@@ -4,7 +4,7 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      flutter: stable
+      flutter: 3.19.3 # Using a specific stable Flutter version that works with the new Gradle plugin system
       java: 17 # Updated from 11 to 17 for better compatibility
       xcode: latest
       cocoapods: default
@@ -49,7 +49,7 @@ workflows:
           echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
           echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
           echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
-          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-7.5-all.zip" >> gradle/wrapper/gradle-wrapper.properties
+          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.0-all.zip" >> gradle/wrapper/gradle-wrapper.properties
           
           # Download Gradle wrapper files
           curl -s -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradle/wrapper/gradle-wrapper.jar
@@ -66,7 +66,9 @@ workflows:
         script: |
           # Use Flutter build instead of direct Gradle
           echo "Building debug APK with Flutter..."
-          flutter build apk --debug
+          # Added extra flags to ignore AndroidX warnings and use the new Gradle system
+          export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true"
+          flutter build apk --debug --no-sound-null-safety
           
           # Ensure export directory exists
           mkdir -p $CM_EXPORT_DIR
@@ -87,7 +89,8 @@ workflows:
             ls -la $CM_EXPORT_DIR
           else
             echo "Flutter build failed. Trying with no-tree-shake-icons option..."
-            flutter build apk --debug --no-tree-shake-icons
+            export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true"
+            flutter build apk --debug --no-tree-shake-icons --no-sound-null-safety
             
             if [ -f "$APK_PATH" ]; then
               echo "Build successful with no-tree-shake-icons option!"

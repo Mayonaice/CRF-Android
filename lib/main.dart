@@ -4,11 +4,196 @@ import 'screens/login_page.dart';
 import 'screens/home_page.dart';
 import 'screens/prepare_mode_screen.dart';
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Global error handler
 void _handleError(Object error, StackTrace stack) {
-  debugPrint('ERROR: $error');
+  debugPrint('CRITICAL ERROR: $error');
   debugPrintStack(stackTrace: stack);
+}
+
+// App-level initialization that happens only once
+bool _isAppInitialized = false;
+
+// SafePrefs Class to handle all preference operations safely
+class SafePrefs {
+  static Future<void> clearAll() async {
+    try {
+      // Clear preferences if they exist
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      debugPrint('Preferences cleared successfully');
+    } catch (e) {
+      debugPrint('Failed to clear preferences: $e');
+    }
+  }
+}
+
+class CrfSplashScreen extends StatefulWidget {
+  final VoidCallback onInitializationComplete;
+  
+  const CrfSplashScreen({Key? key, required this.onInitializationComplete}) : super(key: key);
+
+  @override
+  State<CrfSplashScreen> createState() => _CrfSplashScreenState();
+}
+
+class _CrfSplashScreenState extends State<CrfSplashScreen> {
+  String _statusMessage = 'Initializing...';
+  bool _hasError = false;
+  String _errorDetails = '';
+  
+  @override
+  void initState() {
+    super.initState();
+    _initializeApp();
+  }
+  
+  Future<void> _initializeApp() async {
+    // Add a small delay for UI to render
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    try {
+      // Update status message
+      setState(() => _statusMessage = 'Setting up environment...');
+      
+      // Update status
+      setState(() => _statusMessage = 'Setting display orientation...');
+      
+      // Set orientation - with graceful fallback
+      try {
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+      } catch (e) {
+        debugPrint('Failed to set orientation: $e');
+      }
+      
+      // Update status
+      setState(() => _statusMessage = 'Configuring UI...');
+      
+      // Try to set UI style but don't crash if it fails
+      try {
+        SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+          statusBarColor: Color(0xFF0056A4),
+          statusBarIconBrightness: Brightness.light,
+          systemNavigationBarColor: Color(0xFF0056A4),
+          systemNavigationBarIconBrightness: Brightness.light,
+        ));
+      } catch (e) {
+        debugPrint('Failed to set system UI style: $e');
+      }
+      
+      // Update status
+      setState(() => _statusMessage = 'Initializing data services...');
+
+      // Add a small delay to ensure all async tasks have completed
+      await Future.delayed(const Duration(seconds: 1));
+      
+      // Mark initialization as complete
+      _isAppInitialized = true;
+      widget.onInitializationComplete();
+    } catch (error, stack) {
+      setState(() {
+        _hasError = true;
+        _errorDetails = 'Error: ${error.toString()}\n${stack.toString().split('\n').take(3).join('\n')}';
+        _statusMessage = 'Initialization failed';
+      });
+      _handleError(error, stack);
+    }
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0056A4),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              'assets/images/bg-login.png',
+              width: 150,
+              height: 150,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return const Icon(
+                  Icons.account_balance,
+                  size: 150,
+                  color: Colors.white,
+                );
+              },
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'CRF APP',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 48),
+            if (_hasError)
+              Column(
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    color: Colors.red,
+                    size: 48,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _statusMessage,
+                    style: const TextStyle(color: Colors.red, fontSize: 18),
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      _errorDetails,
+                      style: const TextStyle(color: Colors.white70),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () async {
+                      // Clear data and try again
+                      await SafePrefs.clearAll();
+                      if (mounted) {
+                        setState(() {
+                          _hasError = false;
+                          _statusMessage = 'Retrying...';
+                        });
+                        _initializeApp();
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF0056A4),
+                    ),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              )
+            else
+              Column(
+                children: [
+                  const CircularProgressIndicator(color: Colors.white),
+                  const SizedBox(height: 24),
+                  Text(
+                    _statusMessage,
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> main() async {
@@ -22,38 +207,38 @@ Future<void> main() async {
       _handleError(details.exception, details.stack ?? StackTrace.empty);
     };
     
-    // Try to set orientation but don't crash if it fails
-    try {
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-    } catch (e) {
-      debugPrint('Failed to set orientation: $e');
-    }
-    
-    // Try to set UI style but don't crash if it fails
-    try {
-      SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-        statusBarColor: Color(0xFF0056A4),
-        statusBarIconBrightness: Brightness.light,
-        systemNavigationBarColor: Color(0xFF0056A4),
-        systemNavigationBarIconBrightness: Brightness.light,
-      ));
-    } catch (e) {
-      debugPrint('Failed to set system UI style: $e');
-    }
-    
-    // Start the app
+    // Start with splash screen
     runApp(const MyApp());
   }, _handleError);
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({Key? key}) : super(key: key);
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _showMainApp = false;
+  
+  void _completeInitialization() {
+    setState(() {
+      _showMainApp = true;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (!_showMainApp) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: CrfSplashScreen(
+          onInitializationComplete: _completeInitialization,
+        ),
+      );
+    }
+    
     return MaterialApp(
       title: 'CRF App',
       debugShowCheckedModeBanner: false,
@@ -117,8 +302,9 @@ class MyApp extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Please restart the application',
+                      details.exception.toString(),
                       style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton(
@@ -135,12 +321,15 @@ class MyApp extends StatelessWidget {
           );
         }
 
+        // Set the custom error widget builder
         ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
           return errorScreen(errorDetails);
         };
         
+        // Return the child or error screen
         return child ?? errorScreen(FlutterErrorDetails(
-          exception: 'Unknown error',
+          exception: 'Failed to build UI',
+          library: 'CRF app',
         ));
       },
     );

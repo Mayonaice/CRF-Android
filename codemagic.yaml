@@ -45,26 +45,44 @@ workflows:
           # Check Android directory structure 
           ls -la android/
           
-          # Let Flutter create the Gradle wrapper for us
-          cd android
-          flutter pub get
-          flutter build apk --debug --target-platform=android-arm --no-pub
+          # Check Android manifest and other files
+          cat android/app/src/main/AndroidManifest.xml
           
-          # Verify Gradle wrapper exists
-          ls -la gradle/wrapper/ || echo "Wrapper not created yet, will be created during build"
+          # Create Gradle wrapper manually
+          cd android
+          mkdir -p gradle/wrapper
+          echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
+          echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
+          echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
+          echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
+          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-7.4-all.zip" >> gradle/wrapper/gradle-wrapper.properties
+          
+          # Download Gradle wrapper files
+          curl -s -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v7.4.0/gradle/wrapper/gradle-wrapper.jar
+          curl -s -o gradlew https://raw.githubusercontent.com/gradle/gradle/v7.4.0/gradlew
+          curl -s -o gradlew.bat https://raw.githubusercontent.com/gradle/gradle/v7.4.0/gradlew.bat
+          chmod +x gradlew
+          
+          # Verify wrapper is created
+          ls -la gradle/wrapper/
           cd ..
           
-      - name: Build APK with Flutter (Simplified)
+      - name: Build APK with Gradle directly
         script: |
-          # Configure Gradle
-          export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx4g"
+          # Configure Gradle 
+          export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
           
-          # Simple direct build targeting ARM platform
-          echo "Building debug APK targeting ARM platform..."
-          flutter build apk --debug --target-platform=android-arm
+          # First update dependencies
+          flutter pub get
           
-          # Export the APK
-          APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+          # Build directly with Gradle instead of Flutter
+          echo "Building debug APK with Gradle directly..."
+          cd android
+          ./gradlew :app:assembleDebug --stacktrace --info
+          cd ..
+          
+          # Check for APK in the Gradle output directory
+          APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
           if [ -f "$APK_PATH" ]; then
             # Create export directory
             mkdir -p "$FCI_EXPORT_DIR"
@@ -73,14 +91,16 @@ workflows:
             echo "APK successfully exported to: $FCI_EXPORT_DIR/crf-debug-${timestamp}.apk"
             ls -la "$FCI_EXPORT_DIR"
           else
-            echo "Failed to build APK. Trying with additional flags..."
-            flutter build apk --debug --target-platform=android-arm --no-shrink
+            echo "Gradle build failed. Attempting Flutter build..."
+            flutter build apk --debug --target-platform=android-arm
             
+            # Try the Flutter APK path
+            APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
             if [ -f "$APK_PATH" ]; then
               mkdir -p "$FCI_EXPORT_DIR"
               timestamp=$(date +"%Y%m%d%H%M")
               cp "$APK_PATH" "$FCI_EXPORT_DIR/crf-debug-${timestamp}.apk"
-              echo "APK successfully exported with --no-shrink flag"
+              echo "APK successfully built with Flutter"
             else
               echo "All build attempts failed."
               exit 1
@@ -113,6 +133,7 @@ workflows:
       - $FCI_EXPORT_DIR/*.apk
       - $FCI_ARTIFACT_ROOT/*.apk
       - build/**/outputs/**/*.apk
+      - android/app/build/outputs/**/*.apk
       
     # Empty cache configuration to prevent hanging
     cache:

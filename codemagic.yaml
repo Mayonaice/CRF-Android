@@ -34,7 +34,7 @@ workflows:
           echo "org.gradle.parallel=true" >> android/gradle.properties
           echo "org.gradle.daemon=true" >> android/gradle.properties
           
-          # Generate PNG icon resources
+          # Generate required resource directories
           mkdir -p android/app/src/main/res/drawable
           mkdir -p android/app/src/main/res/drawable-v21
           mkdir -p android/app/src/main/res/mipmap-hdpi
@@ -51,10 +51,13 @@ workflows:
           echo -n '<?xml version="1.0" encoding="utf-8"?><layer-list xmlns:android="http://schemas.android.com/apk/res/android"><item><color android:color="#FFFFFF"/></item></layer-list>' > android/app/src/main/res/drawable/launch_background.xml
           echo -n '<?xml version="1.0" encoding="utf-8"?><layer-list xmlns:android="http://schemas.android.com/apk/res/android"><item><color android:color="#FFFFFF"/></item></layer-list>' > android/app/src/main/res/drawable-v21/launch_background.xml
           
+          # Remove any existing XML icon files to prevent resource conflicts
+          rm -f android/app/src/main/res/mipmap-*/ic_launcher.xml
+          
           # Get a simple placeholder icon from GitHub
           curl -L https://raw.githubusercontent.com/flutter/website/main/src/_assets/image/flutter-logomark-square-logo.png -o icon.png || touch icon.png
           
-          # Create icons in all required sizes
+          # Create icons in all required sizes - PNG ONLY (no XML)
           convert icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png || echo "Icon conversion failed, using placeholder"
           convert icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png || echo "Icon conversion failed, using placeholder"
           convert icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png || echo "Icon conversion failed, using placeholder"
@@ -106,6 +109,9 @@ workflows:
           # Configure Gradle for maximum compatibility
           export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
           
+          # Ensure no XML launcher icons exist
+          find android/app/src/main/res/mipmap-* -name "*.xml" -delete
+          
           # Verify resources are properly created
           ls -la android/app/src/main/res/mipmap-hdpi/
           ls -la android/app/src/main/res/values/
@@ -119,6 +125,14 @@ workflows:
           if [ $? -ne 0 ]; then
             echo "First attempt failed, trying with specific target platform..."
             flutter build apk --debug --target-platform=android-arm
+          fi
+          
+          # If that also fails, try with direct Gradle command
+          if [ $? -ne 0 ]; then
+            echo "Flutter build attempts failed, trying with direct Gradle command..."
+            cd android
+            ./gradlew :app:assembleDebug
+            cd ..
           fi
           
           # Export the APK from either location
@@ -151,6 +165,8 @@ workflows:
           
           # Ensure we always have an APK for download regardless of name
           APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+          GRADLE_APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
+          
           if [ -f "$APK_PATH" ]; then
             # Create artifact directories if they don't exist
             mkdir -p "$FCI_BUILD_OUTPUT_DIR" "$FCI_EXPORT_DIR" "$FCI_ARTIFACT_ROOT"
@@ -161,6 +177,14 @@ workflows:
             cp "$APK_PATH" "$CM_EXPORT_DIR/crf-debug-final.apk" 2>/dev/null || echo "CM_EXPORT_DIR not available"
             
             echo "APK copied to all artifact locations"
+          elif [ -f "$GRADLE_APK_PATH" ]; then
+            mkdir -p "$FCI_BUILD_OUTPUT_DIR" "$FCI_EXPORT_DIR" "$FCI_ARTIFACT_ROOT"
+            
+            cp "$GRADLE_APK_PATH" "$FCI_BUILD_OUTPUT_DIR/crf-debug-final.apk"
+            cp "$GRADLE_APK_PATH" "$FCI_ARTIFACT_ROOT/crf-debug-final.apk"
+            cp "$GRADLE_APK_PATH" "$CM_EXPORT_DIR/crf-debug-final.apk" 2>/dev/null || echo "CM_EXPORT_DIR not available"
+            
+            echo "Gradle APK copied to all artifact locations"
           else
             echo "No APK found to export"
           fi

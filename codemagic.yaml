@@ -26,11 +26,8 @@ workflows:
           flutter --version
           java -version
           
-          # Fix potential Gradle wrapper issues
-          cd android
-          chmod +x ./gradlew
-          ./gradlew --version
-          cd ..
+          # Skip Gradle wrapper check since we'll create it later
+          echo "Will set up Gradle wrapper in next step..."
           
           # Update dependencies - without clean to avoid removing prior setup
           flutter pub get
@@ -48,13 +45,11 @@ workflows:
           mkdir -p gradle/wrapper
           
           # Create gradle-wrapper.properties
-          cat > gradle/wrapper/gradle-wrapper.properties << EOL
-distributionBase=GRADLE_USER_HOME
-distributionPath=wrapper/dists
-zipStoreBase=GRADLE_USER_HOME
-zipStorePath=wrapper/dists
-distributionUrl=https\://services.gradle.org/distributions/gradle-7.5-all.zip
-EOL
+          echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
+          echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
+          echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
+          echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
+          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-7.5-all.zip" >> gradle/wrapper/gradle-wrapper.properties
           
           # Download Gradle wrapper files
           curl -s -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradle/wrapper/gradle-wrapper.jar

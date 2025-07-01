@@ -5,7 +5,10 @@ workflows:
     instance_type: mac_mini_m1
     environment:
       flutter: stable
-      java: 11
+      java: 17 # Updated from 11 to 17 for better compatibility
+      xcode: latest
+      android_sdk: latest
+      cocoapods: default
       # Debug build without custom signing
       vars:
         PACKAGE_NAME: "com.advantage.crf" # Application ID from build.gradle
@@ -20,39 +23,57 @@ workflows:
           
       - name: Setup project
         script: |
-          # Clean any previous builds
-          flutter clean
+          # Display Flutter and Java versions
+          flutter --version
+          java -version
           
-          # Update dependencies
+          # Fix potential Gradle wrapper issues
+          cd android
+          chmod +x ./gradlew
+          ./gradlew --version
+          cd ..
+          
+          # Update dependencies - without clean to avoid removing prior setup
           flutter pub get
           
           # Check Android setup
           flutter doctor -v
-      - name: Build debug APK
+      - name: Check Gradle setup
         script: |
-          # Add verbose output flag for debugging
-          echo "Building debug APK without signing..."
-          flutter build apk --debug --verbose
+          # Check Android directory structure and gradle files
+          ls -la android/
+          cat android/gradle/wrapper/gradle-wrapper.properties
           
-          # Check if build was successful and rename
-          if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
-            echo "Debug build successful. Renaming APK..."
+      - name: Build debug APK directly with Gradle
+        script: |
+          # Try to build using Gradle directly to bypass Flutter tool issues
+          cd android
+          ./gradlew assembleDebug --stacktrace --info
+          cd ..
+          
+          # Check if APK was built with Gradle
+          APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$APK_PATH" ]; then
+            echo "Debug build successful with Gradle. Copying APK..."
+            mkdir -p build/app/outputs/flutter-apk/
             timestamp=$(date +"%Y%m%d%H%M")
-            cp build/app/outputs/flutter-apk/app-debug.apk build/app/outputs/flutter-apk/crf-debug-${timestamp}.apk
+            cp $APK_PATH build/app/outputs/flutter-apk/crf-debug-${timestamp}.apk
             echo "Created: crf-debug-${timestamp}.apk"
             ls -la build/app/outputs/flutter-apk/
           else
-            echo "Failed to create APK file."
-            echo "Checking directory structure:"
-            find build -type d | sort
-            exit 1
+            echo "Failed to create APK with direct Gradle build."
+            echo "Attempting Flutter build with specific options..."
+            # Try Flutter build with specific options
+            flutter build apk --debug --no-tree-shake-icons
           fi
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
+      - android/app/build/outputs/apk/debug/*.apk
+      - android/app/build/reports/
       - $HOME/.gradle/daemon
       - $HOME/.gradle/caches
+      - android/gradlew.log
       - flutter_drive.log
-      - build/reports
     # Artifact publishing and notification
     publishing:
       scripts:

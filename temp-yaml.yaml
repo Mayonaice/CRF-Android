@@ -1,0 +1,11 @@
+test_key:
+  test_multiline: |
+    This is a multiline
+    string test
+  test_xml: |
+    <?xml version="1.0" encoding="utf-8"?>
+    <resources>
+      <style name="Test">
+        <item name="test">value</item>
+      </style>
+    </resources> 

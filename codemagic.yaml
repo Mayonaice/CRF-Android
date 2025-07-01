@@ -119,9 +119,9 @@ workflows:
       - $CM_EXPORT_DIR/**.apk
       - $CM_BUILD_DIR/build/app/outputs/flutter-apk/app-debug.apk
       
-    # Disable caching to prevent hanging
+    # Empty cache configuration to prevent build hanging
     cache:
-      disabled: true
+      cache_paths: []
     # Artifact publishing and notification
     publishing:
       scripts:

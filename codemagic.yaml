@@ -6,8 +6,7 @@ workflows:
     environment:
       flutter: 3.16.9 # Using specific older version that's more compatible
       java: 11 # Downgraded Java version for compatibility
-      android_signing:
-        - keystore_reference
+# No signing config for debug build
       vars:
         PACKAGE_NAME: "com.advantage.crf" # Application ID from build.gradle
     scripts:
@@ -115,6 +114,6 @@ workflows:
       - $FCI_ARTIFACT_ROOT/*.apk
       - build/**/outputs/**/*.apk
       
-    # Disable cache to prevent hanging
+    # Empty cache configuration to prevent hanging
     cache:
-      disabled: true
+      cache_paths: []

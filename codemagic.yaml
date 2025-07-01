@@ -4,11 +4,10 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      flutter: stable # Using stable version for better compatibility
-      java: 17 # Updated from 11 to 17 for better compatibility
-      xcode: latest
-      cocoapods: default
-      # Debug build without custom signing
+      flutter: 3.16.9 # Using specific older version that's more compatible
+      java: 11 # Downgraded Java version for compatibility
+      android_signing:
+        - keystore_reference
       vars:
         PACKAGE_NAME: "com.advantage.crf" # Application ID from build.gradle
     scripts:
@@ -26,13 +25,18 @@ workflows:
           flutter --version
           java -version
           
-          # Add Android X configuration to gradle.properties
-          echo "Creating/updating gradle.properties for AndroidX"
-          mkdir -p android/gradle
+          # Create a dummy keystore for debug build
+          keytool -genkey -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          
+          # Create a simpler gradle.properties with AndroidX settings
           echo "android.useAndroidX=true" > android/gradle.properties
           echo "android.enableJetifier=true" >> android/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx3072m" >> android/gradle.properties
+          echo "org.gradle.parallel=true" >> android/gradle.properties
+          echo "org.gradle.daemon=true" >> android/gradle.properties
           
-          # Update dependencies - without clean to avoid removing prior setup
+          # Clean and get dependencies
+          flutter clean
           flutter pub get
           
           # Check Android setup
@@ -42,104 +46,75 @@ workflows:
           # Check Android directory structure 
           ls -la android/
           
-          # Create missing Gradle wrapper
-          echo "Creating Gradle wrapper since it's missing..."
+          # Let Flutter create the Gradle wrapper for us
           cd android
-          mkdir -p gradle/wrapper
+          flutter pub get
+          flutter build apk --debug --target-platform=android-arm --no-pub
           
-          # Create gradle-wrapper.properties
-          echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
-          echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
-          echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
-          echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
-          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.0-all.zip" >> gradle/wrapper/gradle-wrapper.properties
-          
-          # Download Gradle wrapper files
-          curl -s -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradle/wrapper/gradle-wrapper.jar
-          curl -s -o gradlew https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew
-          curl -s -o gradlew.bat https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew.bat
-          chmod +x gradlew
-          
-          # Verify setup
-          ls -la gradle/wrapper/
-          cat gradle/wrapper/gradle-wrapper.properties
+          # Verify Gradle wrapper exists
+          ls -la gradle/wrapper/ || echo "Wrapper not created yet, will be created during build"
           cd ..
           
-      - name: Build APK with Flutter
+      - name: Build APK with Flutter (Simplified)
         script: |
-          # Use Flutter build instead of direct Gradle
-          echo "Building debug APK with Flutter..."
-          # Added extra flags to ignore AndroidX warnings and use the new Gradle system
-          export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx2048m"
-          flutter build apk --debug
+          # Configure Gradle
+          export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx4g"
           
-          # Ensure export directory exists
-          mkdir -p $CM_EXPORT_DIR
-          echo "Export directory: $CM_EXPORT_DIR"
+          # Simple direct build targeting ARM platform
+          echo "Building debug APK targeting ARM platform..."
+          flutter build apk --debug --target-platform=android-arm
           
-          # Check if APK was built with Flutter
+          # Export the APK
           APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
           if [ -f "$APK_PATH" ]; then
-            echo "Debug build successful. Copying APK to export directory..."
+            # Create export directory
+            mkdir -p "$FCI_EXPORT_DIR"
             timestamp=$(date +"%Y%m%d%H%M")
-            OUTPUT_APK="$CM_EXPORT_DIR/crf-debug-${timestamp}.apk"
-            cp "$APK_PATH" "$OUTPUT_APK"
-            echo "Created APK at: $OUTPUT_APK"
-            
-            # Make sure APK is available for download
-            echo "APK is available for download at: $OUTPUT_APK"
-            echo "Contents of export directory:"
-            ls -la $CM_EXPORT_DIR
+            cp "$APK_PATH" "$FCI_EXPORT_DIR/crf-debug-${timestamp}.apk"
+            echo "APK successfully exported to: $FCI_EXPORT_DIR/crf-debug-${timestamp}.apk"
+            ls -la "$FCI_EXPORT_DIR"
           else
-            echo "Flutter build failed. Trying with no-tree-shake-icons option..."
-            export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx2048m"
-            flutter build apk --debug --no-tree-shake-icons
+            echo "Failed to build APK. Trying with additional flags..."
+            flutter build apk --debug --target-platform=android-arm --no-shrink
             
             if [ -f "$APK_PATH" ]; then
-              echo "Build successful with no-tree-shake-icons option!"
+              mkdir -p "$FCI_EXPORT_DIR"
               timestamp=$(date +"%Y%m%d%H%M")
-              OUTPUT_APK="$CM_EXPORT_DIR/crf-debug-${timestamp}.apk"
-              cp "$APK_PATH" "$OUTPUT_APK"
-              echo "Created APK at: $OUTPUT_APK"
+              cp "$APK_PATH" "$FCI_EXPORT_DIR/crf-debug-${timestamp}.apk"
+              echo "APK successfully exported with --no-shrink flag"
             else
-              echo "All build attempts failed. See logs for details."
+              echo "All build attempts failed."
               exit 1
             fi
           fi
           
-      - name: Export artifacts manually
+      - name: Verify and finalize artifacts
         script: |
-          # This is a failsafe step to make sure the APK is exported
+          # List all APK files in the workspace
+          echo "Searching for all APK files..."
+          find . -name "*.apk" -type f | sort
+          
+          # Ensure we always have an APK for download regardless of name
           APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
           if [ -f "$APK_PATH" ]; then
-            timestamp=$(date +"%Y%m%d%H%M")
-            OUTPUT_APK="$FCI_EXPORT_DIR/crf-debug-${timestamp}.apk"
-            cp "$APK_PATH" "$OUTPUT_APK"
-            echo "Manually exported APK to: $OUTPUT_APK"
-            echo "Contents of FCI_EXPORT_DIR:"
-            ls -la $FCI_EXPORT_DIR
+            # Create artifact directories if they don't exist
+            mkdir -p "$FCI_BUILD_OUTPUT_DIR" "$FCI_EXPORT_DIR" "$FCI_ARTIFACT_ROOT"
+            
+            # Copy to all possible artifact locations
+            cp "$APK_PATH" "$FCI_BUILD_OUTPUT_DIR/crf-debug-final.apk"
+            cp "$APK_PATH" "$FCI_ARTIFACT_ROOT/crf-debug-final.apk"
+            cp "$APK_PATH" "$CM_EXPORT_DIR/crf-debug-final.apk" 2>/dev/null || echo "CM_EXPORT_DIR not available"
+            
+            echo "APK copied to all artifact locations"
           else
-            echo "No APK found to export manually"
+            echo "No APK found to export"
           fi
     artifacts:
-      - $CM_EXPORT_DIR/**.apk
-      - $CM_BUILD_DIR/build/app/outputs/flutter-apk/app-debug.apk
+      - $FCI_BUILD_OUTPUT_DIR/*.apk
+      - $FCI_EXPORT_DIR/*.apk
+      - $FCI_ARTIFACT_ROOT/*.apk
+      - build/**/outputs/**/*.apk
       
-    # Empty cache configuration to prevent build hanging
+    # Disable cache to prevent hanging
     cache:
-      cache_paths: []
-    # Artifact publishing and notification
-    publishing:
-      scripts:
-        - name: Export final artifacts
-          script: |
-            echo "Finding and listing all APK files..."
-            find . -name "*.apk" | sort
-            
-            # Final attempt to get APK to artifacts
-            APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
-            if [ -f "$APK_PATH" ]; then
-              cp "$APK_PATH" "$FCI_ARTIFACT_ROOT/crf-debug-final.apk"
-              echo "Final APK exported to $FCI_ARTIFACT_ROOT/crf-debug-final.apk"
-              ls -la $FCI_ARTIFACT_ROOT
-            fi
+      disabled: true

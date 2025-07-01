@@ -26,10 +26,7 @@ workflows:
           mv app-x86_64-debug.apk crf-debug-x86_64-$(date +"%Y%m%d%H%M").apk
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
+    # Remove email publishing section to avoid configuration errors
     publishing:
-      email:
-        recipients:
-          - $EMAIL
-        notify:
-          success: true
-          failure: true 
+      scripts:
+        - echo "Build completed!"

@@ -5,6 +5,7 @@ import 'screens/home_page.dart';
 import 'screens/prepare_mode_screen.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io' show Platform;
 
 // Global error handler
 void _handleError(Object error, StackTrace stack) {
@@ -51,55 +52,79 @@ class _CrfSplashScreenState extends State<CrfSplashScreen> {
   
   Future<void> _initializeApp() async {
     // Add a small delay for UI to render
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(const Duration(milliseconds: 500));
     
     try {
       // Update status message
-      setState(() => _statusMessage = 'Setting up environment...');
+      if (mounted) setState(() => _statusMessage = 'Setting up environment...');
       
       // Update status
-      setState(() => _statusMessage = 'Setting display orientation...');
+      if (mounted) setState(() => _statusMessage = 'Setting display orientation...');
       
       // Set orientation - with graceful fallback
       try {
-        await SystemChrome.setPreferredOrientations([
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]);
+        // Only set orientation on Android
+        if (Platform.isAndroid) {
+          await SystemChrome.setPreferredOrientations([
+            DeviceOrientation.landscapeLeft,
+            DeviceOrientation.landscapeRight,
+          ]);
+        }
       } catch (e) {
         debugPrint('Failed to set orientation: $e');
       }
       
       // Update status
-      setState(() => _statusMessage = 'Configuring UI...');
+      if (mounted) setState(() => _statusMessage = 'Configuring UI...');
       
       // Try to set UI style but don't crash if it fails
       try {
-        SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-          statusBarColor: Color(0xFF0056A4),
-          statusBarIconBrightness: Brightness.light,
-          systemNavigationBarColor: Color(0xFF0056A4),
-          systemNavigationBarIconBrightness: Brightness.light,
-        ));
+        if (Platform.isAndroid) {
+          SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+            statusBarColor: Color(0xFF0056A4),
+            statusBarIconBrightness: Brightness.light,
+            systemNavigationBarColor: Color(0xFF0056A4),
+            systemNavigationBarIconBrightness: Brightness.light,
+          ));
+        }
       } catch (e) {
         debugPrint('Failed to set system UI style: $e');
       }
       
       // Update status
-      setState(() => _statusMessage = 'Initializing data services...');
+      if (mounted) setState(() => _statusMessage = 'Initializing data services...');
+
+      // Verify shared preferences access 
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        // Try simple write/read test
+        await prefs.setString('_test_key', 'test_value');
+        final testValue = prefs.getString('_test_key');
+        debugPrint('SharedPreferences test: $testValue');
+        await prefs.remove('_test_key');
+      } catch (e) {
+        debugPrint('SharedPreferences test failed: $e');
+        throw Exception('Unable to access app storage: $e');
+      }
 
       // Add a small delay to ensure all async tasks have completed
       await Future.delayed(const Duration(seconds: 1));
       
       // Mark initialization as complete
       _isAppInitialized = true;
-      widget.onInitializationComplete();
+      
+      // Inform parent that initialization is complete
+      if (mounted) {
+        widget.onInitializationComplete();
+      }
     } catch (error, stack) {
-      setState(() {
-        _hasError = true;
-        _errorDetails = 'Error: ${error.toString()}\n${stack.toString().split('\n').take(3).join('\n')}';
-        _statusMessage = 'Initialization failed';
-      });
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _errorDetails = 'Error: ${error.toString()}\n${stack.toString().split('\n').take(3).join('\n')}';
+          _statusMessage = 'Initialization failed';
+        });
+      }
       _handleError(error, stack);
     }
   }
@@ -118,6 +143,7 @@ class _CrfSplashScreenState extends State<CrfSplashScreen> {
               height: 150,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) {
+                debugPrint('Failed to load splash image: $error');
                 return const Icon(
                   Icons.account_balance,
                   size: 150,

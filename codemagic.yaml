@@ -37,33 +37,63 @@ workflows:
           
           # Check Android setup
           flutter doctor -v
-      - name: Check Gradle setup
+      - name: Setup Gradle wrapper
         script: |
-          # Check Android directory structure and gradle files
+          # Check Android directory structure 
           ls -la android/
-          cat android/gradle/wrapper/gradle-wrapper.properties
           
-      - name: Build debug APK directly with Gradle
-        script: |
-          # Try to build using Gradle directly to bypass Flutter tool issues
+          # Create missing Gradle wrapper
+          echo "Creating Gradle wrapper since it's missing..."
           cd android
-          ./gradlew assembleDebug --stacktrace --info
+          mkdir -p gradle/wrapper
+          
+          # Create gradle-wrapper.properties
+          cat > gradle/wrapper/gradle-wrapper.properties << EOL
+distributionBase=GRADLE_USER_HOME
+distributionPath=wrapper/dists
+zipStoreBase=GRADLE_USER_HOME
+zipStorePath=wrapper/dists
+distributionUrl=https\://services.gradle.org/distributions/gradle-7.5-all.zip
+EOL
+          
+          # Download Gradle wrapper files
+          curl -s -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradle/wrapper/gradle-wrapper.jar
+          curl -s -o gradlew https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew
+          curl -s -o gradlew.bat https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew.bat
+          chmod +x gradlew
+          
+          # Verify setup
+          ls -la gradle/wrapper/
+          cat gradle/wrapper/gradle-wrapper.properties
           cd ..
           
-          # Check if APK was built with Gradle
-          APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
+      - name: Build APK with Flutter
+        script: |
+          # Use Flutter build instead of direct Gradle
+          echo "Building debug APK with Flutter..."
+          flutter build apk --debug
+          
+          # Check if APK was built with Flutter
+          APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
           if [ -f "$APK_PATH" ]; then
-            echo "Debug build successful with Gradle. Copying APK..."
-            mkdir -p build/app/outputs/flutter-apk/
+            echo "Debug build successful with Flutter. Renaming APK..."
             timestamp=$(date +"%Y%m%d%H%M")
             cp $APK_PATH build/app/outputs/flutter-apk/crf-debug-${timestamp}.apk
             echo "Created: crf-debug-${timestamp}.apk"
             ls -la build/app/outputs/flutter-apk/
           else
-            echo "Failed to create APK with direct Gradle build."
-            echo "Attempting Flutter build with specific options..."
+            echo "Flutter build failed. Trying with no-tree-shake-icons option..."
             # Try Flutter build with specific options
             flutter build apk --debug --no-tree-shake-icons
+            
+            # Check if second build attempt succeeded
+            if [ -f "$APK_PATH" ]; then
+              echo "Build successful with no-tree-shake-icons option!"
+              timestamp=$(date +"%Y%m%d%H%M")
+              cp $APK_PATH build/app/outputs/flutter-apk/crf-debug-${timestamp}.apk
+            else
+              echo "All build attempts failed. See logs for details."
+            fi
           fi
     artifacts:
       - build/app/outputs/flutter-apk/*.apk

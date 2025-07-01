@@ -1,0 +1,35 @@
+workflows:
+  android-debug:
+    name: Android Debug Build
+    max_build_duration: 30
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      groups:
+        - google_credentials
+      vars:
+        PACKAGE_NAME: "com.advantage.crf" # Application ID from build.gradle
+    scripts:
+      - name: Set up local.properties
+        script: |
+          echo "flutter.sdk=$HOME/programs/flutter" > "$CM_BUILD_DIR/android/local.properties"
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+      - name: Build debug APK
+        script: |
+          flutter build apk --debug --split-per-abi
+          # Rename the output APK with timestamp for easier tracking
+          cd build/app/outputs/flutter-apk/
+          mv app-armeabi-v7a-debug.apk crf-debug-armeabi-v7a-$(date +"%Y%m%d%H%M").apk
+          mv app-arm64-v8a-debug.apk crf-debug-arm64-v8a-$(date +"%Y%m%d%H%M").apk
+          mv app-x86_64-debug.apk crf-debug-x86_64-$(date +"%Y%m%d%H%M").apk
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+    publishing:
+      email:
+        recipients:
+          - $EMAIL
+        notify:
+          success: true
+          failure: true 

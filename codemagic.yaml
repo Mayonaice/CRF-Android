@@ -68,45 +68,72 @@ workflows:
           echo "Building debug APK with Flutter..."
           flutter build apk --debug
           
+          # Ensure export directory exists
+          mkdir -p $CM_EXPORT_DIR
+          echo "Export directory: $CM_EXPORT_DIR"
+          
           # Check if APK was built with Flutter
           APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
           if [ -f "$APK_PATH" ]; then
-            echo "Debug build successful with Flutter. Renaming APK..."
+            echo "Debug build successful. Copying APK to export directory..."
             timestamp=$(date +"%Y%m%d%H%M")
-            mkdir -p $CM_EXPORT_DIR  # Ensure export directory exists
-            cp $APK_PATH $CM_EXPORT_DIR/crf-debug-${timestamp}.apk
-            echo "Created and exported: crf-debug-${timestamp}.apk"
+            OUTPUT_APK="$CM_EXPORT_DIR/crf-debug-${timestamp}.apk"
+            cp "$APK_PATH" "$OUTPUT_APK"
+            echo "Created APK at: $OUTPUT_APK"
+            
+            # Make sure APK is available for download
+            echo "APK is available for download at: $OUTPUT_APK"
+            echo "Contents of export directory:"
             ls -la $CM_EXPORT_DIR
           else
             echo "Flutter build failed. Trying with no-tree-shake-icons option..."
-            # Try Flutter build with specific options
             flutter build apk --debug --no-tree-shake-icons
             
-            # Check if second build attempt succeeded
             if [ -f "$APK_PATH" ]; then
               echo "Build successful with no-tree-shake-icons option!"
               timestamp=$(date +"%Y%m%d%H%M")
-              mkdir -p $CM_EXPORT_DIR  # Ensure export directory exists
-              cp $APK_PATH $CM_EXPORT_DIR/crf-debug-${timestamp}.apk
+              OUTPUT_APK="$CM_EXPORT_DIR/crf-debug-${timestamp}.apk"
+              cp "$APK_PATH" "$OUTPUT_APK"
+              echo "Created APK at: $OUTPUT_APK"
             else
               echo "All build attempts failed. See logs for details."
+              exit 1
             fi
           fi
+          
+      - name: Export artifacts manually
+        script: |
+          # This is a failsafe step to make sure the APK is exported
+          APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+          if [ -f "$APK_PATH" ]; then
+            timestamp=$(date +"%Y%m%d%H%M")
+            OUTPUT_APK="$FCI_EXPORT_DIR/crf-debug-${timestamp}.apk"
+            cp "$APK_PATH" "$OUTPUT_APK"
+            echo "Manually exported APK to: $OUTPUT_APK"
+            echo "Contents of FCI_EXPORT_DIR:"
+            ls -la $FCI_EXPORT_DIR
+          else
+            echo "No APK found to export manually"
+          fi
     artifacts:
-      - build/**/outputs/**/*.apk
+      - $CM_EXPORT_DIR/**.apk
+      - $CM_BUILD_DIR/build/app/outputs/flutter-apk/app-debug.apk
       
-    # Cache configuration
+    # Disable caching to prevent hanging
     cache:
-      cache_paths:
-        - ~/.gradle/caches
-        - ~/.pub-cache
+      disabled: true
     # Artifact publishing and notification
     publishing:
-      email:
-        recipients:
-          - internal@example.com
-        notify:
-          success: true
       scripts:
-        - echo "Finding all APK files..."
-        - find . -name "*.apk" | sort
+        - name: Export final artifacts
+          script: |
+            echo "Finding and listing all APK files..."
+            find . -name "*.apk" | sort
+            
+            # Final attempt to get APK to artifacts
+            APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+            if [ -f "$APK_PATH" ]; then
+              cp "$APK_PATH" "$FCI_ARTIFACT_ROOT/crf-debug-final.apk"
+              echo "Final APK exported to $FCI_ARTIFACT_ROOT/crf-debug-final.apk"
+              ls -la $FCI_ARTIFACT_ROOT
+            fi

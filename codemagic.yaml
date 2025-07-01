@@ -7,7 +7,6 @@ workflows:
       flutter: stable
       java: 17 # Updated from 11 to 17 for better compatibility
       xcode: latest
-      android_sdk: latest
       cocoapods: default
       # Debug build without custom signing
       vars:

@@ -6,10 +6,7 @@ workflows:
     environment:
       flutter: stable
       java: 11
-      android_signing:
-        - debug_keystore
-      groups:
-        - google_credentials
+      # Debug build without custom signing
       vars:
         PACKAGE_NAME: "com.advantage.crf" # Application ID from build.gradle
     scripts:
@@ -33,18 +30,21 @@ workflows:
           flutter doctor -v
       - name: Build debug APK
         script: |
-          # Add additional diagnostic output
-          flutter doctor -v
+          # Add verbose output flag for debugging
+          echo "Building debug APK without signing..."
+          flutter build apk --debug --verbose
           
-          # First, attempt a normal debug build without splitting
-          flutter build apk --debug
-          
-          # Check if build was successful
+          # Check if build was successful and rename
           if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
             echo "Debug build successful. Renaming APK..."
-            cp build/app/outputs/flutter-apk/app-debug.apk build/app/outputs/flutter-apk/crf-debug-$(date +"%Y%m%d%H%M").apk
+            timestamp=$(date +"%Y%m%d%H%M")
+            cp build/app/outputs/flutter-apk/app-debug.apk build/app/outputs/flutter-apk/crf-debug-${timestamp}.apk
+            echo "Created: crf-debug-${timestamp}.apk"
+            ls -la build/app/outputs/flutter-apk/
           else
-            echo "Build failed to produce app-debug.apk"
+            echo "Failed to create APK file."
+            echo "Checking directory structure:"
+            find build -type d | sort
             exit 1
           fi
     artifacts:

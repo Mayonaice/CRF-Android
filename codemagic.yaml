@@ -73,9 +73,10 @@ workflows:
           if [ -f "$APK_PATH" ]; then
             echo "Debug build successful with Flutter. Renaming APK..."
             timestamp=$(date +"%Y%m%d%H%M")
-            cp $APK_PATH build/app/outputs/flutter-apk/crf-debug-${timestamp}.apk
-            echo "Created: crf-debug-${timestamp}.apk"
-            ls -la build/app/outputs/flutter-apk/
+            mkdir -p $CM_EXPORT_DIR  # Ensure export directory exists
+            cp $APK_PATH $CM_EXPORT_DIR/crf-debug-${timestamp}.apk
+            echo "Created and exported: crf-debug-${timestamp}.apk"
+            ls -la $CM_EXPORT_DIR
           else
             echo "Flutter build failed. Trying with no-tree-shake-icons option..."
             # Try Flutter build with specific options
@@ -85,20 +86,27 @@ workflows:
             if [ -f "$APK_PATH" ]; then
               echo "Build successful with no-tree-shake-icons option!"
               timestamp=$(date +"%Y%m%d%H%M")
-              cp $APK_PATH build/app/outputs/flutter-apk/crf-debug-${timestamp}.apk
+              mkdir -p $CM_EXPORT_DIR  # Ensure export directory exists
+              cp $APK_PATH $CM_EXPORT_DIR/crf-debug-${timestamp}.apk
             else
               echo "All build attempts failed. See logs for details."
             fi
           fi
     artifacts:
-      - build/app/outputs/flutter-apk/*.apk
-      - android/app/build/outputs/apk/debug/*.apk
-      - android/app/build/reports/
-      - $HOME/.gradle/daemon
-      - $HOME/.gradle/caches
-      - android/gradlew.log
-      - flutter_drive.log
+      - build/**/outputs/**/*.apk
+      
+    # Cache configuration
+    cache:
+      cache_paths:
+        - ~/.gradle/caches
+        - ~/.pub-cache
     # Artifact publishing and notification
     publishing:
+      email:
+        recipients:
+          - internal@example.com
+        notify:
+          success: true
       scripts:
-        - echo "Build completed successfully!"
+        - echo "Finding all APK files..."
+        - find . -name "*.apk" | sort

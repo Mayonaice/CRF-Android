@@ -4,7 +4,7 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      flutter: 3.19.3 # Using a specific stable Flutter version that works with the new Gradle plugin system
+      flutter: stable # Using stable version for better compatibility
       java: 17 # Updated from 11 to 17 for better compatibility
       xcode: latest
       cocoapods: default
@@ -26,8 +26,11 @@ workflows:
           flutter --version
           java -version
           
-          # Skip Gradle wrapper check since we'll create it later
-          echo "Will set up Gradle wrapper in next step..."
+          # Add Android X configuration to gradle.properties
+          echo "Creating/updating gradle.properties for AndroidX"
+          mkdir -p android/gradle
+          echo "android.useAndroidX=true" > android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
           
           # Update dependencies - without clean to avoid removing prior setup
           flutter pub get
@@ -67,8 +70,8 @@ workflows:
           # Use Flutter build instead of direct Gradle
           echo "Building debug APK with Flutter..."
           # Added extra flags to ignore AndroidX warnings and use the new Gradle system
-          export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true"
-          flutter build apk --debug --no-sound-null-safety
+          export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx2048m"
+          flutter build apk --debug
           
           # Ensure export directory exists
           mkdir -p $CM_EXPORT_DIR
@@ -89,8 +92,8 @@ workflows:
             ls -la $CM_EXPORT_DIR
           else
             echo "Flutter build failed. Trying with no-tree-shake-icons option..."
-            export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true"
-            flutter build apk --debug --no-tree-shake-icons --no-sound-null-safety
+            export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx2048m"
+            flutter build apk --debug --no-tree-shake-icons
             
             if [ -f "$APK_PATH" ]; then
               echo "Build successful with no-tree-shake-icons option!"

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'screens/login_page.dart';
 import 'screens/home_page.dart';
 import 'screens/prepare_mode_screen.dart';
+import 'screens/return_mode_screen.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
@@ -305,6 +306,7 @@ class _MyAppState extends State<MyApp> {
         '/login': (context) => const LoginPage(),
         '/home': (context) => const HomePage(),
         '/prepare_mode': (context) => const PrepareModePage(),
+        '/return_mode': (context) => const ReturnModePage(),
       },
       // Global error handling for navigator
       navigatorKey: GlobalKey<NavigatorState>(),

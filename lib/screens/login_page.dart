@@ -17,9 +17,11 @@ class _LoginPageState extends State<LoginPage> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _noMejaController = TextEditingController();
-  String? _selectedGroup;
+  String? _selectedBranch;
   bool _isLoading = false;
   bool _isPasswordVisible = false;
+  bool _isLoadingBranches = false;
+  List<Map<String, dynamic>> _availableBranches = [];
   
   // Auth service
   final AuthService _authService = AuthService();
@@ -39,6 +41,11 @@ class _LoginPageState extends State<LoginPage> {
     
     // Check if user is already logged in
     _checkLoginStatus();
+    
+    // Add listeners to auto-fetch branches when all 3 fields are filled
+    _usernameController.addListener(_onFieldChanged);
+    _passwordController.addListener(_onFieldChanged);
+    _noMejaController.addListener(_onFieldChanged);
   }
   
   // Check login status
@@ -54,85 +61,188 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
+    _usernameController.removeListener(_onFieldChanged);
+    _passwordController.removeListener(_onFieldChanged);
+    _noMejaController.removeListener(_onFieldChanged);
     _usernameController.dispose();
     _passwordController.dispose();
     _noMejaController.dispose();
     super.dispose();
   }
 
-  Future<void> _login() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-      });
-
-      try {
-        // Use AuthService for login
-        final result = await _authService.login(
-          _usernameController.text,
-          _passwordController.text,
-          _noMejaController.text,
-        );
-        
-        if (result['success']) {
-          // Haptic feedback for Android feel
-          HapticFeedback.mediumImpact();
-          
-          // Navigate to home screen
-          if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const HomePage()),
-            );
-          }
-        } else {
-          if (mounted) {
-            // Haptic feedback for error
-            HapticFeedback.vibrate();
-            
-            // Android-style error dialog
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Login Failed'),
-                content: Text(result['message'] ?? 'Invalid credentials'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('OK'),
-                  ),
-                ],
-              ),
-            );
-          }
+  // Auto-fetch branches when all 3 fields are filled
+  void _onFieldChanged() {
+    // Check if all 3 fields have content
+    if (_usernameController.text.isNotEmpty &&
+        _passwordController.text.isNotEmpty &&
+        _noMejaController.text.isNotEmpty) {
+      
+      // Reset current branches and selected branch
+      if (_availableBranches.isNotEmpty || _selectedBranch != null) {
+        setState(() {
+          _availableBranches.clear();
+          _selectedBranch = null;
+        });
+      }
+      
+      // Debounce the API call (wait 500ms after user stops typing)
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (_usernameController.text.isNotEmpty &&
+            _passwordController.text.isNotEmpty &&
+            _noMejaController.text.isNotEmpty &&
+            !_isLoadingBranches) {
+          _fetchBranches();
         }
-      } catch (e) {
-        if (mounted) {
-          // Haptic feedback for error
-          HapticFeedback.vibrate();
+      });
+    } else {
+      // Clear branches if any field is empty
+      if (_availableBranches.isNotEmpty || _selectedBranch != null) {
+        setState(() {
+          _availableBranches.clear();
+          _selectedBranch = null;
+        });
+      }
+    }
+  }
+
+  // Fetch available branches
+  Future<void> _fetchBranches() async {
+    if (_isLoadingBranches) return;
+    
+    setState(() {
+      _isLoadingBranches = true;
+    });
+
+    try {
+      final result = await _authService.getUserBranches(
+        _usernameController.text.trim(),
+        _passwordController.text.trim(),
+        _noMejaController.text.trim(),
+      );
+      
+      if (result['success'] && result['data'] != null) {
+        final branches = result['data'] as List<dynamic>;
+        
+        setState(() {
+          _availableBranches = branches.map((branch) => {
+            'branchName': branch['branchName'] ?? branch['BranchName'] ?? '',
+            'roleID': branch['roleID'] ?? branch['RoleID'] ?? '',
+            'displayText': '${branch['branchName'] ?? branch['BranchName'] ?? ''} (${branch['roleID'] ?? branch['RoleID'] ?? ''})',
+          }).toList();
           
-          // Android-style error dialog
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Connection Error'),
-              content: Text('Error: $e'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
+          // Auto-select if only one branch
+          if (_availableBranches.length == 1) {
+            _selectedBranch = _availableBranches.first['displayText'];
+          }
+        });
+        
+        // Show success feedback
+        if (_availableBranches.isNotEmpty) {
+          HapticFeedback.lightImpact();
+        }
+      } else {
+        // Clear branches on error but don't show popup yet (user might still be typing)
+        setState(() {
+          _availableBranches.clear();
+          _selectedBranch = null;
+        });
+      }
+    } catch (e) {
+      // Clear branches on error
+      setState(() {
+        _availableBranches.clear();
+        _selectedBranch = null;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingBranches = false;
+        });
+      }
+    }
+  }
+
+  // Perform login
+  Future<void> _performLogin() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    
+    if (_availableBranches.isEmpty) {
+      _showErrorDialog('No Access', 'Please ensure all fields are correct. No CRF branches available for this user.');
+      return;
+    }
+    
+    if (_selectedBranch == null && _availableBranches.length > 1) {
+      _showErrorDialog('Branch Required', 'Please select a branch to continue.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Extract branch name from selected display text
+      String? branchName;
+      if (_selectedBranch != null) {
+        final selectedBranchData = _availableBranches.firstWhere(
+          (branch) => branch['displayText'] == _selectedBranch,
+          orElse: () => _availableBranches.first,
+        );
+        branchName = selectedBranchData['branchName'];
+      }
+
+      final result = await _authService.login(
+        _usernameController.text.trim(),
+        _passwordController.text.trim(),
+        _noMejaController.text.trim(),
+        selectedBranch: branchName,
+      );
+      
+      if (result['success']) {
+        // Haptic feedback for Android feel
+        HapticFeedback.mediumImpact();
+        
+        // Navigate to home screen
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomePage()),
           );
         }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+      } else {
+        _showErrorDialog('Login Failed', result['message'] ?? 'Invalid credentials');
       }
+    } catch (e) {
+      _showErrorDialog('Connection Error', 'Error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _showErrorDialog(String title, String message) {
+    if (mounted) {
+      // Haptic feedback for error
+      HapticFeedback.vibrate();
+      
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -327,58 +437,93 @@ class _LoginPageState extends State<LoginPage> {
                                         
                                         const SizedBox(height: 15),
                                         
-                                        // Group dropdown
-                                        const Text(
-                                          'Group',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
+                                        // Branch/Role dropdown (auto-populated)
+                                        Row(
+                                          children: [
+                                            const Text(
+                                              'Branch & Role',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            if (_isLoadingBranches) ...[
+                                              const SizedBox(width: 10),
+                                              const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
                                         ),
                                         const SizedBox(height: 5),
                                         DropdownButtonFormField<String>(
-                                          value: _selectedGroup,
+                                          value: _selectedBranch,
                                           decoration: InputDecoration(
-                                            hintText: 'Select group',
+                                            hintText: _isLoadingBranches 
+                                                ? 'Loading branches...'
+                                                : _availableBranches.isEmpty 
+                                                    ? 'Fill all fields above to load branches'
+                                                    : 'Select branch & role',
                                             border: OutlineInputBorder(
                                               borderRadius: BorderRadius.circular(30),
                                             ),
                                             filled: true,
-                                            fillColor: Colors.white,
+                                            fillColor: _availableBranches.isEmpty ? Colors.grey.shade100 : Colors.white,
                                             contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                                            suffixIcon: _isLoadingBranches 
+                                                ? const SizedBox(
+                                                    width: 20,
+                                                    height: 20,
+                                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                                  )
+                                                : Icon(
+                                                    _availableBranches.isNotEmpty ? Icons.business : Icons.info_outline,
+                                                    color: _availableBranches.isNotEmpty ? null : Colors.grey,
+                                                  ),
                                           ),
-                                          items: const [
-                                            DropdownMenuItem(
-                                              value: 'Admin',
-                                              child: Text('Admin'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'User',
-                                              child: Text('User'),
-                                            ),
-                                            DropdownMenuItem(
-                                              value: 'Supervisor',
-                                              child: Text('Supervisor'),
-                                            ),
-                                          ],
-                                          onChanged: (value) {
+                                          items: _availableBranches.map((branch) {
+                                            return DropdownMenuItem<String>(
+                                              value: branch['displayText'],
+                                              child: Text(
+                                                branch['displayText'],
+                                                style: const TextStyle(fontSize: 14),
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: _availableBranches.isEmpty ? null : (value) {
                                             setState(() {
-                                              _selectedGroup = value;
+                                              _selectedBranch = value;
                                             });
                                             // Android haptic feedback
                                             HapticFeedback.selectionClick();
+                                          },
+                                          validator: (value) {
+                                            if (_availableBranches.isEmpty) {
+                                              return 'No branches available. Check your credentials.';
+                                            }
+                                            if (_availableBranches.length > 1 && value == null) {
+                                              return 'Please select a branch';
+                                            }
+                                            return null;
                                           },
                                         ),
                                         
                                         const SizedBox(height: 30),
                                         
-                                        // Login button - dengan warna biru yang lebih terang
+                                        // Login button
                                         Center(
                                           child: SizedBox(
                                             width: isTablet ? 250 : 200,
                                             height: isTablet ? 60 : 50,
                                             child: ElevatedButton(
-                                              onPressed: _isLoading ? null : _login,
+                                              onPressed: (_isLoading || _isLoadingBranches || _availableBranches.isEmpty) 
+                                                  ? null 
+                                                  : _performLogin,
                                               style: ElevatedButton.styleFrom(
                                                 backgroundColor: buttonColor,
                                                 shape: RoundedRectangleBorder(
@@ -455,7 +600,6 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
       ),
-      // Hapus bottomNavigationBar
     );
   }
-} 
+}

@@ -171,23 +171,30 @@ class _PrepareModePageState extends State<PrepareModePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Get screen size for responsive layout
+    final screenSize = MediaQuery.of(context).size;
+    final isSmallScreen = screenSize.width < 600;
+    
     return Scaffold(
       body: Container(
         color: Colors.white,
         child: Column(
           children: [
             // Header section with back button, title, and user info
-            _buildHeader(context),
+            _buildHeader(context, isSmallScreen),
             
             // Error message if any
             if (_errorMessage.isNotEmpty)
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(isSmallScreen ? 4 : 8),
                 color: Colors.red.shade100,
                 width: double.infinity,
                 child: Text(
                   _errorMessage,
-                  style: TextStyle(color: Colors.red.shade800),
+                  style: TextStyle(
+                    color: Colors.red.shade800,
+                    fontSize: isSmallScreen ? 12 : 14,
+                  ),
                 ),
               ),
             
@@ -195,75 +202,126 @@ class _PrepareModePageState extends State<PrepareModePage> {
             if (_isLoading)
               const LinearProgressIndicator(),
             
-            // Main content
+            // Main content - Changes layout based on screen size
             Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Left side - Catridge forms
-                  Expanded(
-                    flex: 2,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Form header fields
-                            _buildFormHeaderFields(),
-                            
-                            // Dynamic catridge sections
-                            for (int i = 0; i < _catridgeControllers.length; i++)
-                              _buildCatridgeSection(i + 1, _catridgeControllers[i], _denomValues[i]),
-                          ],
+              child: isSmallScreen
+                ? SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Form header fields
+                        _buildFormHeaderFields(isSmallScreen),
+                        
+                        // Left side - Catridge forms
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Dynamic catridge sections
+                              for (int i = 0; i < _catridgeControllers.length; i++)
+                                _buildCatridgeSection(i + 1, _catridgeControllers[i], _denomValues[i], isSmallScreen),
+                            ],
+                          ),
+                        ),
+                        
+                        // Horizontal divider
+                        Container(
+                          margin: const EdgeInsets.symmetric(vertical: 10),
+                          height: 1,
+                          color: Colors.grey.withOpacity(0.3),
+                        ),
+                        
+                        // Right side - Details
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Detail WSID section
+                              _buildDetailWSIDSection(isSmallScreen),
+                              
+                              // Detail Catridge section
+                              _buildDetailCatridgeSection(isSmallScreen),
+                              
+                              // Grand Total and Submit button
+                              _buildTotalAndSubmitSection(isSmallScreen),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Left side - Catridge forms
+                      Expanded(
+                        flex: 2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Form header fields
+                                _buildFormHeaderFields(isSmallScreen),
+                                
+                                // Dynamic catridge sections
+                                for (int i = 0; i < _catridgeControllers.length; i++)
+                                  _buildCatridgeSection(i + 1, _catridgeControllers[i], _denomValues[i], isSmallScreen),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  
-                  // Vertical divider
-                  Container(
-                    width: 1,
-                    color: Colors.grey.withOpacity(0.3),
-                  ),
-                  
-                  // Right side - Details
-                  Expanded(
-                    flex: 1,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Detail WSID section
-                            _buildDetailWSIDSection(),
-                            
-                            // Detail Catridge section
-                            _buildDetailCatridgeSection(),
-                            
-                            // Grand Total and Submit button
-                            _buildTotalAndSubmitSection(),
-                          ],
+                      
+                      // Vertical divider
+                      Container(
+                        width: 1,
+                        color: Colors.grey.withOpacity(0.3),
+                      ),
+                      
+                      // Right side - Details
+                      Expanded(
+                        flex: 1,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Detail WSID section
+                                _buildDetailWSIDSection(isSmallScreen),
+                                
+                                // Detail Catridge section
+                                _buildDetailCatridgeSection(isSmallScreen),
+                                
+                                // Grand Total and Submit button
+                                _buildTotalAndSubmitSection(isSmallScreen),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
             ),
             
             // Footer
-            _buildFooter(),
+            _buildFooter(isSmallScreen),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, bool isSmallScreen) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      padding: EdgeInsets.symmetric(
+        horizontal: isSmallScreen ? 8.0 : 16.0, 
+        vertical: isSmallScreen ? 4.0 : 8.0
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -278,152 +336,773 @@ class _PrepareModePageState extends State<PrepareModePage> {
         children: [
           // Back button
           IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.red, size: 30),
+            icon: Icon(
+              Icons.arrow_back, 
+              color: Colors.red, 
+              size: isSmallScreen ? 24 : 30
+            ),
+            padding: EdgeInsets.zero,
+            constraints: BoxConstraints(),
             onPressed: () => Navigator.of(context).pop(),
           ),
           
           // Title
-          const Text(
+          Text(
             'Prepare Mode',
             style: TextStyle(
-              fontSize: 22,
+              fontSize: isSmallScreen ? 18 : 22,
               fontWeight: FontWeight.bold,
             ),
           ),
           
           const Spacer(),
           
-          // Location and user info
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'JAKARTA-CIDENG',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Row(
+          // Location and user info - For small screens, show minimal info
+          if (isSmallScreen)
+            // Compact header for small screens
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
-                    'Meja : 010101',
-                    style: TextStyle(
-                      fontSize: 16,
+                  Flexible(
+                    child: Text(
+                      'JAKARTA-CIDENG',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(width: 20),
+                  const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.green.shade100,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Text(
+                    child: Text(
                       'CRF_OPR',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
-          
-          const SizedBox(width: 16),
-          
-          // User avatar and info
-          Row(
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.grey.shade200,
-                  backgroundImage: const AssetImage('assets/images/user.jpg'),
-                  onBackgroundImageError: (exception, stackTrace) {},
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Lorenzo Putra',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    '9180812021',
-                    style: TextStyle(
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFormHeaderFields() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16.0),
-      child: Row(
-        children: [
-          // ID CRF field with search functionality
-          Expanded(
-            child: _buildFormField(
-              label: 'ID CRF :',
-              controller: _idCRFController,
-              hasIcon: true,
-              onIconPressed: _fetchPrepareData,
-            ),
-          ),
-          
-          const SizedBox(width: 20),
-          
-          // Jam Mulai field
-          Expanded(
-            child: _buildFormField(
-              label: 'Jam Mulai :',
-              controller: _jamMulaiController,
-              hasIcon: true,
-              hasInfoIcon: true,
-            ),
-          ),
-          
-          const SizedBox(width: 20),
-          
-          // Tanggal Replenish field
-          Expanded(
-            child: Row(
+            )
+          else
+            // Full header for larger screens
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Tanggal Replenish :',
+                  'JAKARTA-CIDENG',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Row(
+                  children: [
+                    const Text(
+                      'Meja : 010101',
+                      style: TextStyle(
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'CRF_OPR',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          
+          SizedBox(width: isSmallScreen ? 8 : 16),
+          
+          // User avatar and info - Simplified for small screens
+          if (isSmallScreen)
+            // Just show avatar for small screens
+            CircleAvatar(
+              radius: 15,
+              backgroundColor: Colors.grey.shade200,
+              backgroundImage: const AssetImage('assets/images/user.jpg'),
+              onBackgroundImageError: (exception, stackTrace) {},
+            )
+          else
+            // Full user info for larger screens
+            Row(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.grey.shade200,
+                    backgroundImage: const AssetImage('assets/images/user.jpg'),
+                    onBackgroundImageError: (exception, stackTrace) {},
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  _prepareData?.dateReplenish != null
-                      ? '${_prepareData!.dateReplenish!.day}/${_prepareData!.dateReplenish!.month}/${_prepareData!.dateReplenish!.year}'
-                      : '-',
-                  style: const TextStyle(fontSize: 16),
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Lorenzo Putra',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      '9180812021',
+                      style: TextStyle(
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormHeaderFields(bool isSmallScreen) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: isSmallScreen ? 8.0 : 16.0),
+      child: isSmallScreen
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ID CRF field with search functionality
+                _buildFormField(
+                  label: 'ID CRF :',
+                  controller: _idCRFController,
+                  hasIcon: true,
+                  onIconPressed: _fetchPrepareData,
+                  isSmallScreen: isSmallScreen,
+                ),
+                
+                const SizedBox(height: 8),
+                
+                // Jam Mulai field with time icon
+                _buildFormField(
+                  label: 'Jam Mulai :',
+                  controller: _jamMulaiController,
+                  hasIcon: true,
+                  iconData: Icons.access_time,
+                  isSmallScreen: isSmallScreen,
+                ),
+                
+                const SizedBox(height: 8),
+                
+                // Tanggal Replenish field (disabled/read-only)
+                _buildFormField(
+                  label: 'Tanggal Replenish :',
+                  readOnly: true,
+                  hintText: '―',
+                  isSmallScreen: isSmallScreen,
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                // ID CRF field with search functionality
+                Expanded(
+                  child: _buildFormField(
+                    label: 'ID CRF :',
+                    controller: _idCRFController,
+                    hasIcon: true,
+                    onIconPressed: _fetchPrepareData,
+                    isSmallScreen: isSmallScreen,
+                  ),
+                ),
+                
+                const SizedBox(width: 20),
+                
+                // Jam Mulai field with time icon
+                Expanded(
+                  child: _buildFormField(
+                    label: 'Jam Mulai :',
+                    controller: _jamMulaiController,
+                    hasIcon: true,
+                    iconData: Icons.access_time,
+                    isSmallScreen: isSmallScreen,
+                  ),
+                ),
+                
+                const SizedBox(width: 20),
+                
+                // Tanggal Replenish field (disabled/read-only)
+                Expanded(
+                  child: _buildFormField(
+                    label: 'Tanggal Replenish :',
+                    readOnly: true,
+                    hintText: '―',
+                    isSmallScreen: isSmallScreen,
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildCatridgeSection(
+    int index, 
+    List<TextEditingController> controllers, 
+    int denomValue,
+    bool isSmallScreen
+  ) {
+    // Get tipeDenom from API data if available
+    String? tipeDenom = _prepareData?.tipeDenom;
+    int standValue = _prepareData?.standValue ?? 0;
+    
+    // Convert tipeDenom to rupiah value
+    String denomText = '';
+    int denomAmount = 0;
+    
+    // Only show denom values if _prepareData is available
+    if (_prepareData != null && tipeDenom != null) {
+      if (tipeDenom == 'A50') {
+        denomText = 'Rp 50.000';
+        denomAmount = 50000;
+      } else if (tipeDenom == 'A100') {
+        denomText = 'Rp 100.000';
+        denomAmount = 100000;
+      } else {
+        // Default fallback
+        denomText = 'Rp 50.000';
+        denomAmount = 50000;
+      }
+    } else {
+      // Empty state when no data is available
+      denomText = '—';
+    }
+    
+    // Calculate total nominal only if we have valid data
+    String formattedTotal = '—';
+    if (_prepareData != null && denomAmount > 0 && standValue > 0) {
+      int totalNominal = denomAmount * standValue;
+      formattedTotal = _formatCurrency(totalNominal);
+    }
+    
+    // Determine image path based on tipeDenom
+    String? imagePath;
+    if (_prepareData != null && tipeDenom != null) {
+      imagePath = 'assets/images/${tipeDenom}.png';
+    }
+    
+    return Container(
+      margin: EdgeInsets.only(bottom: isSmallScreen ? 10 : 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Catridge title with Denom indicator on right
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Catridge $index',
+                style: TextStyle(
+                  fontSize: isSmallScreen ? 14 : 18,
+                  fontWeight: FontWeight.bold,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+              Row(
+                children: [
+                  Text(
+                    'Denom',
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 12 : 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    denomText,
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 12 : 14,
+                    ),
+                  ),
+                ],
+              )
+            ],
+          ),
+          SizedBox(height: isSmallScreen ? 8 : 15),
+          
+          // Fields with denom section on right
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left side - All fields in a vertical column with inline labels
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // No. Catridge field - inline style
+                    _buildInlineField(
+                      label: 'No. Catridge', 
+                      controller: controllers[0],
+                      isSmallScreen: isSmallScreen,
+                    ),
+                    SizedBox(height: 8),
+                    
+                    // Seal Catridge field - inline style
+                    _buildInlineField(
+                      label: 'Seal Catridge', 
+                      controller: controllers[1],
+                      isSmallScreen: isSmallScreen,
+                    ),
+                    SizedBox(height: 8),
+                    
+                    // Bag Code field - inline style
+                    _buildInlineField(
+                      label: 'Bag Code', 
+                      controller: controllers[2],
+                      isSmallScreen: isSmallScreen,
+                    ),
+                    SizedBox(height: 8),
+                    
+                    // Seal Code field - inline style
+                    _buildInlineField(
+                      label: 'Seal Code', 
+                      controller: controllers[3],
+                      isSmallScreen: isSmallScreen,
+                    ),
+                    SizedBox(height: 8),
+                    
+                    // Additional field - Seal Code Return at the bottom - inline style
+                    if (controllers.length >= 5)
+                      _buildInlineField(
+                        label: 'Seal Code Return', 
+                        controller: controllers[4],
+                        isSmallScreen: isSmallScreen,
+                      ),
+                  ],
+                ),
+              ),
+              
+              // Right side - Denom details with image and total
+              Expanded(
+                flex: 2,
+                child: Container(
+                  margin: EdgeInsets.only(left: isSmallScreen ? 5 : 15),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Money image
+                      Container(
+                        height: 100,
+                        width: double.infinity,
+                        margin: EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: _prepareData == null || imagePath == null
+                          ? Center(
+                              child: Icon(
+                                Icons.image_outlined,
+                                size: 40,
+                                color: Colors.grey.shade400,
+                              ),
+                            )
+                          : Image.asset(
+                              imagePath,
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.currency_exchange,
+                                      size: 40,
+                                      color: Colors.blue,
+                                    ),
+                                    SizedBox(height: 5),
+                                    Text(
+                                      denomText,
+                                      style: TextStyle(
+                                        fontSize: isSmallScreen ? 12 : 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                      ),
+                      
+                      // Value and Lembar info
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: Colors.grey.shade300),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Value',
+                              style: TextStyle(
+                                fontSize: isSmallScreen ? 12 : 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              _prepareData == null ? '—' : standValue.toString(),
+                              style: TextStyle(
+                                fontSize: isSmallScreen ? 12 : 14,
+                              ),
+                            ),
+                            Text(
+                              'Lembar',
+                              style: TextStyle(
+                                fontSize: isSmallScreen ? 12 : 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Total Nominal box
+                      Container(
+                        margin: EdgeInsets.only(top: 15),
+                        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: Color(0xFFDCF8C6),  // Light green background
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Total Nominal',
+                              style: TextStyle(
+                                fontSize: isSmallScreen ? 12 : 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              formattedTotal,
+                              style: TextStyle(
+                                fontSize: isSmallScreen ? 14 : 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          // Divider at the bottom
+          Padding(
+            padding: EdgeInsets.only(top: isSmallScreen ? 15 : 25),
+            child: Container(
+              height: 1,
+              color: Colors.grey.shade300,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Helper method to format currency
+  String _formatCurrency(int amount) {
+    String value = amount.toString();
+    String result = '';
+    int count = 0;
+    
+    for (int i = value.length - 1; i >= 0; i--) {
+      count++;
+      result = value[i] + result;
+      if (count % 3 == 0 && i > 0) {
+        result = '.$result';
+      }
+    }
+    
+    return 'Rp $result';
+  }
+
+  // Helper method to build inline field (label and field on same row)
+  Widget _buildInlineField({
+    required String label,
+    required TextEditingController controller,
+    required bool isSmallScreen,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Label - fixed width
+        Container(
+          width: isSmallScreen ? 100 : 120,
+          child: Text(
+            '$label',
+            style: TextStyle(
+              fontSize: isSmallScreen ? 12 : 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        
+        // Colon
+        Text(
+          ':',
+          style: TextStyle(
+            fontSize: isSmallScreen ? 12 : 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        
+        SizedBox(width: 10),
+        
+        // Field
+        Expanded(
+          child: Container(
+            height: isSmallScreen ? 36 : 40,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                    decoration: InputDecoration(
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: isSmallScreen ? 8 : 12,
+                      ),
+                      border: InputBorder.none,
+
+                    ),
+                  ),
+
+                ),
+                // Copy icon button
+                IconButton(
+                  icon: Icon(
+                    Icons.content_copy,
+                    size: isSmallScreen ? 18 : 20,
+                    color: Colors.grey.shade600,
+                  ),
+                  onPressed: () {
+                    // Copy functionality
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                SizedBox(width: isSmallScreen ? 6 : 10),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailWSIDSection(bool isSmallScreen) {
+    return Container(
+      margin: EdgeInsets.only(bottom: isSmallScreen ? 15 : 25),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Detail WSID',
+            style: TextStyle(
+              fontSize: isSmallScreen ? 14 : 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: isSmallScreen ? 8 : 15),
+          
+          _buildDetailRow('WSID', _prepareData?.atmCode ?? '-', isSmallScreen),
+          _buildDetailRow('Bank', _prepareData?.codeBank ?? '-', isSmallScreen),
+          _buildDetailRow('Lokasi', _prepareData?.lokasi ?? '-', isSmallScreen),
+          _buildDetailRow('ATM Type', _prepareData?.jnsMesin ?? '-', isSmallScreen),
+          _buildDetailRow('Jumlah Kaset', '${_prepareData?.jmlKaset ?? 0}', isSmallScreen),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildDetailRow(String label, String value, bool isSmallScreen) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isSmallScreen ? 4 : 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: isSmallScreen ? 80 : 100,
+            child: Text(
+              '$label :',
+              style: TextStyle(
+                fontSize: isSmallScreen ? 12 : 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: isSmallScreen ? 12 : 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildDetailCatridgeSection(bool isSmallScreen) {
+    return Container(
+      margin: EdgeInsets.only(bottom: isSmallScreen ? 15 : 25),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Detail Catridge',
+            style: TextStyle(
+              fontSize: isSmallScreen ? 14 : 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: isSmallScreen ? 8 : 15),
+          
+          if (_prepareData != null) 
+            _buildAllCatridgeDetails(isSmallScreen)
+          else
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(
+                'No catridge data available',
+                style: TextStyle(
+                  fontSize: isSmallScreen ? 12 : 14,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildAllCatridgeDetails(bool isSmallScreen) {
+    // Jumlah kaset dari API
+    final int jmlKaset = _prepareData?.jmlKaset ?? 0;
+    
+    // Data catridge yang ada dari API
+    final List<CatridgeDetail> existingCatridges = _prepareData?.listCatridge ?? [];
+    
+    // Log untuk debugging
+    debugPrint('jmlKaset dari API: $jmlKaset');
+    debugPrint('Jumlah catridges yang ada: ${existingCatridges.length}');
+    
+    // Jika tidak ada data sama sekali, tampilkan pesan kosong
+    if (jmlKaset <= 0 && existingCatridges.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8.0),
+        child: Text(
+          'No catridge data available',
+          style: TextStyle(
+            fontSize: isSmallScreen ? 12 : 14,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      );
+    }
+    
+    // Tentukan jumlah catridge yang harus ditampilkan
+    // Gunakan nilai terbesar antara jmlKaset atau panjang list catridge
+    final int catridgeCount = jmlKaset > existingCatridges.length ? jmlKaset : existingCatridges.length;
+    
+    debugPrint('Total catridge yang akan ditampilkan: $catridgeCount');
+    
+    // Generate daftar catridge untuk ditampilkan
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: List.generate(catridgeCount, (index) {
+        // Jika index masih dalam jangkauan list yang ada, gunakan data tersebut
+        if (index < existingCatridges.length) {
+          final catridge = existingCatridges[index];
+          return _buildCatridgeDetailRow(catridge, isSmallScreen, index + 1);
+        } 
+        // Jika tidak ada data untuk index ini, buat catridge placeholder
+        else {
+          return _buildEmptyCatridgeDetailRow(isSmallScreen, index + 1);
+        }
+      }),
+    );
+  }
+  
+  Widget _buildCatridgeDetailRow(CatridgeDetail catridge, bool isSmallScreen, int displayIndex) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isSmallScreen ? 4 : 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Catridge $displayIndex',
+            style: TextStyle(
+              fontSize: isSmallScreen ? 12 : 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Value: ${catridge.value}',
+                  style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                ),
+                Text(
+                  'Denom: ${catridge.denom}',
+                  style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                ),
+                if (catridge.code.isNotEmpty)
+                  Text(
+                    'Code: ${catridge.code}',
+                    style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                  ),
+                if (catridge.seal.isNotEmpty)
+                  Text(
+                    'Seal: ${catridge.seal}',
+                    style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                  ),
               ],
             ),
           ),
@@ -431,398 +1110,165 @@ class _PrepareModePageState extends State<PrepareModePage> {
       ),
     );
   }
-
-  Widget _buildCatridgeSection(int catridgeNumber, List<TextEditingController> controllers, int denomValue) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Catridge header with denom section
-        Row(
-          children: [
-            Text(
-              'Catridge $catridgeNumber',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const Spacer(),
-            
-            // Denom section (separated as requested)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                const Text(
-                  'Denom',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  'Rp ${denomValue.toString()}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        
-        const Divider(height: 1, thickness: 1),
-        
-        const SizedBox(height: 10),
-        
-        // Catridge form fields
-        _buildFormField(
-          label: 'No. Catridge',
-          controller: controllers[0],
-          hasIcon: true,
-        ),
-        
-        const SizedBox(height: 10),
-        
-        _buildFormField(
-          label: 'Seal Catridge',
-          controller: controllers[1],
-          hasIcon: true,
-        ),
-        
-        const SizedBox(height: 10),
-        
-        _buildFormField(
-          label: 'Bag Code',
-          controller: controllers[2],
-          hasIcon: true,
-        ),
-        
-        const SizedBox(height: 10),
-        
-        _buildFormField(
-          label: 'Seal Code',
-          controller: controllers[3],
-          hasIcon: true,
-        ),
-        
-        const SizedBox(height: 10),
-        
-        _buildFormField(
-          label: 'Seal Code Return',
-          controller: controllers[4],
-          hasIcon: true,
-        ),
-        
-        const SizedBox(height: 16),
-        
-        // Value and Lembar
-        Row(
-          children: [
-            const Spacer(),
-            const Text(
-              'Value',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(width: 60),
-            const Text(
-              'Lembar',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        
-        const SizedBox(height: 16),
-        
-        // Total Nominal
-        Center(
-          child: Container(
-            width: 200,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                const Text(
-                  'Total Nominal',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Rp ${_prepareData?.total ?? 0}',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+  
+  // Widget untuk menampilkan catridge yang belum ada datanya
+  Widget _buildEmptyCatridgeDetailRow(bool isSmallScreen, int displayIndex) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isSmallScreen ? 4 : 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Catridge $displayIndex',
+            style: TextStyle(
+              fontSize: isSmallScreen ? 12 : 14,
+              fontWeight: FontWeight.bold,
             ),
           ),
-        ),
-        
-        const SizedBox(height: 16),
-        
-        // Divider
-        Container(
-          height: 1,
-          color: Colors.grey.shade300,
-        ),
-        
-        const SizedBox(height: 16),
-      ],
+          Padding(
+            padding: const EdgeInsets.only(left: 12.0),
+            child: Text(
+              '(Data not available)',
+              style: TextStyle(
+                fontSize: isSmallScreen ? 12 : 14,
+                fontStyle: FontStyle.italic,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
-
-  Widget _buildDetailWSIDSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 16),
-        
-        // Detail WSID header
-        const Text(
-          '| Detail WSID',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        
-        const SizedBox(height: 16),
-        
-        // WSID and Bank info
-        Row(
+  
+  Widget _buildTotalAndSubmitSection(bool isSmallScreen) {
+    // Jika belum ada data, tampilkan tanda strip
+    if (_prepareData == null) {
+      return Padding(
+        padding: EdgeInsets.only(top: isSmallScreen ? 15 : 25),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // WSID
-            Expanded(
-              child: Row(
-                children: [
-                  const Text(
-                    'WSID',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+            // Grand Total
+            Row(
+              children: [
+                Text(
+                  'Grand Total :',
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 14 : 16,
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(width: 8),
-                  const Text(':'),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _prepareData?.atmCode ?? '-',
-                      style: const TextStyle(fontSize: 16),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                ),
+                SizedBox(width: isSmallScreen ? 8 : 15),
+                Text(
+                  '—',
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 14 : 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+              ],
+            ),
+            
+            // Submit button with arrow icon
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(25),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF5AE25A), Color(0xFF29CC29)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.green.withOpacity(0.3),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
-            ),
-            
-            const Text('|'),
-            
-            // Bank
-            Expanded(
-              child: Row(
-                children: [
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Bank',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  // Submit functionality
+                },
+                icon: const Icon(Icons.arrow_forward),
+                label: Text(
+                  'Submit Data',
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 14 : 16,
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(width: 8),
-                  const Text(':'),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _prepareData?.codeBank ?? '-',
-                      style: const TextStyle(fontSize: 16),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isSmallScreen ? 12 : 24, 
+                    vertical: isSmallScreen ? 8 : 12
                   ),
-                ],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                ),
               ),
             ),
           ],
         ),
-        
-        const SizedBox(height: 16),
-        
-        // Lokasi
-        Row(
-          children: [
-            const Text(
-              'Lokasi',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Text(':'),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _prepareData?.lokasi ?? '-',
-                style: const TextStyle(fontSize: 16),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        
-        const SizedBox(height: 16),
-        
-        // ATM Type
-        Row(
-          children: [
-            const Text(
-              'ATM Type',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Text(':'),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _prepareData?.jnsMesin ?? '-',
-                style: const TextStyle(fontSize: 16),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        
-        const SizedBox(height: 8),
-        
-        // Jumlah Kaset
-        Row(
-          children: [
-            const Text(
-              'Jumlah Kaset',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Text(':'),
-            const SizedBox(width: 8),
-            Text(
-              _prepareData?.jmlKaset.toString() ?? '0',
-              style: const TextStyle(fontSize: 16),
-            ),
-          ],
-        ),
-        
-        const SizedBox(height: 16),
-        
-        // Divider
-        Container(
-          height: 1,
-          color: Colors.grey.shade300,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDetailCatridgeSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 20),
-        
-        // Detail Catridge header
-        const Text(
-          '| Detail Catridge',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        
-        const SizedBox(height: 10),
-        
-        // Empty space for detail catridge content
-        Container(
-          height: 100,
-          width: double.infinity,
-          child: _prepareData != null ? 
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Catridge Code: ${_prepareData!.catridgeCode}'),
-                Text('Type: ${_prepareData!.typeCatridge}'),
-                Text('Denom: ${_prepareData!.denomCode}'),
-                Text('Value: ${_prepareData!.value}'),
-              ],
-            ) : 
-            const Center(child: Text('No catridge data available')),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTotalAndSubmitSection() {
-    // Calculate grand total
-    int grandTotal = 0;
-    if (_prepareData != null) {
-      grandTotal = _prepareData!.total;
+      );
     }
     
+    // Get tipeDenom from API data if available
+    String tipeDenom = _prepareData?.tipeDenom ?? 'A50';
+    int standValue = _prepareData?.standValue ?? 0;
+    
+    // Convert tipeDenom to rupiah value
+    int denomAmount = 0;
+    if (tipeDenom == 'A50') {
+      denomAmount = 50000;
+    } else if (tipeDenom == 'A100') {
+      denomAmount = 100000;
+    } else {
+      // Default fallback
+      denomAmount = 50000;
+    }
+    
+    // Calculate total from all catridges
+    int totalAmount = denomAmount * standValue * _catridgeControllers.length;
+    String formattedTotal = _formatCurrency(totalAmount);
+    
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20.0),
+      padding: EdgeInsets.only(top: isSmallScreen ? 15 : 25),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Grand Total
           Row(
             children: [
-              const Text(
+              Text(
                 'Grand Total :',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: isSmallScreen ? 14 : 16,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: isSmallScreen ? 8 : 15),
               Text(
-                'Rp $grandTotal',
-                style: const TextStyle(
-                  fontSize: 18,
+                formattedTotal,
+                style: TextStyle(
+                  fontSize: isSmallScreen ? 14 : 16,
                   fontWeight: FontWeight.bold,
+                  color: Colors.red,
                 ),
               ),
             ],
           ),
           
-          // Submit Data button
+          // Submit button with arrow icon
           Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(30),
+              borderRadius: BorderRadius.circular(25),
               gradient: const LinearGradient(
                 colors: [Color(0xFF5AE25A), Color(0xFF29CC29)],
                 begin: Alignment.topCenter,
@@ -837,14 +1283,14 @@ class _PrepareModePageState extends State<PrepareModePage> {
               ],
             ),
             child: ElevatedButton.icon(
-              onPressed: _prepareData != null ? () {
-                // Handle submit
-              } : null,
+              onPressed: () {
+                // Submit functionality
+              },
               icon: const Icon(Icons.arrow_forward),
-              label: const Text(
+              label: Text(
                 'Submit Data',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: isSmallScreen ? 14 : 16,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -852,9 +1298,12 @@ class _PrepareModePageState extends State<PrepareModePage> {
                 backgroundColor: Colors.transparent,
                 foregroundColor: Colors.white,
                 elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isSmallScreen ? 12 : 24, 
+                  vertical: isSmallScreen ? 8 : 12
+                ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+                  borderRadius: BorderRadius.circular(25),
                 ),
               ),
             ),
@@ -863,18 +1312,67 @@ class _PrepareModePageState extends State<PrepareModePage> {
       ),
     );
   }
-
-  Widget _buildFooter() {
+  
+  Widget _buildFooter(bool isSmallScreen) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      color: Colors.white.withOpacity(0.7),
-      child: const Row(
+      color: Colors.white,
+      padding: EdgeInsets.symmetric(
+        vertical: isSmallScreen ? 5 : 10,
+        horizontal: isSmallScreen ? 10 : 20,
+      ),
+      child: Row(
         children: [
-          Text(
-            'CASH REPLENISH FORM   ver. 0.0.1',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-            ),
+          // Left side - version info
+          Row(
+            children: [
+              Text(
+                'CASH REPLENISH FORM',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: isSmallScreen ? 12 : 16,
+                ),
+              ),
+              SizedBox(width: 8),
+              Text(
+                'ver. 0.0.1',
+                style: TextStyle(
+                  fontSize: isSmallScreen ? 10 : 14,
+                ),
+              ),
+            ],
+          ),
+          
+          const Spacer(),
+          
+          // Right side - logos
+          Row(
+            children: [
+              Image.asset(
+                'assets/images/advantage_logo.png',
+                height: isSmallScreen ? 30 : 40,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    height: isSmallScreen ? 30 : 40,
+                    width: isSmallScreen ? 80 : 120,
+                    color: Colors.transparent,
+                    child: Center(child: Text('ADVANTAGE')),
+                  );
+                },
+              ),
+              SizedBox(width: isSmallScreen ? 10 : 20),
+              Image.asset(
+                'assets/images/crf_logo.png',
+                height: isSmallScreen ? 30 : 40,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    height: isSmallScreen ? 30 : 40,
+                    width: isSmallScreen ? 40 : 60,
+                    color: Colors.transparent,
+                    child: Center(child: Text('CRF')),
+                  );
+                },
+              ),
+            ],
           ),
         ],
       ),
@@ -883,91 +1381,70 @@ class _PrepareModePageState extends State<PrepareModePage> {
 
   Widget _buildFormField({
     required String label,
-    required TextEditingController controller,
+    TextEditingController? controller,
+    bool readOnly = false,
+    String? hintText,
     bool hasIcon = false,
-    bool hasInfoIcon = false,
+    IconData iconData = Icons.search,
     VoidCallback? onIconPressed,
+    required bool isSmallScreen,
   }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 150,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: isSmallScreen ? 12 : 14,
+            fontWeight: FontWeight.bold,
           ),
         ),
-        Expanded(
-          child: Container(
-            height: 40,
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(4),
-              color: Colors.white,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    decoration: const InputDecoration(
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8),
-                      border: InputBorder.none,
+        const SizedBox(height: 4),
+        Container(
+          height: isSmallScreen ? 36 : 45,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  readOnly: readOnly,
+                  style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                  decoration: InputDecoration(
+                    hintText: hintText,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: isSmallScreen ? 8 : 12,
+                      vertical: isSmallScreen ? 6 : 10,
                     ),
-                    onSubmitted: (value) {
-                      if (label == 'ID CRF :' && value.isNotEmpty) {
-                        _fetchPrepareData();
-                      }
-                    },
+                    border: InputBorder.none,
                   ),
                 ),
-                if (hasIcon)
-                  GestureDetector(
-                    onTap: onIconPressed,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        border: Border(
-                          left: BorderSide(color: Colors.grey.shade300),
-                        ),
-                      ),
-                      child: Icon(
-                        label == 'ID CRF :' ? Icons.search : Icons.content_copy,
-                        color: Colors.grey.shade600,
-                        size: 20,
-                      ),
-                    ),
+              ),
+              if (hasIcon)
+                IconButton(
+                  icon: Icon(
+                    iconData,
+                    size: isSmallScreen ? 18 : 24,
+                    color: Colors.grey.shade700,
                   ),
-              ],
-            ),
+                  onPressed: onIconPressed,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  iconSize: isSmallScreen ? 18 : 24,
+                ),
+              SizedBox(width: isSmallScreen ? 6 : 10),
+            ],
           ),
         ),
-        if (hasInfoIcon)
-          Padding(
-            padding: const EdgeInsets.only(left: 8.0),
-            child: Container(
-              width: 24,
-              height: 24,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.grey,
-              ),
-              child: const Icon(
-                Icons.info_outline,
-                color: Colors.white,
-                size: 16,
-              ),
-            ),
-          ),
       ],
     );
   }
 }
+
+
 
 
 

@@ -79,8 +79,56 @@ class AuthService {
     }
   }
 
-  // Login method with enhanced error handling
-  Future<Map<String, dynamic>> login(String username, String password, String noMeja) async {
+  // Get available branches for user (Step 1 of 2-step login)
+  Future<Map<String, dynamic>> getUserBranches(String username, String password, String noMeja) async {
+    try {
+      final response = await _tryRequestWithFallback(
+        requestFn: (baseUrl) => http.post(
+          Uri.parse('$baseUrl/CRF/get-user-branches'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'Username': username,
+            'Password': password,
+            'NoMeja': noMeja,
+            'ClientType': 'Android'
+          }),
+        ),
+      );
+
+      Map<String, dynamic> responseData;
+      try {
+        responseData = json.decode(response.body) as Map<String, dynamic>;
+      } catch (e) {
+        debugPrint('Error parsing JSON: $e');
+        return {
+          'success': false,
+          'message': 'Server returned invalid data: ${response.body.substring(0, min(100, response.body.length))}',
+        };
+      }
+      
+      if (response.statusCode == 200 && responseData['success'] == true) {
+        return {
+          'success': true,
+          'message': responseData['message'] ?? 'Branches retrieved successfully',
+          'data': responseData['data']
+        };
+      } else {
+        return {
+          'success': false,
+          'message': responseData['message'] ?? 'Failed to get branches (${response.statusCode})',
+        };
+      }
+    } catch (e) {
+      debugPrint('Get branches error: $e');
+      return {
+        'success': false,
+        'message': 'Connection error: $e',
+      };
+    }
+  }
+
+  // Login method with enhanced error handling (Step 2 of 2-step login)
+  Future<Map<String, dynamic>> login(String username, String password, String noMeja, {String? selectedBranch}) async {
     try {
       final response = await _tryRequestWithFallback(
         requestFn: (baseUrl) => http.post(
@@ -89,7 +137,9 @@ class AuthService {
           body: json.encode({
             'Username': username,
             'Password': password,
-            'NoMeja': noMeja
+            'NoMeja': noMeja,
+            'ClientType': 'Android',  // Identify this request is from Android app
+            if (selectedBranch != null) 'SelectedBranch': selectedBranch,
           }),
         ),
       );

@@ -21,6 +21,32 @@ class PrepareReplenishResponse {
   }
 }
 
+class CatridgeDetail {
+  final int id;
+  final String code;
+  final String seal;
+  final int denom;
+  final int value;
+
+  CatridgeDetail({
+    required this.id,
+    required this.code,
+    required this.seal,
+    required this.denom,
+    required this.value,
+  });
+
+  factory CatridgeDetail.fromJson(Map<String, dynamic> json) {
+    return CatridgeDetail(
+      id: json['id'] ?? 0,
+      code: json['code'] ?? '',
+      seal: json['seal'] ?? '',
+      denom: json['denom'] ?? 0,
+      value: json['value'] ?? 0,
+    );
+  }
+}
+
 class ATMPrepareReplenishData {
   final int id;
   final String planNo;
@@ -77,6 +103,7 @@ class ATMPrepareReplenishData {
   final bool isEmpty;
   final bool isNoBag;
   final bool isMDM;
+  final List<CatridgeDetail> listCatridge;
 
   ATMPrepareReplenishData({
     required this.id,
@@ -134,9 +161,51 @@ class ATMPrepareReplenishData {
     required this.isEmpty,
     required this.isNoBag,
     required this.isMDM,
+    required this.listCatridge,
   });
 
   factory ATMPrepareReplenishData.fromJson(Map<String, dynamic> json) {
+    List<CatridgeDetail> catridgeList = [];
+    
+    // Check for catridge data in different formats
+    if (json['listCatridge'] != null) {
+      // If listCatridge field is present as an array
+      catridgeList = (json['listCatridge'] as List)
+          .map((item) => CatridgeDetail.fromJson(item))
+          .toList();
+    } else {
+      // Create a synthetic list from individual catridge data
+      // Add each catridge that has valid data
+      if (json['catridgeCode'] != null && json['catridgeCode'].toString().isNotEmpty) {
+        catridgeList.add(CatridgeDetail(
+          id: 1,
+          code: json['catridgeCode'] ?? '',
+          seal: json['catridgeSeal'] ?? '',
+          denom: json['denomCass1'] ?? 0,
+          value: json['value'] ?? 0,
+        ));
+      }
+      
+      // Add additional catridges based on jmlKaset if needed
+      int jmlKaset = json['jmlKaset'] ?? 0;
+      for (int i = 1; i < jmlKaset; i++) {
+        if (i >= catridgeList.length) {
+          catridgeList.add(CatridgeDetail(
+            id: i + 1,
+            code: '',
+            seal: '',
+            denom: i == 1 ? (json['denomCass2'] ?? 0) :
+                  i == 2 ? (json['denomCass3'] ?? 0) :
+                  i == 3 ? (json['denomCass4'] ?? 0) :
+                  i == 4 ? (json['denomCass5'] ?? 0) :
+                  i == 5 ? (json['denomCass6'] ?? 0) :
+                  i == 6 ? (json['denomCass7'] ?? 0) : 0,
+            value: 0,
+          ));
+        }
+      }
+    }
+    
     return ATMPrepareReplenishData(
       id: json['id'] ?? 0,
       planNo: json['planNo'] ?? '',
@@ -193,6 +262,7 @@ class ATMPrepareReplenishData {
       isEmpty: json['isEmpty'] ?? false,
       isNoBag: json['isNoBag'] ?? false,
       isMDM: json['isMDM'] ?? false,
+      listCatridge: catridgeList,
     );
   }
 } 

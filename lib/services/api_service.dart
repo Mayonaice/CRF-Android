@@ -320,4 +320,51 @@ class ApiService {
       throw Exception('Network error: ${e.toString()}');
     }
   }
+
+  // Validate TL Supervisor for approval
+  Future<TLSupervisorValidationResponse> validateTLSupervisor({
+    required String nik,
+    required String password,
+  }) async {
+    try {
+      final requestHeaders = await headers;
+      
+      final requestBody = {
+        "NIK": nik,
+        "Password": password,
+      };
+      
+      print('TL Supervisor validation request: ${json.encode(requestBody)}');
+      
+      final response = await _tryRequestWithFallback(
+        requestFn: (baseUrl) => http.post(
+          Uri.parse('$baseUrl/CRF/validate/tl-supervisor'),
+          headers: requestHeaders,
+          body: json.encode(requestBody),
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        try {
+          final jsonData = json.decode(response.body);
+          print('TL Supervisor validation response: ${response.body}');
+          return TLSupervisorValidationResponse.fromJson(jsonData);
+        } catch (e) {
+          debugPrint('Error parsing TL supervisor validation JSON: $e');
+          throw Exception('Invalid TL supervisor validation data format from server');
+        }
+      } else if (response.statusCode == 401) {
+        await _authService.logout();
+        throw Exception('Session expired: Please login again');
+      } else {
+        throw Exception('Server error (${response.statusCode}): ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('TL Supervisor validation API error: $e');
+      if (e is TimeoutException) {
+        throw Exception('Connection timeout: Please check your internet connection');
+      }
+      throw Exception('Network error: ${e.toString()}');
+    }
+  }
 } 

@@ -57,6 +57,10 @@ class _PrepareModePageState extends State<PrepareModePage> {
     
     // Set current time as jam mulai
     _setCurrentTime();
+    
+    // Add listeners to text fields to auto-hide approval form
+    _idCRFController.addListener(_checkAndHideApprovalForm);
+    _jamMulaiController.addListener(_checkAndHideApprovalForm);
   }
 
   @override
@@ -106,6 +110,75 @@ class _PrepareModePageState extends State<PrepareModePage> {
         TextEditingController(), // Seal Code
         TextEditingController(), // Seal Code Return
       ]);
+      
+      // Add listeners to all catridge controllers
+      for (var controller in _catridgeControllers[i]) {
+        controller.addListener(_checkAndHideApprovalForm);
+      }
+    }
+  }
+  
+  // Clear all data and hide approval form
+  void _clearAllData() {
+    setState(() {
+      // Clear controllers
+      _idCRFController.clear();
+      _jamMulaiController.clear();
+      
+      // Clear catridge controllers
+      for (var controllerList in _catridgeControllers) {
+        for (var controller in controllerList) {
+          controller.clear();
+        }
+      }
+      
+      // Clear data
+      _prepareData = null;
+      _detailCatridgeItems.clear();
+      _catridgeData.clear();
+      _denomValues.clear();
+      _errorMessage = '';
+      
+      // Hide approval form
+      _showApprovalForm = false;
+      _nikTLController.clear();
+      _passwordTLController.clear();
+    });
+    
+    // Reset time to current time
+    _setCurrentTime();
+  }
+  
+  // Check if any left side field is empty
+  bool _hasAnyLeftFieldEmpty() {
+    // Check header fields
+    if (_idCRFController.text.trim().isEmpty) return true;
+    if (_jamMulaiController.text.trim().isEmpty) return true;
+    
+    // Check all catridge fields
+    for (var controllerList in _catridgeControllers) {
+      for (var controller in controllerList) {
+        if (controller.text.trim().isEmpty) return true;
+      }
+    }
+    
+    // Check if there's no prepare data
+    if (_prepareData == null) return true;
+    
+    // Check if there are no detail catridge items
+    if (_detailCatridgeItems.isEmpty) return true;
+    
+    return false;
+  }
+  
+  // Auto-hide approval form if any left field is empty
+  void _checkAndHideApprovalForm() {
+    if (_showApprovalForm && _hasAnyLeftFieldEmpty()) {
+      setState(() {
+        _showApprovalForm = false;
+        _nikTLController.clear();
+        _passwordTLController.clear();
+      });
     }
   }
   
@@ -216,6 +289,9 @@ class _PrepareModePageState extends State<PrepareModePage> {
           print('Total detail items now: ${_detailCatridgeItems.length}');
         });
         
+        // Check if approval form should be hidden
+        _checkAndHideApprovalForm();
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Catridge found: ${catridgeData.code}')),
         );
@@ -233,6 +309,9 @@ class _PrepareModePageState extends State<PrepareModePage> {
         // Create error detail item
         _createErrorDetailItem(catridgeIndex, catridgeCode, errorMessage);
         
+        // Check if approval form should be hidden
+        _checkAndHideApprovalForm();
+        
         // Show error to user
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -244,6 +323,9 @@ class _PrepareModePageState extends State<PrepareModePage> {
     } catch (e) {
       print('Error looking up catridge: $e');
       _createErrorDetailItem(catridgeIndex, catridgeCode, 'Error: ${e.toString()}');
+      
+      // Check if approval form should be hidden
+      _checkAndHideApprovalForm();
     }
   }
   
@@ -283,6 +365,9 @@ class _PrepareModePageState extends State<PrepareModePage> {
           }
         });
         
+        // Check if approval form should be hidden
+        _checkAndHideApprovalForm();
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Seal berhasil divalidasi'),
@@ -313,6 +398,9 @@ class _PrepareModePageState extends State<PrepareModePage> {
           }
         });
         
+        // Check if approval form should be hidden
+        _checkAndHideApprovalForm();
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Validasi seal gagal: $errorMessage'),
@@ -337,6 +425,9 @@ class _PrepareModePageState extends State<PrepareModePage> {
           );
         }
       });
+      
+      // Check if approval form should be hidden
+      _checkAndHideApprovalForm();
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -369,6 +460,9 @@ class _PrepareModePageState extends State<PrepareModePage> {
       _detailCatridgeItems.sort((a, b) => a.index.compareTo(b.index));
       print('Created error detail item: $errorMessage');
     });
+    
+    // Check if approval form should be hidden
+    _checkAndHideApprovalForm();
   }
   
   // Remove detail catridge item
@@ -376,6 +470,9 @@ class _PrepareModePageState extends State<PrepareModePage> {
     setState(() {
       _detailCatridgeItems.removeWhere((item) => item.index == index);
     });
+    
+    // Check if approval form should be hidden
+    _checkAndHideApprovalForm();
   }
   
   // Check if all detail catridge items are valid and complete
@@ -433,6 +530,20 @@ class _PrepareModePageState extends State<PrepareModePage> {
     });
     
     try {
+      // Step 0: Validate TL Supervisor credentials and role
+      print('=== STEP 0: VALIDATE TL SUPERVISOR ===');
+      final tlValidationResponse = await _apiService.validateTLSupervisor(
+        nik: _nikTLController.text.trim(),
+        password: _passwordTLController.text.trim(),
+      );
+      
+      if (!tlValidationResponse.success || 
+          tlValidationResponse.data?.validationStatus != 'SUCCESS') {
+        throw Exception('Validasi TL SPV gagal: ${tlValidationResponse.message}');
+      }
+      
+      print('TL Supervisor validation success: ${tlValidationResponse.data?.userName} (${tlValidationResponse.data?.userRole})');
+      
       // Step 1: Update Planning API
       print('=== STEP 1: UPDATE PLANNING ===');
       final planningResponse = await _apiService.updatePlanning(
@@ -605,7 +716,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
     if (_idCRFController.text.isEmpty || !mounted) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Please enter ID CRF';
+          _errorMessage = 'Silakan masukkan ID CRF terlebih dahulu';
         });
       }
       return;
@@ -613,11 +724,19 @@ class _PrepareModePageState extends State<PrepareModePage> {
     
     int id;
     try {
-      id = int.parse(_idCRFController.text);
+      id = int.parse(_idCRFController.text.trim());
+      if (id <= 0) {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'ID CRF harus berupa angka positif yang valid';
+          });
+        }
+        return;
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Invalid ID format. Please enter a number.';
+          _errorMessage = 'Format ID CRF tidak valid. Masukkan angka yang benar, contoh: 12345';
         });
       }
       return;
@@ -658,8 +777,14 @@ class _PrepareModePageState extends State<PrepareModePage> {
             
             // Note: standValue is now taken directly from _prepareData.standValue
             // No need to store in _denomValues array
+            
+            // Check if approval form should be hidden
+            _checkAndHideApprovalForm();
           } else {
             _errorMessage = response.message;
+            
+            // Check if approval form should be hidden
+            _checkAndHideApprovalForm();
           }
         });
       }
@@ -667,13 +792,30 @@ class _PrepareModePageState extends State<PrepareModePage> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'Error: ${e.toString()}';
+          
+          // Provide more user-friendly error messages
+          String errorMessage = e.toString();
+          if (errorMessage.contains('Connection timeout') || errorMessage.contains('timeout')) {
+            _errorMessage = 'Koneksi timeout. Silakan periksa jaringan dan coba lagi.';
+          } else if (errorMessage.contains('Session expired') || errorMessage.contains('Unauthorized')) {
+            _errorMessage = 'Sesi telah berakhir. Silakan login ulang.';
+          } else if (errorMessage.contains('Network error') || errorMessage.contains('Connection failed')) {
+            _errorMessage = 'Tidak dapat terhubung ke server. Periksa koneksi internet dan coba lagi.';
+          } else if (errorMessage.contains('Invalid data format')) {
+            _errorMessage = 'Format data dari server tidak valid. Hubungi administrator sistem.';
+          } else {
+            // For other errors, show generic message
+            _errorMessage = 'Terjadi kesalahan. Silakan coba lagi atau hubungi support jika masalah berlanjut.';
+          }
         });
         
         // If unauthorized, navigate back to login
-        if (e.toString().contains('Unauthorized')) {
+        if (e.toString().contains('Unauthorized') || e.toString().contains('Session expired')) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Session expired. Please login again.')),
+            const SnackBar(
+              content: Text('Sesi telah berakhir. Silakan login ulang.'),
+              backgroundColor: Colors.red,
+            ),
           );
           
           // Clear token and navigate back
@@ -2254,78 +2396,114 @@ class _PrepareModePageState extends State<PrepareModePage> {
     required bool isSmallScreen,
     bool enableScan = false,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: isSmallScreen ? 12 : 14,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Container(
-          height: isSmallScreen ? 36 : 45,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  readOnly: readOnly,
-                  style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
-                  decoration: InputDecoration(
-                    hintText: hintText,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: isSmallScreen ? 8 : 12,
-                      vertical: isSmallScreen ? 6 : 10,
-                    ),
-                    border: InputBorder.none,
-                  ),
-                  onChanged: (value) {
-                    // Auto-trigger fetch data for ID CRF field
-                    if (label == 'ID CRF :' && value.isNotEmpty) {
-                      // Debounce the API call to avoid too many requests
-                      Future.delayed(Duration(milliseconds: 800), () {
-                        if (controller != null && controller.text == value && value.isNotEmpty) {
-                          _fetchPrepareData();
-                        }
-                      });
-                    }
-                  },
+    return Container(
+      height: isSmallScreen ? 36 : 45,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Label section - fixed width
+          SizedBox(
+            width: isSmallScreen ? 100 : 120,
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isSmallScreen ? 6 : 8),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: isSmallScreen ? 12 : 14,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              if (enableScan && controller != null)
-                IconButton(
-                  icon: Icon(
-                    Icons.qr_code_scanner,
-                    size: isSmallScreen ? 18 : 20,
-                    color: Colors.blue.shade600,
-                  ),
-                  onPressed: () => _openBarcodeScanner(label, controller),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              if (hasIcon)
-                IconButton(
-                  icon: Icon(
-                    iconData,
-                    size: isSmallScreen ? 18 : 24,
-                    color: Colors.grey.shade700,
-                  ),
-                  onPressed: onIconPressed,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              SizedBox(width: isSmallScreen ? 6 : 10),
-            ],
+            ),
           ),
-        ),
-      ],
+          
+          // Input field section with underline - expandable
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.grey.shade400,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      readOnly: readOnly,
+                      style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                      decoration: InputDecoration(
+                        hintText: hintText,
+                        contentPadding: EdgeInsets.only(
+                          left: isSmallScreen ? 4 : 6,
+                          right: isSmallScreen ? 4 : 6,
+                          bottom: isSmallScreen ? 6 : 8,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
+                      onChanged: (value) {
+                        // Auto-trigger fetch data for ID CRF field
+                        if (label == 'ID CRF :' && value.isNotEmpty) {
+                          // Debounce the API call to avoid too many requests
+                          Future.delayed(Duration(milliseconds: 800), () {
+                            if (controller != null && controller.text == value && value.isNotEmpty) {
+                              _fetchPrepareData();
+                            }
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  
+                  // Icons positioned on the underline
+                  if (enableScan && controller != null)
+                    Container(
+                      width: isSmallScreen ? 20 : 24,
+                      height: isSmallScreen ? 20 : 24,
+                      margin: EdgeInsets.only(
+                        left: isSmallScreen ? 4 : 6,
+                        bottom: isSmallScreen ? 3 : 4,
+                      ),
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.qr_code_scanner,
+                          size: isSmallScreen ? 14 : 18,
+                          color: Colors.blue.shade600,
+                        ),
+                        onPressed: () => _openBarcodeScanner(label, controller),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ),
+                    
+                  if (hasIcon)
+                    Container(
+                      width: isSmallScreen ? 20 : 24,
+                      height: isSmallScreen ? 20 : 24,
+                      margin: EdgeInsets.only(
+                        left: isSmallScreen ? 4 : 6,
+                        bottom: isSmallScreen ? 3 : 4,
+                      ),
+                      child: IconButton(
+                        icon: Icon(
+                          iconData,
+                          size: isSmallScreen ? 14 : 18,
+                          color: Colors.grey.shade700,
+                        ),
+                        onPressed: onIconPressed,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

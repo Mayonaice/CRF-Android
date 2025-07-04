@@ -409,4 +409,51 @@ class ApiResponse {
       data: json['data'],
     );
   }
+}
+
+// TL Supervisor Validation Models
+class TLSupervisorValidationData {
+  final String validationStatus;
+  final String errorMessage;
+  final String userRole;
+  final String userName;
+  final String nik;
+
+  TLSupervisorValidationData({
+    required this.validationStatus,
+    required this.errorMessage,
+    required this.userRole,
+    required this.userName,
+    required this.nik,
+  });
+
+  factory TLSupervisorValidationData.fromJson(Map<String, dynamic> json) {
+    return TLSupervisorValidationData(
+      validationStatus: json['validationStatus'] ?? '',
+      errorMessage: json['errorMessage'] ?? '',
+      userRole: json['userRole'] ?? '',
+      userName: json['userName'] ?? '',
+      nik: json['nik'] ?? '',
+    );
+  }
+}
+
+class TLSupervisorValidationResponse {
+  final bool success;
+  final String message;
+  final TLSupervisorValidationData? data;
+
+  TLSupervisorValidationResponse({
+    required this.success,
+    required this.message,
+    this.data,
+  });
+
+  factory TLSupervisorValidationResponse.fromJson(Map<String, dynamic> json) {
+    return TLSupervisorValidationResponse(
+      success: json['success'] ?? false,
+      message: json['message'] ?? '',
+      data: json['data'] != null ? TLSupervisorValidationData.fromJson(json['data']) : null,
+    );
+  }
 } 

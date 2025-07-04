@@ -721,116 +721,126 @@ class _PrepareModePageState extends State<PrepareModePage> {
             
             // Main content - Changes layout based on screen size
             Expanded(
-              child: isSmallScreen
-                ? SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Form header fields
-                        _buildFormHeaderFields(isSmallScreen),
-                        
-                        // Left side - Catridge forms
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final availableWidth = constraints.maxWidth;
+                  final availableHeight = constraints.maxHeight;
+                  final useVerticalLayout = isSmallScreen || availableWidth < 800;
+                  
+                  return useVerticalLayout
+                    ? SingleChildScrollView(
+                        padding: EdgeInsets.all(isSmallScreen ? 8.0 : 16.0),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: availableHeight - 32, // Account for padding
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Dynamic catridge sections
-                              for (int i = 0; i < _catridgeControllers.length; i++)
-                                _buildCatridgeSection(i + 1, _catridgeControllers[i], _denomValues[i], isSmallScreen),
+                              // Form header fields
+                              _buildFormHeaderFields(isSmallScreen),
+                              
+                              SizedBox(height: isSmallScreen ? 8 : 16),
+                              
+                              // Left side - Catridge forms
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Dynamic catridge sections
+                                  for (int i = 0; i < _catridgeControllers.length; i++)
+                                    _buildCatridgeSection(i + 1, _catridgeControllers[i], _denomValues[i], isSmallScreen),
+                                ],
+                              ),
+                              
+                              // Horizontal divider
+                              Container(
+                                margin: const EdgeInsets.symmetric(vertical: 10),
+                                height: 1,
+                                color: Colors.grey.withOpacity(0.3),
+                              ),
+                              
+                              // Right side - Details
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Detail WSID section
+                                  _buildDetailWSIDSection(isSmallScreen),
+                                  
+                                  // Detail Catridge section
+                                  _buildDetailCatridgeSection(isSmallScreen),
+                                  
+                                  // Approval TL Supervisor form
+                                  if (_showApprovalForm)
+                                    _buildApprovalForm(isSmallScreen),
+                                  
+                                  // Grand Total and Submit button
+                                  _buildTotalAndSubmitSection(isSmallScreen),
+                                ],
+                              ),
                             ],
                           ),
                         ),
-                        
-                        // Horizontal divider
-                        Container(
-                          margin: const EdgeInsets.symmetric(vertical: 10),
-                          height: 1,
-                          color: Colors.grey.withOpacity(0.3),
-                        ),
-                        
-                        // Right side - Details
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Detail WSID section
-                              _buildDetailWSIDSection(isSmallScreen),
-                              
-                              // Detail Catridge section
-                              _buildDetailCatridgeSection(isSmallScreen),
-                              
-                              // Approval TL Supervisor form
-                              if (_showApprovalForm)
-                                _buildApprovalForm(isSmallScreen),
-                              
-                              // Grand Total and Submit button
-                              _buildTotalAndSubmitSection(isSmallScreen),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Left side - Catridge forms
-                      Expanded(
-                        flex: 2,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: SingleChildScrollView(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Form header fields
-                                _buildFormHeaderFields(isSmallScreen),
-                                
-                                // Dynamic catridge sections
-                                for (int i = 0; i < _catridgeControllers.length; i++)
-                                  _buildCatridgeSection(i + 1, _catridgeControllers[i], _denomValues[i], isSmallScreen),
-                              ],
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Left side - Catridge forms
+                          Expanded(
+                            flex: 2,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Form header fields
+                                    _buildFormHeaderFields(isSmallScreen),
+                                    
+                                    // Dynamic catridge sections
+                                    for (int i = 0; i < _catridgeControllers.length; i++)
+                                      _buildCatridgeSection(i + 1, _catridgeControllers[i], _denomValues[i], isSmallScreen),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                      
-                      // Vertical divider
-                      Container(
-                        width: 1,
-                        color: Colors.grey.withOpacity(0.3),
-                      ),
-                      
-                      // Right side - Details
-                      Expanded(
-                        flex: 1,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: SingleChildScrollView(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Detail WSID section
-                                _buildDetailWSIDSection(isSmallScreen),
-                                
-                                // Detail Catridge section
-                                _buildDetailCatridgeSection(isSmallScreen),
-                                
-                                // Approval TL Supervisor form
-                                if (_showApprovalForm)
-                                  _buildApprovalForm(isSmallScreen),
-                                
-                                // Grand Total and Submit button
-                                _buildTotalAndSubmitSection(isSmallScreen),
-                              ],
+                          
+                          // Vertical divider
+                          Container(
+                            width: 1,
+                            color: Colors.grey.withOpacity(0.3),
+                          ),
+                          
+                          // Right side - Details
+                          Expanded(
+                            flex: 1,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Detail WSID section
+                                    _buildDetailWSIDSection(isSmallScreen),
+                                    
+                                    // Detail Catridge section
+                                    _buildDetailCatridgeSection(isSmallScreen),
+                                    
+                                    // Approval TL Supervisor form
+                                    if (_showApprovalForm)
+                                      _buildApprovalForm(isSmallScreen),
+                                    
+                                    // Grand Total and Submit button
+                                    _buildTotalAndSubmitSection(isSmallScreen),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
+                        ],
+                      );
+                }
+              ),
             ),
             
             // Footer
@@ -864,18 +874,20 @@ class _PrepareModePageState extends State<PrepareModePage> {
             icon: Icon(
               Icons.arrow_back, 
               color: Colors.red, 
-              size: isSmallScreen ? 24 : 30
+              size: isSmallScreen ? 20 : 30
             ),
             padding: EdgeInsets.zero,
-            constraints: BoxConstraints(),
+            constraints: BoxConstraints(minWidth: isSmallScreen ? 32 : 48),
             onPressed: () => Navigator.of(context).pop(),
           ),
+          
+          SizedBox(width: isSmallScreen ? 4 : 8),
           
           // Title
           Text(
             'Prepare Mode',
             style: TextStyle(
-              fontSize: isSmallScreen ? 18 : 22,
+              fontSize: isSmallScreen ? 16 : 22,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -885,37 +897,42 @@ class _PrepareModePageState extends State<PrepareModePage> {
           // Location and user info - For small screens, show minimal info
           if (isSmallScreen)
             // Compact header for small screens
-            Flexible(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      'JAKARTA-CIDENG',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'JAKARTA-CIDENG',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade100,
-                      borderRadius: BorderRadius.circular(12),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Meja: 010101',
+                      style: TextStyle(fontSize: 8),
                     ),
-                    child: Text(
-                      'CRF_OPR',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                    SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'CRF_OPR',
+                        style: TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             )
           else
             // Full header for larger screens
@@ -931,6 +948,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
                   ),
                 ),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
                       'Meja : 010101',
@@ -958,13 +976,13 @@ class _PrepareModePageState extends State<PrepareModePage> {
               ],
             ),
           
-          SizedBox(width: isSmallScreen ? 8 : 16),
+          SizedBox(width: isSmallScreen ? 4 : 16),
           
           // User avatar and info - Simplified for small screens
           if (isSmallScreen)
             // Just show avatar for small screens
             CircleAvatar(
-              radius: 15,
+              radius: 12,
               backgroundColor: Colors.grey.shade200,
               backgroundImage: const AssetImage('assets/images/user.jpg'),
               onBackgroundImageError: (exception, stackTrace) {},
@@ -972,6 +990,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
           else
             // Full user info for larger screens
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   decoration: BoxDecoration(
@@ -1019,12 +1038,11 @@ class _PrepareModePageState extends State<PrepareModePage> {
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ID CRF field with search functionality
+                // ID CRF field - removed search button
                 _buildFormField(
                   label: 'ID CRF :',
                   controller: _idCRFController,
-                  hasIcon: true,
-                  onIconPressed: _fetchPrepareData,
+                  hasIcon: false,
                   isSmallScreen: isSmallScreen,
                   enableScan: true,
                 ),
@@ -1053,13 +1071,12 @@ class _PrepareModePageState extends State<PrepareModePage> {
             )
           : Row(
               children: [
-                // ID CRF field with search functionality
+                // ID CRF field - removed search button
                 Expanded(
                   child: _buildFormField(
                     label: 'ID CRF :',
                     controller: _idCRFController,
-                    hasIcon: true,
-                    onIconPressed: _fetchPrepareData,
+                    hasIcon: false,
                     isSmallScreen: isSmallScreen,
                     enableScan: true,
                   ),
@@ -1150,83 +1167,94 @@ class _PrepareModePageState extends State<PrepareModePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Catridge $index',
-                style: TextStyle(
-                  fontSize: isSmallScreen ? 14 : 18,
-                  fontWeight: FontWeight.bold,
-                  decoration: TextDecoration.underline,
+              Flexible(
+                flex: 2,
+                child: Text(
+                  'Catridge $index',
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 12 : 18,
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Row(
-                children: [
-                  Text(
-                    'Denom',
-                    style: TextStyle(
-                      fontSize: isSmallScreen ? 12 : 14,
-                      fontWeight: FontWeight.bold,
+              Flexible(
+                flex: 1,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Denom',
+                      style: TextStyle(
+                        fontSize: isSmallScreen ? 10 : 14,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    denomText,
-                    style: TextStyle(
-                      fontSize: isSmallScreen ? 12 : 14,
+                    SizedBox(width: isSmallScreen ? 4 : 8),
+                    Flexible(
+                      child: Text(
+                        denomText,
+                        style: TextStyle(
+                          fontSize: isSmallScreen ? 10 : 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               )
             ],
           ),
-          SizedBox(height: isSmallScreen ? 8 : 15),
+          SizedBox(height: isSmallScreen ? 6 : 15),
           
           // Fields with denom section on right
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Left side - All fields in a vertical column with inline labels
+              // Left side - All 5 fields in single column (vertical) - made narrower
               Expanded(
-                flex: 3,
+                flex: isSmallScreen ? 3 : 3, // Increased from 2 to 3
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // No. Catridge field - inline style
-                    _buildInlineField(
+                    // No. Catridge field
+                    _buildCompactField(
                       label: 'No. Catridge', 
                       controller: controllers[0],
                       isSmallScreen: isSmallScreen,
                       catridgeIndex: index - 1,
                     ),
-                    SizedBox(height: 8),
+                    SizedBox(height: isSmallScreen ? 6 : 10),
                     
-                    // Seal Catridge field - inline style
-                    _buildInlineField(
+                    // Seal Catridge field
+                    _buildCompactField(
                       label: 'Seal Catridge', 
                       controller: controllers[1],
                       isSmallScreen: isSmallScreen,
                       catridgeIndex: index - 1,
                     ),
-                    SizedBox(height: 8),
+                    SizedBox(height: isSmallScreen ? 6 : 10),
                     
-                    // Bag Code field - inline style
-                    _buildInlineField(
+                    // Bag Code field
+                    _buildCompactField(
                       label: 'Bag Code', 
                       controller: controllers[2],
                       isSmallScreen: isSmallScreen,
                     ),
-                    SizedBox(height: 8),
+                    SizedBox(height: isSmallScreen ? 6 : 10),
                     
-                    // Seal Code field - inline style
-                    _buildInlineField(
+                    // Seal Code field
+                    _buildCompactField(
                       label: 'Seal Code', 
                       controller: controllers[3],
                       isSmallScreen: isSmallScreen,
                     ),
-                    SizedBox(height: 8),
+                    SizedBox(height: isSmallScreen ? 6 : 10),
                     
-                    // Additional field - Seal Code Return at the bottom - inline style
+                    // Seal Code Return field
                     if (controllers.length >= 5)
-                      _buildInlineField(
+                      _buildCompactField(
                         label: 'Seal Code Return', 
                         controller: controllers[4],
                         isSmallScreen: isSmallScreen,
@@ -1235,123 +1263,129 @@ class _PrepareModePageState extends State<PrepareModePage> {
                 ),
               ),
               
-              // Right side - Denom details with image and total
+              SizedBox(width: isSmallScreen ? 12 : 16),
+              
+              // Right side - Denom details with image and total - balanced width
               Expanded(
-                flex: 2,
-                child: Container(
-                  margin: EdgeInsets.only(left: isSmallScreen ? 5 : 15),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Money image
-                      Container(
-                        height: 100,
-                        width: double.infinity,
-                        margin: EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: _prepareData == null || imagePath == null
-                          ? Center(
-                              child: Icon(
-                                Icons.image_outlined,
-                                size: 40,
-                                color: Colors.grey.shade400,
-                              ),
-                            )
-                          : Image.asset(
-                              imagePath,
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.currency_exchange,
-                                      size: 40,
-                                      color: Colors.blue,
-                                    ),
-                                    SizedBox(height: 5),
-                                    Text(
-                                      denomText,
-                                      style: TextStyle(
-                                        fontSize: isSmallScreen ? 12 : 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
+                flex: isSmallScreen ? 2 : 2, // Reduced from 2:3 to 3:2
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Money image - adjusted size
+                    Container(
+                      height: isSmallScreen ? 110 : 135,
+                      width: double.infinity,
+                      margin: EdgeInsets.symmetric(vertical: isSmallScreen ? 8 : 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      
-                      // Value and Lembar info
-                      Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(color: Colors.grey.shade300),
+                      child: _prepareData == null || imagePath == null
+                        ? Center(
+                            child: Icon(
+                              Icons.image_outlined,
+                              size: isSmallScreen ? 45 : 60,
+                              color: Colors.grey.shade400,
+                            ),
+                          )
+                        : Image.asset(
+                            imagePath,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.currency_exchange,
+                                    size: isSmallScreen ? 45 : 60,
+                                    color: Colors.blue,
+                                  ),
+                                  SizedBox(height: isSmallScreen ? 5 : 8),
+                                  Text(
+                                    denomText,
+                                    style: TextStyle(
+                                      fontSize: isSmallScreen ? 13 : 17,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              );
+                            },
                           ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Value',
-                              style: TextStyle(
-                                fontSize: isSmallScreen ? 12 : 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              _prepareData?.standValue != null && _prepareData!.standValue > 0
-                                ? _prepareData!.standValue.toString()
-                                : '—',
-                              style: TextStyle(
-                                fontSize: isSmallScreen ? 12 : 14,
-                              ),
-                            ),
-                            Text(
-                              'Lembar',
-                              style: TextStyle(
-                                fontSize: isSmallScreen ? 12 : 14,
-                              ),
-                            ),
-                          ],
+                    ),
+                    
+                    // Value and Lembar info
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.symmetric(vertical: isSmallScreen ? 9 : 11),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: Colors.grey.shade300),
                         ),
                       ),
-                      
-                      // Total Nominal box
-                      Container(
-                        margin: EdgeInsets.only(top: 15),
-                        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-                        decoration: BoxDecoration(
-                          color: Color(0xFFDCF8C6),  // Light green background
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              'Total Nominal',
-                              style: TextStyle(
-                                fontSize: isSmallScreen ? 12 : 14,
-                                fontWeight: FontWeight.bold,
-                              ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Value',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 15,
+                              fontWeight: FontWeight.bold,
                             ),
-                            Text(
-                              formattedTotal,
-                              style: TextStyle(
-                                fontSize: isSmallScreen ? 14 : 16,
-                                fontWeight: FontWeight.bold,
-                              ),
+                          ),
+                          Text(
+                            _prepareData?.standValue != null && _prepareData!.standValue > 0
+                              ? _prepareData!.standValue.toString()
+                              : '—',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 15,
                             ),
-                          ],
-                        ),
+                          ),
+                          Text(
+                            'Lembar',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 15,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    
+                    // Total Nominal box
+                    Container(
+                      margin: EdgeInsets.only(top: isSmallScreen ? 11 : 16),
+                      padding: EdgeInsets.symmetric(
+                        vertical: isSmallScreen ? 11 : 13, 
+                        horizontal: isSmallScreen ? 9 : 11
+                      ),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFDCF8C6),  // Light green background
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            'Total Nominal',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: isSmallScreen ? 5 : 8),
+                          Text(
+                            formattedTotal,
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 15 : 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1387,98 +1421,82 @@ class _PrepareModePageState extends State<PrepareModePage> {
     return 'Rp $result';
   }
 
-  // Helper method to build inline field (label and field on same row)
-  Widget _buildInlineField({
+  // Helper method to build compact field (for horizontal layout)
+  Widget _buildCompactField({
     required String label,
     required TextEditingController controller,
     required bool isSmallScreen,
     int? catridgeIndex,
   }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Label - fixed width
-        Container(
-          width: isSmallScreen ? 100 : 120,
-          child: Text(
-            '$label',
-            style: TextStyle(
-              fontSize: isSmallScreen ? 12 : 14,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        
-        // Colon
         Text(
-          ':',
+          label,
           style: TextStyle(
-            fontSize: isSmallScreen ? 12 : 14,
+            fontSize: isSmallScreen ? 10 : 12,
             fontWeight: FontWeight.bold,
           ),
         ),
-        
-        SizedBox(width: 10),
-        
-        // Field
-        Expanded(
-          child: Container(
-            height: isSmallScreen ? 36 : 40,
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
-                    decoration: InputDecoration(
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: isSmallScreen ? 8 : 12,
-                      ),
-                      border: InputBorder.none,
+        SizedBox(height: isSmallScreen ? 2 : 4),
+        Container(
+          height: isSmallScreen ? 32 : 36,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  style: TextStyle(fontSize: isSmallScreen ? 10 : 12),
+                  decoration: InputDecoration(
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: isSmallScreen ? 6 : 8,
                     ),
-                    onChanged: (value) {
-                      // Step 1: If this is a catridge code field, lookup catridge and create detail
-                      if (label == 'No. Catridge' && catridgeIndex != null) {
-                        print('No. Catridge changed: $value for index $catridgeIndex');
-                        // Debounce the lookup to avoid too many API calls
-                        Future.delayed(Duration(milliseconds: 500), () {
-                          if (controller.text == value && value.isNotEmpty) {
-                            _lookupCatridgeAndCreateDetail(catridgeIndex, value);
-                          }
-                        });
-                      }
-                      // Step 2: If this is a seal catridge field, validate seal and update detail
-                      else if (label == 'Seal Catridge' && catridgeIndex != null) {
-                        print('Seal Catridge changed: $value for index $catridgeIndex');
-                        // Debounce the validation to avoid too many API calls
-                        Future.delayed(Duration(milliseconds: 500), () {
-                          if (controller.text == value && value.isNotEmpty) {
-                            _validateSealAndUpdateDetail(catridgeIndex, value);
-                          }
-                        });
-                      }
-                    },
+                    border: InputBorder.none,
                   ),
-
+                  onChanged: (value) {
+                    // Step 1: If this is a catridge code field, lookup catridge and create detail
+                    if (label == 'No. Catridge' && catridgeIndex != null) {
+                      print('No. Catridge changed: $value for index $catridgeIndex');
+                      // Debounce the lookup to avoid too many API calls
+                      Future.delayed(Duration(milliseconds: 500), () {
+                        if (controller.text == value && value.isNotEmpty) {
+                          _lookupCatridgeAndCreateDetail(catridgeIndex, value);
+                        }
+                      });
+                    }
+                    // Step 2: If this is a seal catridge field, validate seal and update detail
+                    else if (label == 'Seal Catridge' && catridgeIndex != null) {
+                      print('Seal Catridge changed: $value for index $catridgeIndex');
+                      // Debounce the validation to avoid too many API calls
+                      Future.delayed(Duration(milliseconds: 500), () {
+                        if (controller.text == value && value.isNotEmpty) {
+                          _validateSealAndUpdateDetail(catridgeIndex, value);
+                        }
+                      });
+                    }
+                  },
                 ),
-                // Scan barcode icon button
-                IconButton(
+              ),
+              // Scan barcode icon button
+              Container(
+                width: isSmallScreen ? 24 : 28,
+                height: isSmallScreen ? 24 : 28,
+                child: IconButton(
                   icon: Icon(
                     Icons.qr_code_scanner,
-                    size: isSmallScreen ? 18 : 20,
+                    size: isSmallScreen ? 12 : 16,
                     color: Colors.blue.shade600,
                   ),
                   onPressed: () => _openBarcodeScanner(label, controller),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
-                SizedBox(width: isSmallScreen ? 6 : 10),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ],
@@ -1925,31 +1943,35 @@ class _PrepareModePageState extends State<PrepareModePage> {
     // Jika belum ada data, tampilkan tanda strip
     if (_prepareData == null) {
       return Padding(
-        padding: EdgeInsets.only(top: isSmallScreen ? 15 : 25),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        padding: EdgeInsets.only(top: isSmallScreen ? 10 : 25),
+        child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             // Grand Total
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   'Grand Total :',
                   style: TextStyle(
-                    fontSize: isSmallScreen ? 14 : 16,
+                    fontSize: isSmallScreen ? 12 : 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                SizedBox(width: isSmallScreen ? 8 : 15),
+                SizedBox(width: isSmallScreen ? 6 : 15),
                 Text(
                   '—',
                   style: TextStyle(
-                    fontSize: isSmallScreen ? 14 : 16,
+                    fontSize: isSmallScreen ? 12 : 16,
                     fontWeight: FontWeight.bold,
                     color: Colors.red,
                   ),
                 ),
               ],
             ),
+            
+            SizedBox(height: isSmallScreen ? 8 : 0),
             
             // Submit button with arrow icon
             Container(
@@ -1970,11 +1992,11 @@ class _PrepareModePageState extends State<PrepareModePage> {
               ),
               child: ElevatedButton.icon(
                 onPressed: _areAllCatridgeItemsValid() ? _showApprovalFormDialog : null,
-                icon: const Icon(Icons.arrow_forward),
+                icon: Icon(Icons.arrow_forward, size: isSmallScreen ? 14 : 16),
                 label: Text(
                   'Submit Data',
                   style: TextStyle(
-                    fontSize: isSmallScreen ? 14 : 16,
+                    fontSize: isSmallScreen ? 12 : 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1983,8 +2005,8 @@ class _PrepareModePageState extends State<PrepareModePage> {
                   foregroundColor: Colors.white,
                   elevation: 0,
                   padding: EdgeInsets.symmetric(
-                    horizontal: isSmallScreen ? 12 : 24, 
-                    vertical: isSmallScreen ? 8 : 12
+                    horizontal: isSmallScreen ? 8 : 24, 
+                    vertical: isSmallScreen ? 6 : 12
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(25),
@@ -2032,31 +2054,38 @@ class _PrepareModePageState extends State<PrepareModePage> {
     String formattedTotal = totalAmount > 0 ? _formatCurrency(totalAmount) : '—';
     
     return Padding(
-      padding: EdgeInsets.only(top: isSmallScreen ? 15 : 25),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      padding: EdgeInsets.only(top: isSmallScreen ? 10 : 25),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           // Grand Total
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 'Grand Total :',
                 style: TextStyle(
-                  fontSize: isSmallScreen ? 14 : 16,
+                  fontSize: isSmallScreen ? 12 : 16,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              SizedBox(width: isSmallScreen ? 8 : 15),
-              Text(
-                formattedTotal,
-                style: TextStyle(
-                  fontSize: isSmallScreen ? 14 : 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.red,
+              SizedBox(width: isSmallScreen ? 6 : 15),
+              Flexible(
+                child: Text(
+                  formattedTotal,
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 12 : 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
+          
+          SizedBox(height: isSmallScreen ? 8 : 0),
           
           // Submit button with arrow icon
           Container(
@@ -2077,11 +2106,11 @@ class _PrepareModePageState extends State<PrepareModePage> {
             ),
             child: ElevatedButton.icon(
               onPressed: _areAllCatridgeItemsValid() ? _showApprovalFormDialog : null,
-              icon: const Icon(Icons.arrow_forward),
+              icon: Icon(Icons.arrow_forward, size: isSmallScreen ? 14 : 16),
               label: Text(
                 'Submit Data',
                 style: TextStyle(
-                  fontSize: isSmallScreen ? 14 : 16,
+                  fontSize: isSmallScreen ? 12 : 16,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -2090,8 +2119,8 @@ class _PrepareModePageState extends State<PrepareModePage> {
                 foregroundColor: Colors.white,
                 elevation: 0,
                 padding: EdgeInsets.symmetric(
-                  horizontal: isSmallScreen ? 12 : 24, 
-                  vertical: isSmallScreen ? 8 : 12
+                  horizontal: isSmallScreen ? 8 : 24, 
+                  vertical: isSmallScreen ? 6 : 12
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(25),
@@ -2108,62 +2137,83 @@ class _PrepareModePageState extends State<PrepareModePage> {
     return Container(
       color: Colors.white,
       padding: EdgeInsets.symmetric(
-        vertical: isSmallScreen ? 5 : 10,
-        horizontal: isSmallScreen ? 10 : 20,
+        vertical: isSmallScreen ? 4 : 10,
+        horizontal: isSmallScreen ? 8 : 20,
       ),
       child: Row(
         children: [
           // Left side - version info
-          Row(
-            children: [
-              Text(
-                'CASH REPLENISH FORM',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: isSmallScreen ? 12 : 16,
+          Flexible(
+            flex: 2,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    'CASH REPLENISH FORM',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: isSmallScreen ? 10 : 16,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-              SizedBox(width: 8),
-              Text(
-                'ver. 0.0.1',
-                style: TextStyle(
-                  fontSize: isSmallScreen ? 10 : 14,
+                SizedBox(width: isSmallScreen ? 4 : 8),
+                Text(
+                  'ver. 0.0.1',
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 8 : 14,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           
           const Spacer(),
           
           // Right side - logos
-          Row(
-            children: [
-              Image.asset(
-                'assets/images/advantage_logo.png',
-                height: isSmallScreen ? 30 : 40,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    height: isSmallScreen ? 30 : 40,
-                    width: isSmallScreen ? 80 : 120,
-                    color: Colors.transparent,
-                    child: Center(child: Text('ADVANTAGE')),
-                  );
-                },
-              ),
-              SizedBox(width: isSmallScreen ? 10 : 20),
-              Image.asset(
-                'assets/images/crf_logo.png',
-                height: isSmallScreen ? 30 : 40,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    height: isSmallScreen ? 30 : 40,
-                    width: isSmallScreen ? 40 : 60,
-                    color: Colors.transparent,
-                    child: Center(child: Text('CRF')),
-                  );
-                },
-              ),
-            ],
+          Flexible(
+            flex: 1,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'assets/images/advantage_logo.png',
+                  height: isSmallScreen ? 20 : 40,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      height: isSmallScreen ? 20 : 40,
+                      width: isSmallScreen ? 60 : 120,
+                      color: Colors.transparent,
+                      child: Center(
+                        child: Text(
+                          'ADVANTAGE',
+                          style: TextStyle(fontSize: isSmallScreen ? 8 : 12),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                SizedBox(width: isSmallScreen ? 6 : 20),
+                Image.asset(
+                  'assets/images/crf_logo.png',
+                  height: isSmallScreen ? 20 : 40,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      height: isSmallScreen ? 20 : 40,
+                      width: isSmallScreen ? 20 : 60,
+                      color: Colors.transparent,
+                      child: Center(
+                        child: Text(
+                          'CRF',
+                          style: TextStyle(fontSize: isSmallScreen ? 8 : 12),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -2213,6 +2263,17 @@ class _PrepareModePageState extends State<PrepareModePage> {
                     ),
                     border: InputBorder.none,
                   ),
+                  onChanged: (value) {
+                    // Auto-trigger fetch data for ID CRF field
+                    if (label == 'ID CRF :' && value.isNotEmpty) {
+                      // Debounce the API call to avoid too many requests
+                      Future.delayed(Duration(milliseconds: 800), () {
+                        if (controller != null && controller.text == value && value.isNotEmpty) {
+                          _fetchPrepareData();
+                        }
+                      });
+                    }
+                  },
                 ),
               ),
               if (enableScan && controller != null)

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 class BarcodeScannerWidget extends StatefulWidget {
@@ -16,25 +17,39 @@ class BarcodeScannerWidget extends StatefulWidget {
 }
 
 class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
-  MobileScannerController cameraController = MobileScannerController();
+  MobileScannerController cameraController = MobileScannerController(
+    // Configure camera for landscape orientation
+    facing: CameraFacing.back,
+    torchEnabled: false,
+    useNewCameraSelector: true,
+  );
   bool _screenOpened = false;
 
   @override
   void initState() {
     super.initState();
     _screenOpened = false;
+    
+    // Lock orientation to landscape only for camera
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final isSmallScreen = size.width < 600;
+    
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
         title: Text(
           widget.title,
-          style: const TextStyle(
-            fontSize: 18,
+          style: TextStyle(
+            fontSize: isSmallScreen ? 16 : 18,
             fontWeight: FontWeight.w500,
             color: Colors.white,
           ),
@@ -79,59 +94,64 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
       ),
       body: Stack(
         children: [
-          // Camera preview
-          MobileScanner(
-            controller: cameraController,
-            onDetect: _foundBarcode,
+          // Camera preview with proper orientation
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            child: MobileScanner(
+              controller: cameraController,
+              onDetect: _foundBarcode,
+              fit: BoxFit.cover, // Ensure camera fills the screen properly
+            ),
           ),
           
-          // Overlay with scanning frame
+          // Overlay with scanning frame - responsive size
           Container(
             decoration: ShapeDecoration(
               shape: QrScannerOverlayShape(
                 borderColor: Colors.red,
                 borderRadius: 10,
-                borderLength: 30,
-                borderWidth: 10,
-                cutOutSize: 300,
+                borderLength: isSmallScreen ? 25 : 30,
+                borderWidth: isSmallScreen ? 8 : 10,
+                cutOutSize: isSmallScreen ? 200 : 300,
               ),
             ),
           ),
           
-          // Instructions
+          // Instructions - responsive positioning
           Positioned(
-            bottom: 100,
-            left: 0,
-            right: 0,
+            bottom: isSmallScreen ? 60 : 100,
+            left: isSmallScreen ? 10 : 0,
+            right: isSmallScreen ? 10 : 0,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 10 : 20),
               child: Card(
-                color: Colors.white.withOpacity(0.8),
+                color: Colors.white.withOpacity(0.9),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.qr_code_scanner,
-                        size: 48,
+                        size: isSmallScreen ? 32 : 48,
                         color: Colors.blue[600],
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: isSmallScreen ? 8 : 12),
                       Text(
                         'Arahkan kamera ke barcode',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: isSmallScreen ? 14 : 16,
                           fontWeight: FontWeight.bold,
                           color: Colors.grey[800],
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: isSmallScreen ? 4 : 8),
                       Text(
                         'Barcode akan otomatis terdeteksi dan mengisi field',
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: isSmallScreen ? 12 : 14,
                           color: Colors.grey[600],
                         ),
                         textAlign: TextAlign.center,

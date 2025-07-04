@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m1
     environment:
       flutter: 3.16.9 # Using specific older version that's more compatible
-      java: 11 # Downgraded Java version for compatibility
+      java: 17 # Updated Java version for Android Gradle Plugin 8.1.0
 # No signing config for debug build
       vars:
         PACKAGE_NAME: "com.advantage.crf" # Application ID from build.gradle
@@ -33,6 +33,9 @@ workflows:
           echo "org.gradle.jvmargs=-Xmx3072m" >> android/gradle.properties
           echo "org.gradle.parallel=true" >> android/gradle.properties
           echo "org.gradle.daemon=true" >> android/gradle.properties
+          echo "android.compileSdkVersion=34" >> android/gradle.properties
+          echo "android.targetSdkVersion=34" >> android/gradle.properties
+          echo "android.buildToolsVersion=34.0.0" >> android/gradle.properties
           
           # Generate required resource directories
           mkdir -p android/app/src/main/res/drawable
@@ -104,12 +107,12 @@ workflows:
           echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
           echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
           echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
-          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-7.4-all.zip" >> gradle/wrapper/gradle-wrapper.properties
+          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.0-all.zip" >> gradle/wrapper/gradle-wrapper.properties
           
           # Download Gradle wrapper files
-          curl -s -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v7.4.0/gradle/wrapper/gradle-wrapper.jar
-          curl -s -o gradlew https://raw.githubusercontent.com/gradle/gradle/v7.4.0/gradlew
-          curl -s -o gradlew.bat https://raw.githubusercontent.com/gradle/gradle/v7.4.0/gradlew.bat
+          curl -s -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.0.0/gradle/wrapper/gradle-wrapper.jar
+          curl -s -o gradlew https://raw.githubusercontent.com/gradle/gradle/v8.0.0/gradlew
+          curl -s -o gradlew.bat https://raw.githubusercontent.com/gradle/gradle/v8.0.0/gradlew.bat
           chmod +x gradlew
           
           # Verify wrapper is created

@@ -18,7 +18,7 @@ class BarcodeScannerWidget extends StatefulWidget {
 
 class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
   MobileScannerController cameraController = MobileScannerController(
-    // Configure camera for landscape orientation
+    // Configure camera for portrait orientation during scanning
     facing: CameraFacing.back,
     torchEnabled: false,
     useNewCameraSelector: true,
@@ -30,17 +30,18 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
     super.initState();
     _screenOpened = false;
     
-    // Lock orientation to landscape only for camera
+    // Change to portrait orientation for camera scanning
     SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
     ]);
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final isSmallScreen = size.width < 600;
+    // For portrait mode, adjust the responsive check
+    final isSmallScreen = size.height < 600; // Changed from width to height for portrait
     
     return Scaffold(
       backgroundColor: Colors.black,
@@ -55,7 +56,14 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
           ),
         ),
         leading: IconButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            // Return to landscape orientation before closing
+            SystemChrome.setPreferredOrientations([
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ]);
+            Navigator.of(context).pop();
+          },
           icon: const Icon(
             Icons.arrow_back,
             color: Colors.white,
@@ -94,7 +102,7 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
       ),
       body: Stack(
         children: [
-          // Camera preview with proper orientation
+          // Camera preview with proper orientation for portrait
           Container(
             width: double.infinity,
             height: double.infinity,
@@ -105,7 +113,7 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
             ),
           ),
           
-          // Overlay with scanning frame - responsive size
+          // Overlay with scanning frame - adjusted for portrait
           Container(
             decoration: ShapeDecoration(
               shape: QrScannerOverlayShape(
@@ -113,45 +121,45 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
                 borderRadius: 10,
                 borderLength: isSmallScreen ? 25 : 30,
                 borderWidth: isSmallScreen ? 8 : 10,
-                cutOutSize: isSmallScreen ? 200 : 300,
+                cutOutSize: isSmallScreen ? 250 : 300, // Larger for portrait
               ),
             ),
           ),
           
-          // Instructions - responsive positioning
+          // Instructions - responsive positioning for portrait
           Positioned(
-            bottom: isSmallScreen ? 60 : 100,
-            left: isSmallScreen ? 10 : 0,
-            right: isSmallScreen ? 10 : 0,
+            bottom: isSmallScreen ? 80 : 120,
+            left: isSmallScreen ? 10 : 20,
+            right: isSmallScreen ? 10 : 20,
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 10 : 20),
+              padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 15 : 20),
               child: Card(
                 color: Colors.white.withOpacity(0.9),
                 child: Padding(
-                  padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
+                  padding: EdgeInsets.all(isSmallScreen ? 16 : 20),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.qr_code_scanner,
-                        size: isSmallScreen ? 32 : 48,
+                        size: isSmallScreen ? 40 : 48,
                         color: Colors.blue[600],
                       ),
-                      SizedBox(height: isSmallScreen ? 8 : 12),
+                      SizedBox(height: isSmallScreen ? 12 : 16),
                       Text(
                         'Arahkan kamera ke barcode',
                         style: TextStyle(
-                          fontSize: isSmallScreen ? 14 : 16,
+                          fontSize: isSmallScreen ? 16 : 18,
                           fontWeight: FontWeight.bold,
                           color: Colors.grey[800],
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      SizedBox(height: isSmallScreen ? 4 : 8),
+                      SizedBox(height: isSmallScreen ? 8 : 12),
                       Text(
                         'Barcode akan otomatis terdeteksi dan mengisi field',
                         style: TextStyle(
-                          fontSize: isSmallScreen ? 12 : 14,
+                          fontSize: isSmallScreen ? 14 : 16,
                           color: Colors.grey[600],
                         ),
                         textAlign: TextAlign.center,
@@ -183,6 +191,12 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
             print('Error stopping camera: $e');
           }
           
+          // Return to landscape orientation before calling callback
+          SystemChrome.setPreferredOrientations([
+            DeviceOrientation.landscapeLeft,
+            DeviceOrientation.landscapeRight,
+          ]);
+          
           // Call the callback function
           widget.onBarcodeDetected(code);
           
@@ -197,6 +211,12 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
 
   @override
   void dispose() {
+    // Ensure we return to landscape orientation when disposing
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    
     try {
       cameraController.dispose();
     } catch (e) {

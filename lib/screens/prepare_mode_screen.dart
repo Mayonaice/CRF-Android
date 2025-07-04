@@ -1421,85 +1421,108 @@ class _PrepareModePageState extends State<PrepareModePage> {
     return 'Rp $result';
   }
 
-  // Helper method to build compact field (for horizontal layout)
+  // Helper method to build compact field (for inline layout with underline)
   Widget _buildCompactField({
     required String label,
     required TextEditingController controller,
     required bool isSmallScreen,
     int? catridgeIndex,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: isSmallScreen ? 10 : 12,
-            fontWeight: FontWeight.bold,
+    return Container(
+      height: isSmallScreen ? 32 : 36,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Label section - fixed width
+          SizedBox(
+            width: isSmallScreen ? 85 : 100,
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isSmallScreen ? 4 : 6),
+              child: Text(
+                '$label :',
+                style: TextStyle(
+                  fontSize: isSmallScreen ? 10 : 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
           ),
-        ),
-        SizedBox(height: isSmallScreen ? 2 : 4),
-        Container(
-          height: isSmallScreen ? 32 : 36,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade300),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  style: TextStyle(fontSize: isSmallScreen ? 10 : 12),
-                  decoration: InputDecoration(
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: isSmallScreen ? 6 : 8,
+          
+          // Input field section with underline - expandable
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.grey.shade400,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      style: TextStyle(fontSize: isSmallScreen ? 10 : 12),
+                      decoration: InputDecoration(
+                        contentPadding: EdgeInsets.only(
+                          left: isSmallScreen ? 4 : 6,
+                          right: isSmallScreen ? 4 : 6,
+                          bottom: isSmallScreen ? 4 : 6,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
+                      onChanged: (value) {
+                        // Step 1: If this is a catridge code field, lookup catridge and create detail
+                        if (label == 'No. Catridge' && catridgeIndex != null) {
+                          print('No. Catridge changed: $value for index $catridgeIndex');
+                          // Debounce the lookup to avoid too many API calls
+                          Future.delayed(Duration(milliseconds: 500), () {
+                            if (controller.text == value && value.isNotEmpty) {
+                              _lookupCatridgeAndCreateDetail(catridgeIndex, value);
+                            }
+                          });
+                        }
+                        // Step 2: If this is a seal catridge field, validate seal and update detail
+                        else if (label == 'Seal Catridge' && catridgeIndex != null) {
+                          print('Seal Catridge changed: $value for index $catridgeIndex');
+                          // Debounce the validation to avoid too many API calls
+                          Future.delayed(Duration(milliseconds: 500), () {
+                            if (controller.text == value && value.isNotEmpty) {
+                              _validateSealAndUpdateDetail(catridgeIndex, value);
+                            }
+                          });
+                        }
+                      },
                     ),
-                    border: InputBorder.none,
                   ),
-                  onChanged: (value) {
-                    // Step 1: If this is a catridge code field, lookup catridge and create detail
-                    if (label == 'No. Catridge' && catridgeIndex != null) {
-                      print('No. Catridge changed: $value for index $catridgeIndex');
-                      // Debounce the lookup to avoid too many API calls
-                      Future.delayed(Duration(milliseconds: 500), () {
-                        if (controller.text == value && value.isNotEmpty) {
-                          _lookupCatridgeAndCreateDetail(catridgeIndex, value);
-                        }
-                      });
-                    }
-                    // Step 2: If this is a seal catridge field, validate seal and update detail
-                    else if (label == 'Seal Catridge' && catridgeIndex != null) {
-                      print('Seal Catridge changed: $value for index $catridgeIndex');
-                      // Debounce the validation to avoid too many API calls
-                      Future.delayed(Duration(milliseconds: 500), () {
-                        if (controller.text == value && value.isNotEmpty) {
-                          _validateSealAndUpdateDetail(catridgeIndex, value);
-                        }
-                      });
-                    }
-                  },
-                ),
-              ),
-              // Scan barcode icon button
-              Container(
-                width: isSmallScreen ? 24 : 28,
-                height: isSmallScreen ? 24 : 28,
-                child: IconButton(
-                  icon: Icon(
-                    Icons.qr_code_scanner,
-                    size: isSmallScreen ? 12 : 16,
-                    color: Colors.blue.shade600,
+                  // Scan barcode icon button - positioned on the underline
+                  Container(
+                    width: isSmallScreen ? 20 : 24,
+                    height: isSmallScreen ? 20 : 24,
+                    margin: EdgeInsets.only(
+                      left: isSmallScreen ? 4 : 6,
+                      bottom: isSmallScreen ? 2 : 3,
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.qr_code_scanner,
+                        size: isSmallScreen ? 12 : 16,
+                        color: Colors.blue.shade600,
+                      ),
+                      onPressed: () => _openBarcodeScanner(label, controller),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
                   ),
-                  onPressed: () => _openBarcodeScanner(label, controller),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

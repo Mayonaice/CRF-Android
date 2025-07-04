@@ -265,4 +265,148 @@ class ATMPrepareReplenishData {
       listCatridge: catridgeList,
     );
   }
+}
+
+// Model for catridge lookup response
+class CatridgeData {
+  final String code;
+  final String barCode;
+  final String typeCatridge;
+  final String codeBank;
+  final int standValue;
+
+  CatridgeData({
+    required this.code,
+    required this.barCode,
+    required this.typeCatridge,
+    required this.codeBank,
+    required this.standValue,
+  });
+
+  factory CatridgeData.fromJson(Map<String, dynamic> json) {
+    return CatridgeData(
+      code: json['Code'] ?? '',
+      barCode: json['BarCode'] ?? '',
+      typeCatridge: json['TypeCatridge'] ?? '',
+      codeBank: json['CodeBank'] ?? '',
+      standValue: json['StandValue'] ?? 0,
+    );
+  }
+}
+
+class CatridgeResponse {
+  final bool success;
+  final String message;
+  final List<CatridgeData> data;
+
+  CatridgeResponse({
+    required this.success,
+    required this.message,
+    required this.data,
+  });
+
+  factory CatridgeResponse.fromJson(Map<String, dynamic> json) {
+    var dataList = json['data'] as List<dynamic>? ?? [];
+    List<CatridgeData> catridgeList = dataList
+        .map((item) => CatridgeData.fromJson(item))
+        .toList();
+
+    return CatridgeResponse(
+      success: json['success'] ?? false,
+      message: json['message'] ?? '',
+      data: catridgeList,
+    );
+  }
+}
+
+// Model for comprehensive seal validation response from SP
+class SealValidationData {
+  final String validationStatus;
+  final String errorCode;
+  final String errorMessage;
+  final String validatedSealCode;
+  final DateTime validationDate;
+  final String requestedSealCode;
+
+  SealValidationData({
+    required this.validationStatus,
+    required this.errorCode,
+    required this.errorMessage,
+    required this.validatedSealCode,
+    required this.validationDate,
+    required this.requestedSealCode,
+  });
+
+  factory SealValidationData.fromJson(Map<String, dynamic> json) {
+    return SealValidationData(
+      validationStatus: json['validationStatus'] ?? '',
+      errorCode: json['errorCode'] ?? '',
+      errorMessage: json['errorMessage'] ?? '',
+      validatedSealCode: json['validatedSealCode'] ?? '',
+      validationDate: json['validationDate'] != null 
+        ? DateTime.parse(json['validationDate']) 
+        : DateTime.now(),
+      requestedSealCode: json['requestedSealCode'] ?? '',
+    );
+  }
+}
+
+class SealValidationResponse {
+  final bool success;
+  final String message;
+  final SealValidationData? data;
+
+  SealValidationResponse({
+    required this.success,
+    required this.message,
+    this.data,
+  });
+
+  factory SealValidationResponse.fromJson(Map<String, dynamic> json) {
+    return SealValidationResponse(
+      success: json['success'] ?? false,
+      message: json['message'] ?? '',
+      data: json['data'] != null ? SealValidationData.fromJson(json['data']) : null,
+    );
+  }
+}
+
+// Model for detail catridge items in the right panel
+class DetailCatridgeItem {
+  final int index;
+  String noCatridge;
+  String sealCatridge;
+  int value;
+  String total;
+  String denom;
+
+  DetailCatridgeItem({
+    required this.index,
+    this.noCatridge = '',
+    this.sealCatridge = '',
+    this.value = 0,
+    this.total = '',
+    this.denom = '',
+  });
+}
+
+// Generic API Response model for planning/update and atm/catridge APIs
+class ApiResponse {
+  final bool success;
+  final String message;
+  final dynamic data;
+
+  ApiResponse({
+    required this.success,
+    required this.message,
+    this.data,
+  });
+
+  factory ApiResponse.fromJson(Map<String, dynamic> json) {
+    return ApiResponse(
+      success: json['success'] ?? false,
+      message: json['message'] ?? '',
+      data: json['data'],
+    );
+  }
 } 

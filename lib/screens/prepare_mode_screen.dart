@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../models/prepare_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../widgets/barcode_scanner_widget.dart';
 
 class PrepareModePage extends StatefulWidget {
   const PrepareModePage({Key? key}) : super(key: key);
@@ -29,6 +30,18 @@ class _PrepareModePageState extends State<PrepareModePage> {
   
   // Denom values for each catridge
   List<int> _denomValues = [];
+  
+  // Catridge data from lookup
+  List<CatridgeData?> _catridgeData = [];
+  
+  // Detail catridge data for the right panel
+  List<DetailCatridgeItem> _detailCatridgeItems = [];
+  
+  // Approval form state
+  bool _showApprovalForm = false;
+  bool _isSubmitting = false;
+  final TextEditingController _nikTLController = TextEditingController();
+  final TextEditingController _passwordTLController = TextEditingController();
 
   @override
   void initState() {
@@ -58,6 +71,10 @@ class _PrepareModePageState extends State<PrepareModePage> {
       }
     }
     
+    // Dispose approval form controllers
+    _nikTLController.dispose();
+    _passwordTLController.dispose();
+    
     super.dispose();
   }
   
@@ -78,6 +95,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
     
     _catridgeControllers = [];
     _denomValues = List.filled(count, 0);
+    _catridgeData = List.filled(count, null);
     
     // Create new controllers for each catridge
     for (int i = 0; i < count; i++) {
@@ -91,12 +109,505 @@ class _PrepareModePageState extends State<PrepareModePage> {
     }
   }
   
+  // Step 1: Lookup catridge and create initial detail item
+  Future<void> _lookupCatridgeAndCreateDetail(int catridgeIndex, String catridgeCode) async {
+    if (catridgeCode.isEmpty || !mounted) return;
+    
+    try {
+      print('=== STEP 1: LOOKUP CATRIDGE ===');
+      print('Catridge Index: $catridgeIndex');
+      print('Catridge Code: $catridgeCode');
+      
+      // Get branch code
+      String branchCode = "1"; // Default
+      if (_prepareData != null && _prepareData!.branchCode.isNotEmpty) {
+        branchCode = _prepareData!.branchCode;
+      }
+      
+      // Get required standValue from prepare data for validation
+      int? requiredStandValue = _prepareData?.standValue;
+      
+      print('Using requiredStandValue for validation: $requiredStandValue');
+      
+      final response = await _apiService.getCatridgeDetails(
+        branchCode, 
+        catridgeCode, 
+        requiredStandValue: requiredStandValue
+      );
+      
+      print('Catridge lookup response: ${response.success}, data count: ${response.data.length}, message: ${response.message}');
+      
+      if (response.success && response.data.isNotEmpty && mounted) {
+        final catridgeData = response.data.first;
+        print('Found catridge: ${catridgeData.code}');
+        
+        // Calculate denom amount
+        String tipeDenom = _prepareData?.tipeDenom ?? 'A50';
+        int denomAmount = 0;
+        String denomText = '';
+        
+        if (tipeDenom == 'A50') {
+          denomAmount = 50000;
+          denomText = 'Rp 50.000';
+        } else if (tipeDenom == 'A100') {
+          denomAmount = 100000;
+          denomText = 'Rp 100.000';
+        } else {
+          denomAmount = 50000;
+          denomText = 'Rp 50.000';
+        }
+        
+        // Use standValue from prepare data
+        int actualStandValue = _prepareData?.standValue ?? 0;
+        
+        // Calculate total
+        int totalNominal = denomAmount * actualStandValue;
+        String formattedTotal = _formatCurrency(totalNominal);
+        
+        // Auto-populate seal if available from prepare data
+        String autoSeal = '';
+        if (_prepareData != null && catridgeIndex == 0) {
+          // For first catridge, try to use seal from prepare data
+          if (_prepareData!.catridgeSeal.isNotEmpty) {
+            autoSeal = _prepareData!.catridgeSeal;
+            // Also populate the controller
+            if (_catridgeControllers.length > catridgeIndex && _catridgeControllers[catridgeIndex].length > 1) {
+              _catridgeControllers[catridgeIndex][1].text = autoSeal;
+            }
+          }
+        }
+        
+        // Create initial detail item
+        final detailItem = DetailCatridgeItem(
+          index: catridgeIndex + 1,
+          noCatridge: catridgeCode,
+          sealCatridge: autoSeal, // Auto-populated or empty
+          value: actualStandValue,
+          total: formattedTotal,
+          denom: denomText,
+        );
+        
+        setState(() {
+          // Store catridge data for reference
+          _catridgeData[catridgeIndex] = catridgeData;
+          
+          // Check if item already exists for this index
+          int existingIndex = _detailCatridgeItems.indexWhere((item) => item.index == catridgeIndex + 1);
+          if (existingIndex >= 0) {
+            // Update existing item but keep seal if already filled
+            var existingItem = _detailCatridgeItems[existingIndex];
+            _detailCatridgeItems[existingIndex] = DetailCatridgeItem(
+              index: detailItem.index,
+              noCatridge: detailItem.noCatridge,
+              sealCatridge: existingItem.sealCatridge, // Keep existing seal
+              value: detailItem.value,
+              total: detailItem.total,
+              denom: detailItem.denom,
+            );
+            print('Updated existing detail item at index $existingIndex');
+          } else {
+            // Add new item
+            _detailCatridgeItems.add(detailItem);
+            print('Added new detail item: ${detailItem.noCatridge}');
+          }
+          
+          // Sort by index
+          _detailCatridgeItems.sort((a, b) => a.index.compareTo(b.index));
+          print('Total detail items now: ${_detailCatridgeItems.length}');
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Catridge found: ${catridgeData.code}')),
+        );
+      } else {
+        // Handle API response error or empty data
+        String errorMessage = 'Catridge tidak ditemukan';
+        if (!response.success && response.message.isNotEmpty) {
+          // Use API error message if available
+          errorMessage = response.message;
+        } else if (response.success && response.data.isEmpty) {
+          // Empty data with success response (should not happen with new logic)
+          errorMessage = 'Catridge tidak ditemukan atau tidak sesuai kriteria';
+        }
+        
+        // Create error detail item
+        _createErrorDetailItem(catridgeIndex, catridgeCode, errorMessage);
+        
+        // Show error to user
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error looking up catridge: $e');
+      _createErrorDetailItem(catridgeIndex, catridgeCode, 'Error: ${e.toString()}');
+    }
+  }
+  
+  // Step 2: Validate seal and update detail item using comprehensive validation
+  Future<void> _validateSealAndUpdateDetail(int catridgeIndex, String sealCode) async {
+    if (sealCode.isEmpty || !mounted) return;
+    
+    try {
+      print('=== STEP 2: COMPREHENSIVE SEAL VALIDATION ===');
+      print('Catridge Index: $catridgeIndex');
+      print('Seal Code: $sealCode');
+      
+      final response = await _apiService.validateSeal(sealCode);
+      
+      print('Seal validation response: ${response.success}');
+      print('Seal validation message: ${response.message}');
+      print('Validation data: ${response.data?.validationStatus}');
+      print('Error code: ${response.data?.errorCode}');
+      print('Error message: ${response.data?.errorMessage}');
+      print('Validated seal code: ${response.data?.validatedSealCode}');
+      
+      if (response.success && response.data != null && response.data!.validationStatus == 'SUCCESS' && mounted) {
+        // Validation successful - update with validated seal code
+        setState(() {
+          int existingIndex = _detailCatridgeItems.indexWhere((item) => item.index == catridgeIndex + 1);
+          if (existingIndex >= 0) {
+            var existingItem = _detailCatridgeItems[existingIndex];
+            _detailCatridgeItems[existingIndex] = DetailCatridgeItem(
+              index: existingItem.index,
+              noCatridge: existingItem.noCatridge,
+              sealCatridge: response.data!.validatedSealCode, // Use validated seal code
+              value: existingItem.value,
+              total: existingItem.total,
+              denom: existingItem.denom,
+            );
+            print('Updated seal for detail item at index $existingIndex with validated code: ${response.data!.validatedSealCode}');
+          }
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Seal berhasil divalidasi'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        // Validation failed - update detail item with error from SP
+        String errorMessage = 'Seal tidak valid';
+        if (response.data != null && response.data!.errorMessage.isNotEmpty) {
+          errorMessage = response.data!.errorMessage;
+        } else if (response.message.isNotEmpty) {
+          errorMessage = response.message;
+        }
+        
+        setState(() {
+          int existingIndex = _detailCatridgeItems.indexWhere((item) => item.index == catridgeIndex + 1);
+          if (existingIndex >= 0) {
+            var existingItem = _detailCatridgeItems[existingIndex];
+            _detailCatridgeItems[existingIndex] = DetailCatridgeItem(
+              index: existingItem.index,
+              noCatridge: existingItem.noCatridge,
+              sealCatridge: 'Error: $errorMessage', // Show error from SP
+              value: existingItem.value,
+              total: existingItem.total,
+              denom: existingItem.denom,
+            );
+          }
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Validasi seal gagal: $errorMessage'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error validating seal: $e');
+      // Update detail item with network/system error
+      setState(() {
+        int existingIndex = _detailCatridgeItems.indexWhere((item) => item.index == catridgeIndex + 1);
+        if (existingIndex >= 0) {
+          var existingItem = _detailCatridgeItems[existingIndex];
+          _detailCatridgeItems[existingIndex] = DetailCatridgeItem(
+            index: existingItem.index,
+            noCatridge: existingItem.noCatridge,
+            sealCatridge: 'Error: ${e.toString()}', // Show system error
+            value: existingItem.value,
+            total: existingItem.total,
+            denom: existingItem.denom,
+          );
+        }
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Kesalahan sistem: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+  
+  // Helper method to create error detail item
+  void _createErrorDetailItem(int catridgeIndex, String catridgeCode, String errorMessage) {
+    final detailItem = DetailCatridgeItem(
+      index: catridgeIndex + 1,
+      noCatridge: catridgeCode.isNotEmpty ? catridgeCode : 'Error',
+      sealCatridge: '',
+      value: 0,
+      total: errorMessage, // Show error in total field
+      denom: '',
+    );
+    
+    setState(() {
+      int existingIndex = _detailCatridgeItems.indexWhere((item) => item.index == catridgeIndex + 1);
+      if (existingIndex >= 0) {
+        _detailCatridgeItems[existingIndex] = detailItem;
+      } else {
+        _detailCatridgeItems.add(detailItem);
+      }
+      
+      _detailCatridgeItems.sort((a, b) => a.index.compareTo(b.index));
+      print('Created error detail item: $errorMessage');
+    });
+  }
+  
+  // Remove detail catridge item
+  void _removeDetailCatridgeItem(int index) {
+    setState(() {
+      _detailCatridgeItems.removeWhere((item) => item.index == index);
+    });
+  }
+  
+  // Check if all detail catridge items are valid and complete
+  bool _areAllCatridgeItemsValid() {
+    if (_detailCatridgeItems.isEmpty) return false;
+    
+    for (var item in _detailCatridgeItems) {
+      // Check if item has error
+      if (item.total.contains('Error') || item.total.contains('tidak ditemukan') ||
+          item.sealCatridge.contains('Error') || item.sealCatridge.contains('tidak valid')) {
+        print('Item has error: ${item.noCatridge}');
+        return false;
+      }
+      
+      // Check if all required fields are filled
+      if (item.noCatridge.isEmpty || item.sealCatridge.isEmpty || item.value <= 0) {
+        print('Item is incomplete: noCatridge=${item.noCatridge.isEmpty}, sealCatridge=${item.sealCatridge.isEmpty}, value=${item.value}');
+        return false;
+      }
+    }
+    
+    return true;
+  }
+  
+  // Show approval form
+  void _showApprovalFormDialog() {
+    setState(() {
+      _showApprovalForm = true;
+    });
+  }
+  
+  // Hide approval form
+  void _hideApprovalForm() {
+    setState(() {
+      _showApprovalForm = false;
+      _nikTLController.clear();
+      _passwordTLController.clear();
+    });
+  }
+  
+  // Submit data with approval
+  Future<void> _submitDataWithApproval() async {
+    if (_nikTLController.text.isEmpty || _passwordTLController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('NIK TL SPV dan Password harus diisi'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
+    setState(() {
+      _isSubmitting = true;
+    });
+    
+    try {
+      // Step 1: Update Planning API
+      print('=== STEP 1: UPDATE PLANNING ===');
+      final planningResponse = await _apiService.updatePlanning(
+        idTool: _prepareData!.id,
+        cashierCode: 'CURRENT_USER', // TODO: Get from auth service
+        spvTLCode: _nikTLController.text,
+        tableCode: _prepareData!.tableCode,
+      );
+      
+      if (!planningResponse.success) {
+        throw Exception('Planning update failed: ${planningResponse.message}');
+      }
+      
+      print('Planning update success: ${planningResponse.message}');
+      
+      // Step 2: Insert ATM Catridge for each detail item
+      print('=== STEP 2: INSERT ATM CATRIDGE ===');
+      List<String> successMessages = [];
+      List<String> errorMessages = [];
+      
+      for (int i = 0; i < _detailCatridgeItems.length; i++) {
+        var item = _detailCatridgeItems[i];
+        print('Processing catridge ${i + 1}: ${item.noCatridge}');
+        
+        // Get data from form fields for this catridge
+        String bagCode = '';
+        String sealCode = '';
+        String sealReturn = '';
+        
+        // Get data from controllers if available
+        if (i < _catridgeControllers.length) {
+          bagCode = _catridgeControllers[i][2].text.trim(); // Bag Code field
+          sealCode = _catridgeControllers[i][3].text.trim(); // Seal Code field
+          sealReturn = _catridgeControllers[i][4].text.trim(); // Seal Code Return field
+        }
+        
+        // Fallback to prepare data if form fields are empty
+        if (bagCode.isEmpty) bagCode = _prepareData!.bagCode;
+        if (sealCode.isEmpty) sealCode = _prepareData!.sealCode;
+        // sealReturn MUST come from form field only - no fallback to TEST
+        
+        // Final validation - ensure no empty critical fields
+        if (bagCode.isEmpty) bagCode = 'TEST';
+        if (sealCode.isEmpty) sealCode = 'TEST';
+        // Do NOT set sealReturn to TEST - it must be from form field only
+        
+        // Get current user data for userInput
+        String userInput = 'UNKNOWN';
+        try {
+          final userData = await _authService.getUserData();
+          if (userData != null) {
+            // Try to get NIK first, then username as fallback
+            userInput = userData['nik'] ?? userData['username'] ?? userData['userCode'] ?? 'UNKNOWN';
+          }
+        } catch (e) {
+          print('Error getting user data: $e');
+          userInput = 'UNKNOWN';
+        }
+        
+        // Ensure denomination code is not empty
+        String finalDenomCode = _prepareData!.denomCode;
+        if (finalDenomCode.isEmpty) finalDenomCode = 'TEST';
+        
+        // Ensure catridge seal is not empty
+        String finalCatridgeSeal = item.sealCatridge;
+        if (finalCatridgeSeal.isEmpty || finalCatridgeSeal.contains('Error')) {
+          finalCatridgeSeal = 'TEST';
+        }
+        
+        print('Catridge ${i + 1} data:');
+        print('  bagCode: $bagCode');
+        print('  sealCode: $sealCode');
+        print('  sealReturn: $sealReturn (from form field only)');
+        print('  catridgeSeal: $finalCatridgeSeal');
+        print('  denomCode: $finalDenomCode');
+        print('  qty: ${item.value}');
+        print('  userInput: $userInput (from logged-in user)');
+        
+        // Validate required fields before API call
+        if (sealReturn.isEmpty) {
+          errorMessages.add('Catridge ${i + 1}: Seal Code Return harus diisi');
+          print('Catridge ${i + 1} error: Seal Code Return is empty');
+          continue; // Skip this catridge and continue to next
+        }
+        
+        try {
+          final catridgeResponse = await _apiService.insertAtmCatridge(
+            idTool: _prepareData!.id,
+            bagCode: bagCode,
+            catridgeCode: item.noCatridge,
+            sealCode: sealCode,
+            catridgeSeal: finalCatridgeSeal,
+            denomCode: finalDenomCode,
+            qty: item.value.toString(),
+            userInput: userInput, // Use actual logged-in user
+            sealReturn: sealReturn, // Must be from form field only
+            // Send TEST values for all 6 fields
+            scanCatStatus: "TEST",
+            scanCatStatusRemark: "TEST",
+            scanSealStatus: "TEST", 
+            scanSealStatusRemark: "TEST",
+            difCatAlasan: "TEST",
+            difCatRemark: "TEST",
+          );
+          
+          if (catridgeResponse.success) {
+            successMessages.add('Catridge ${i + 1}: ${catridgeResponse.message}');
+            print('Catridge ${i + 1} success: ${catridgeResponse.message}');
+          } else {
+            errorMessages.add('Catridge ${i + 1}: ${catridgeResponse.message}');
+            print('Catridge ${i + 1} error: ${catridgeResponse.message}');
+          }
+        } catch (e) {
+          errorMessages.add('Catridge ${i + 1}: ${e.toString()}');
+          print('Catridge ${i + 1} exception: $e');
+        }
+      }
+      
+      // Show results
+      if (errorMessages.isEmpty) {
+        // All success
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Semua data berhasil disimpan!\n${successMessages.join('\n')}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        
+        // Hide approval form and potentially navigate back or reset form
+        _hideApprovalForm();
+        
+        // TODO: Navigate back or reset form
+        Navigator.of(context).pop();
+        
+      } else if (successMessages.isEmpty) {
+        // All failed
+        throw Exception('Semua catridge gagal disimpan:\n${errorMessages.join('\n')}');
+      } else {
+        // Mixed results
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sebagian data berhasil disimpan:\nBerhasil: ${successMessages.length}\nGagal: ${errorMessages.length}'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        
+        _hideApprovalForm();
+      }
+      
+    } catch (e) {
+      print('Submit error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal menyimpan data: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } finally {
+      setState(() {
+        _isSubmitting = false;
+      });
+    }
+  }
+  
   // Fetch data from API
   Future<void> _fetchPrepareData() async {
-    if (_idCRFController.text.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter ID CRF';
-      });
+    if (_idCRFController.text.isEmpty || !mounted) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Please enter ID CRF';
+        });
+      }
       return;
     }
     
@@ -104,66 +615,72 @@ class _PrepareModePageState extends State<PrepareModePage> {
     try {
       id = int.parse(_idCRFController.text);
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Invalid ID format. Please enter a number.';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Invalid ID format. Please enter a number.';
+        });
+      }
       return;
     }
     
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+    }
     
     try {
       final response = await _apiService.getATMPrepareReplenish(id);
       
-      setState(() {
-        _isLoading = false;
-        if (response.success && response.data != null) {
-          _prepareData = response.data;
-          
-          // Initialize controllers based on jmlKaset
-          int kasetCount = _prepareData!.jmlKaset;
-          if (kasetCount <= 0) kasetCount = 1; // Ensure at least 1 catridge
-          
-          _initializeCatridgeControllers(kasetCount);
-          
-          // Set jam mulai to current time
-          _setCurrentTime();
-          
-          // Populate catridge fields if data is available
-          if (_catridgeControllers.isNotEmpty && _prepareData!.catridgeCode.isNotEmpty) {
-            _catridgeControllers[0][0].text = _prepareData!.catridgeCode;
-            _catridgeControllers[0][1].text = _prepareData!.catridgeSeal;
-            _catridgeControllers[0][2].text = _prepareData!.bagCode;
-            _catridgeControllers[0][3].text = _prepareData!.sealCode;
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          if (response.success && response.data != null) {
+            _prepareData = response.data;
+            
+            // Initialize controllers based on jmlKaset
+            int kasetCount = _prepareData!.jmlKaset;
+            if (kasetCount <= 0) kasetCount = 1; // Ensure at least 1 catridge
+            
+            _initializeCatridgeControllers(kasetCount);
+            
+            // Set jam mulai to current time
+            _setCurrentTime();
+            
+            // Populate catridge fields if data is available
+            if (_catridgeControllers.isNotEmpty && _prepareData!.catridgeCode.isNotEmpty) {
+              _catridgeControllers[0][0].text = _prepareData!.catridgeCode;
+              _catridgeControllers[0][1].text = _prepareData!.catridgeSeal;
+              _catridgeControllers[0][2].text = _prepareData!.bagCode;
+              _catridgeControllers[0][3].text = _prepareData!.sealCode;
+            }
+            
+            // Note: standValue is now taken directly from _prepareData.standValue
+            // No need to store in _denomValues array
+          } else {
+            _errorMessage = response.message;
           }
-          
-          // Set denom values if available
-          if (_denomValues.isNotEmpty) {
-            _denomValues[0] = _prepareData!.value;
-          }
-        } else {
-          _errorMessage = response.message;
-        }
-      });
+        });
+      }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Error: ${e.toString()}';
-      });
-      
-      // If unauthorized, navigate back to login
-      if (e.toString().contains('Unauthorized')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Session expired. Please login again.')),
-        );
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Error: ${e.toString()}';
+        });
         
-        // Clear token and navigate back
-        await _authService.logout();
-        if (mounted) {
-          Navigator.of(context).pop();
+        // If unauthorized, navigate back to login
+        if (e.toString().contains('Unauthorized')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Session expired. Please login again.')),
+          );
+          
+          // Clear token and navigate back
+          await _authService.logout();
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
         }
       }
     }
@@ -244,6 +761,10 @@ class _PrepareModePageState extends State<PrepareModePage> {
                               // Detail Catridge section
                               _buildDetailCatridgeSection(isSmallScreen),
                               
+                              // Approval TL Supervisor form
+                              if (_showApprovalForm)
+                                _buildApprovalForm(isSmallScreen),
+                              
                               // Grand Total and Submit button
                               _buildTotalAndSubmitSection(isSmallScreen),
                             ],
@@ -296,6 +817,10 @@ class _PrepareModePageState extends State<PrepareModePage> {
                                 
                                 // Detail Catridge section
                                 _buildDetailCatridgeSection(isSmallScreen),
+                                
+                                // Approval TL Supervisor form
+                                if (_showApprovalForm)
+                                  _buildApprovalForm(isSmallScreen),
                                 
                                 // Grand Total and Submit button
                                 _buildTotalAndSubmitSection(isSmallScreen),
@@ -501,6 +1026,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
                   hasIcon: true,
                   onIconPressed: _fetchPrepareData,
                   isSmallScreen: isSmallScreen,
+                  enableScan: true,
                 ),
                 
                 const SizedBox(height: 8),
@@ -535,6 +1061,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
                     hasIcon: true,
                     onIconPressed: _fetchPrepareData,
                     isSmallScreen: isSmallScreen,
+                    enableScan: true,
                   ),
                 ),
                 
@@ -599,10 +1126,12 @@ class _PrepareModePageState extends State<PrepareModePage> {
       denomText = '—';
     }
     
-    // Calculate total nominal only if we have valid data
+    // Calculate total nominal using standValue from prepare data
     String formattedTotal = '—';
-    if (_prepareData != null && denomAmount > 0 && standValue > 0) {
-      int totalNominal = denomAmount * standValue;
+    int actualValue = _prepareData?.standValue ?? 0;
+    
+    if (denomAmount > 0 && actualValue > 0) {
+      int totalNominal = denomAmount * actualValue;
       formattedTotal = _formatCurrency(totalNominal);
     }
     
@@ -666,6 +1195,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
                       label: 'No. Catridge', 
                       controller: controllers[0],
                       isSmallScreen: isSmallScreen,
+                      catridgeIndex: index - 1,
                     ),
                     SizedBox(height: 8),
                     
@@ -674,6 +1204,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
                       label: 'Seal Catridge', 
                       controller: controllers[1],
                       isSmallScreen: isSmallScreen,
+                      catridgeIndex: index - 1,
                     ),
                     SizedBox(height: 8),
                     
@@ -775,7 +1306,9 @@ class _PrepareModePageState extends State<PrepareModePage> {
                               ),
                             ),
                             Text(
-                              _prepareData == null ? '—' : standValue.toString(),
+                              _prepareData?.standValue != null && _prepareData!.standValue > 0
+                                ? _prepareData!.standValue.toString()
+                                : '—',
                               style: TextStyle(
                                 fontSize: isSmallScreen ? 12 : 14,
                               ),
@@ -859,6 +1392,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
     required String label,
     required TextEditingController controller,
     required bool isSmallScreen,
+    int? catridgeIndex,
   }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -905,21 +1439,40 @@ class _PrepareModePageState extends State<PrepareModePage> {
                         horizontal: isSmallScreen ? 8 : 12,
                       ),
                       border: InputBorder.none,
-
                     ),
+                    onChanged: (value) {
+                      // Step 1: If this is a catridge code field, lookup catridge and create detail
+                      if (label == 'No. Catridge' && catridgeIndex != null) {
+                        print('No. Catridge changed: $value for index $catridgeIndex');
+                        // Debounce the lookup to avoid too many API calls
+                        Future.delayed(Duration(milliseconds: 500), () {
+                          if (controller.text == value && value.isNotEmpty) {
+                            _lookupCatridgeAndCreateDetail(catridgeIndex, value);
+                          }
+                        });
+                      }
+                      // Step 2: If this is a seal catridge field, validate seal and update detail
+                      else if (label == 'Seal Catridge' && catridgeIndex != null) {
+                        print('Seal Catridge changed: $value for index $catridgeIndex');
+                        // Debounce the validation to avoid too many API calls
+                        Future.delayed(Duration(milliseconds: 500), () {
+                          if (controller.text == value && value.isNotEmpty) {
+                            _validateSealAndUpdateDetail(catridgeIndex, value);
+                          }
+                        });
+                      }
+                    },
                   ),
 
                 ),
-                // Copy icon button
+                // Scan barcode icon button
                 IconButton(
                   icon: Icon(
-                    Icons.content_copy,
+                    Icons.qr_code_scanner,
                     size: isSmallScreen ? 18 : 20,
-                    color: Colors.grey.shade600,
+                    color: Colors.blue.shade600,
                   ),
-                  onPressed: () {
-                    // Copy functionality
-                  },
+                  onPressed: () => _openBarcodeScanner(label, controller),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -987,6 +1540,13 @@ class _PrepareModePageState extends State<PrepareModePage> {
   }
   
   Widget _buildDetailCatridgeSection(bool isSmallScreen) {
+    // Debug logging
+    print('=== BUILDING DETAIL CATRIDGE SECTION ===');
+    print('Detail catridge items count: ${_detailCatridgeItems.length}');
+    for (int i = 0; i < _detailCatridgeItems.length; i++) {
+      print('Item $i: ${_detailCatridgeItems[i].noCatridge} - ${_detailCatridgeItems[i].sealCatridge}');
+    }
+    
     return Container(
       margin: EdgeInsets.only(bottom: isSmallScreen ? 15 : 25),
       child: Column(
@@ -1001,16 +1561,18 @@ class _PrepareModePageState extends State<PrepareModePage> {
           ),
           SizedBox(height: isSmallScreen ? 8 : 15),
           
-          if (_prepareData != null) 
-            _buildAllCatridgeDetails(isSmallScreen)
+          // Display detail catridge items
+          if (_detailCatridgeItems.isNotEmpty)
+            ..._detailCatridgeItems.map((item) => _buildDetailCatridgeItem(item, isSmallScreen)).toList()
           else
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: Text(
-                'No catridge data available',
+                'No catridge data available (${_detailCatridgeItems.length} items)',
                 style: TextStyle(
                   fontSize: isSmallScreen ? 12 : 14,
                   fontStyle: FontStyle.italic,
+                  color: Colors.grey,
                 ),
               ),
             ),
@@ -1019,90 +1581,102 @@ class _PrepareModePageState extends State<PrepareModePage> {
     );
   }
   
-  Widget _buildAllCatridgeDetails(bool isSmallScreen) {
-    // Jumlah kaset dari API
-    final int jmlKaset = _prepareData?.jmlKaset ?? 0;
+  Widget _buildDetailCatridgeItem(DetailCatridgeItem item, bool isSmallScreen) {
+    // Check if this is an error item
+    bool isError = item.total.contains('Error') || item.total.contains('tidak ditemukan') || 
+                   item.sealCatridge.contains('Error') || item.sealCatridge.contains('tidak valid');
     
-    // Data catridge yang ada dari API
-    final List<CatridgeDetail> existingCatridges = _prepareData?.listCatridge ?? [];
-    
-    // Log untuk debugging
-    debugPrint('jmlKaset dari API: $jmlKaset');
-    debugPrint('Jumlah catridges yang ada: ${existingCatridges.length}');
-    
-    // Jika tidak ada data sama sekali, tampilkan pesan kosong
-    if (jmlKaset <= 0 && existingCatridges.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 8.0),
-        child: Text(
-          'No catridge data available',
-          style: TextStyle(
-            fontSize: isSmallScreen ? 12 : 14,
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-      );
-    }
-    
-    // Tentukan jumlah catridge yang harus ditampilkan
-    // Gunakan nilai terbesar antara jmlKaset atau panjang list catridge
-    final int catridgeCount = jmlKaset > existingCatridges.length ? jmlKaset : existingCatridges.length;
-    
-    debugPrint('Total catridge yang akan ditampilkan: $catridgeCount');
-    
-    // Generate daftar catridge untuk ditampilkan
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: List.generate(catridgeCount, (index) {
-        // Jika index masih dalam jangkauan list yang ada, gunakan data tersebut
-        if (index < existingCatridges.length) {
-          final catridge = existingCatridges[index];
-          return _buildCatridgeDetailRow(catridge, isSmallScreen, index + 1);
-        } 
-        // Jika tidak ada data untuk index ini, buat catridge placeholder
-        else {
-          return _buildEmptyCatridgeDetailRow(isSmallScreen, index + 1);
-        }
-      }),
-    );
-  }
-  
-  Widget _buildCatridgeDetailRow(CatridgeDetail catridge, bool isSmallScreen, int displayIndex) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: isSmallScreen ? 4 : 8),
+    return Container(
+      margin: EdgeInsets.only(bottom: isSmallScreen ? 8 : 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: isError ? Colors.red.shade300 : Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(4),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Catridge $displayIndex',
-            style: TextStyle(
-              fontSize: isSmallScreen ? 12 : 14,
-              fontWeight: FontWeight.bold,
+          // Header with Catridge number, Denom and trash icon
+          Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isSmallScreen ? 8 : 12,
+              vertical: isSmallScreen ? 6 : 8,
+            ),
+            decoration: BoxDecoration(
+              color: isError ? Colors.red.shade50 : Colors.grey.shade50,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(4),
+                topRight: Radius.circular(4),
+              ),
+              border: Border(
+                bottom: BorderSide(color: isError ? Colors.red.shade300 : Colors.grey.shade300),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      '${item.index}. Catridge ${item.index}',
+                      style: TextStyle(
+                        fontSize: isSmallScreen ? 12 : 14,
+                        fontWeight: FontWeight.bold,
+                        color: isError ? Colors.red.shade700 : null,
+                      ),
+                    ),
+                    SizedBox(width: 20),
+                    if (!isError)
+                      Text(
+                        'Denom : ${item.denom}',
+                        style: TextStyle(
+                          fontSize: isSmallScreen ? 12 : 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    else
+                      Icon(
+                        Icons.error_outline,
+                        color: Colors.red.shade700,
+                        size: isSmallScreen ? 16 : 18,
+                      ),
+                  ],
+                ),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: Colors.red,
+                      size: isSmallScreen ? 16 : 18,
+                    ),
+                    onPressed: () => _removeDetailCatridgeItem(item.index),
+                    padding: EdgeInsets.all(4),
+                    constraints: BoxConstraints(
+                      minWidth: 24,
+                      minHeight: 24,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(left: 12.0),
+          
+          // Detail fields
+          Container(
+            padding: EdgeInsets.all(isSmallScreen ? 8 : 12),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Value: ${catridge.value}',
-                  style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
-                ),
-                Text(
-                  'Denom: ${catridge.denom}',
-                  style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
-                ),
-                if (catridge.code.isNotEmpty)
-                  Text(
-                    'Code: ${catridge.code}',
-                    style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
-                  ),
-                if (catridge.seal.isNotEmpty)
-                  Text(
-                    'Seal: ${catridge.seal}',
-                    style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
-                  ),
+                _buildDetailItemRow('No. Catridge', item.noCatridge, isSmallScreen, isError),
+                SizedBox(height: isSmallScreen ? 6 : 8),
+                _buildDetailItemRow('Seal Catridge', item.sealCatridge, isSmallScreen, isError),
+                SizedBox(height: isSmallScreen ? 6 : 8),
+                _buildDetailItemRow('Value', item.value.toString(), isSmallScreen, isError),
+                SizedBox(height: isSmallScreen ? 6 : 8),
+                _buildDetailItemRow('Total', item.total, isSmallScreen, isError),
               ],
             ),
           ),
@@ -1111,37 +1685,243 @@ class _PrepareModePageState extends State<PrepareModePage> {
     );
   }
   
-  // Widget untuk menampilkan catridge yang belum ada datanya
-  Widget _buildEmptyCatridgeDetailRow(bool isSmallScreen, int displayIndex) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: isSmallScreen ? 4 : 8),
+  Widget _buildDetailItemRow(String label, String value, bool isSmallScreen, [bool isError = false]) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: isSmallScreen ? 100 : 120,
+          child: Text(
+            '$label :',
+            style: TextStyle(
+              fontSize: isSmallScreen ? 12 : 14,
+              fontWeight: FontWeight.w500,
+              color: isError ? Colors.red.shade700 : null,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: isSmallScreen ? 12 : 14,
+              color: isError && (value.contains('Error') || value.contains('tidak')) 
+                     ? Colors.red.shade700 : null,
+              fontWeight: isError && (value.contains('Error') || value.contains('tidak'))
+                        ? FontWeight.w500 : null,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // Build Approval TL Supervisor form
+  Widget _buildApprovalForm(bool isSmallScreen) {
+    return Container(
+      margin: EdgeInsets.only(bottom: isSmallScreen ? 15 : 25, top: isSmallScreen ? 10 : 15),
+      padding: EdgeInsets.all(isSmallScreen ? 12 : 16),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        border: Border.all(color: Colors.green.shade300),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Catridge $displayIndex',
-            style: TextStyle(
-              fontSize: isSmallScreen ? 12 : 14,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 12.0),
-            child: Text(
-              '(Data not available)',
-              style: TextStyle(
-                fontSize: isSmallScreen ? 12 : 14,
-                fontStyle: FontStyle.italic,
-                color: Colors.grey,
+          // Header
+          Row(
+            children: [
+              Icon(
+                Icons.security,
+                color: Colors.green.shade700,
+                size: isSmallScreen ? 20 : 24,
               ),
-            ),
+              SizedBox(width: 8),
+              Text(
+                'Approval TL Supervisor',
+                style: TextStyle(
+                  fontSize: isSmallScreen ? 14 : 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade700,
+                ),
+              ),
+            ],
+          ),
+          
+          SizedBox(height: isSmallScreen ? 12 : 16),
+          
+          // NIK TL SPV Field
+          _buildApprovalField(
+            label: 'NIK TL SPV',
+            controller: _nikTLController,
+            isSmallScreen: isSmallScreen,
+            icon: Icons.person,
+          ),
+          
+          SizedBox(height: isSmallScreen ? 12 : 16),
+          
+          // Password Field
+          _buildApprovalField(
+            label: 'Password',
+            controller: _passwordTLController,
+            isSmallScreen: isSmallScreen,
+            icon: Icons.lock,
+            isPassword: true,
+          ),
+          
+          SizedBox(height: isSmallScreen ? 16 : 20),
+          
+          // Action buttons
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // Cancel button
+              TextButton(
+                onPressed: _isSubmitting ? null : _hideApprovalForm,
+                child: Text(
+                  'Batal',
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 12 : 14,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ),
+              
+              SizedBox(width: 12),
+              
+              // Submit button
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF5AE25A), Color(0xFF29CC29)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+                child: ElevatedButton.icon(
+                  onPressed: _isSubmitting ? null : _submitDataWithApproval,
+                  icon: _isSubmitting 
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Icon(Icons.check, size: isSmallScreen ? 16 : 18),
+                  label: Text(
+                    _isSubmitting ? 'Processing...' : 'Approve & Submit',
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 12 : 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isSmallScreen ? 12 : 16,
+                      vertical: isSmallScreen ? 8 : 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
   
+  // Helper method to build approval form fields
+  Widget _buildApprovalField({
+    required String label,
+    required TextEditingController controller,
+    required bool isSmallScreen,
+    required IconData icon,
+    bool isPassword = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: isSmallScreen ? 12 : 14,
+            fontWeight: FontWeight.bold,
+            color: Colors.green.shade700,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          height: isSmallScreen ? 36 : 40,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.green.shade300),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            children: [
+              SizedBox(width: 12),
+              Icon(
+                icon,
+                size: isSmallScreen ? 16 : 18,
+                color: Colors.green.shade600,
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  obscureText: isPassword,
+                  enabled: !_isSubmitting,
+                  style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    hintText: isPassword ? '••••••••••' : 'Enter $label',
+                    hintStyle: TextStyle(
+                      color: Colors.grey.shade400,
+                      fontSize: isSmallScreen ? 12 : 14,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 12),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  
   Widget _buildTotalAndSubmitSection(bool isSmallScreen) {
+    // Add debugging for submit button validation
+    print('=== SUBMIT BUTTON CHECK ===');
+    print('_prepareData is null: ${_prepareData == null}');
+    print('_detailCatridgeItems.length: ${_detailCatridgeItems.length}');
+    if (_detailCatridgeItems.isNotEmpty) {
+      for (int i = 0; i < _detailCatridgeItems.length; i++) {
+        var item = _detailCatridgeItems[i];
+        print('Item $i: ${item.noCatridge} - ${item.sealCatridge} - ${item.value} - ${item.total}');
+      }
+    }
+    bool isValid = _areAllCatridgeItemsValid();
+    print('_areAllCatridgeItemsValid(): $isValid');
+    
     // Jika belum ada data, tampilkan tanda strip
     if (_prepareData == null) {
       return Padding(
@@ -1189,9 +1969,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
                 ],
               ),
               child: ElevatedButton.icon(
-                onPressed: () {
-                  // Submit functionality
-                },
+                onPressed: _areAllCatridgeItemsValid() ? _showApprovalFormDialog : null,
                 icon: const Icon(Icons.arrow_forward),
                 label: Text(
                   'Submit Data',
@@ -1234,9 +2012,24 @@ class _PrepareModePageState extends State<PrepareModePage> {
       denomAmount = 50000;
     }
     
-    // Calculate total from all catridges
-    int totalAmount = denomAmount * standValue * _catridgeControllers.length;
-    String formattedTotal = _formatCurrency(totalAmount);
+    // Calculate total from detail catridge items
+    int totalAmount = 0;
+    for (var item in _detailCatridgeItems) {
+      // Parse total back to int (remove currency formatting)
+      String cleanTotal = item.total.replaceAll('Rp ', '').replaceAll('.', '').trim();
+      if (cleanTotal.isNotEmpty && cleanTotal != '0') {
+        try {
+          totalAmount += int.parse(cleanTotal);
+        } catch (e) {
+          // If parsing fails, calculate from value and denom
+          String tipeDenom = _prepareData?.tipeDenom ?? 'A50';
+          int denomAmount = tipeDenom == 'A100' ? 100000 : 50000;
+          totalAmount += denomAmount * item.value;
+        }
+      }
+    }
+    
+    String formattedTotal = totalAmount > 0 ? _formatCurrency(totalAmount) : '—';
     
     return Padding(
       padding: EdgeInsets.only(top: isSmallScreen ? 15 : 25),
@@ -1283,9 +2076,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
               ],
             ),
             child: ElevatedButton.icon(
-              onPressed: () {
-                // Submit functionality
-              },
+              onPressed: _areAllCatridgeItemsValid() ? _showApprovalFormDialog : null,
               icon: const Icon(Icons.arrow_forward),
               label: Text(
                 'Submit Data',
@@ -1388,6 +2179,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
     IconData iconData = Icons.search,
     VoidCallback? onIconPressed,
     required bool isSmallScreen,
+    bool enableScan = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1423,6 +2215,17 @@ class _PrepareModePageState extends State<PrepareModePage> {
                   ),
                 ),
               ),
+              if (enableScan && controller != null)
+                IconButton(
+                  icon: Icon(
+                    Icons.qr_code_scanner,
+                    size: isSmallScreen ? 18 : 20,
+                    color: Colors.blue.shade600,
+                  ),
+                  onPressed: () => _openBarcodeScanner(label, controller),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
               if (hasIcon)
                 IconButton(
                   icon: Icon(
@@ -1433,7 +2236,6 @@ class _PrepareModePageState extends State<PrepareModePage> {
                   onPressed: onIconPressed,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  iconSize: isSmallScreen ? 18 : 24,
                 ),
               SizedBox(width: isSmallScreen ? 6 : 10),
             ],
@@ -1442,7 +2244,80 @@ class _PrepareModePageState extends State<PrepareModePage> {
       ],
     );
   }
+
+  // Open barcode scanner for field input
+  Future<void> _openBarcodeScanner(String fieldLabel, TextEditingController controller) async {
+    try {
+      print('Opening barcode scanner for field: $fieldLabel');
+      
+      // Clean field label for display
+      String cleanLabel = fieldLabel.replaceAll(' :', '').trim();
+      
+      // Navigate to barcode scanner
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => BarcodeScannerWidget(
+            title: 'Scan $cleanLabel',
+            onBarcodeDetected: (String barcode) {
+              print('Barcode detected for $cleanLabel: $barcode');
+              
+              // Fill the field with scanned barcode
+              setState(() {
+                controller.text = barcode;
+              });
+              
+              // Show success message
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('$cleanLabel berhasil diisi: $barcode'),
+                  backgroundColor: Colors.green,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+              
+              // Trigger the same logic as manual input
+              if (cleanLabel == 'ID CRF') {
+                // Trigger API call to fetch prepare data
+                Future.delayed(Duration(milliseconds: 300), () {
+                  _fetchPrepareData();
+                });
+              } else if (cleanLabel == 'No. Catridge') {
+                // Find catridge index for this controller
+                for (int i = 0; i < _catridgeControllers.length; i++) {
+                  if (_catridgeControllers[i].isNotEmpty && _catridgeControllers[i][0] == controller) {
+                    Future.delayed(Duration(milliseconds: 300), () {
+                      _lookupCatridgeAndCreateDetail(i, barcode);
+                    });
+                    break;
+                  }
+                }
+              } else if (cleanLabel == 'Seal Catridge') {
+                // Find catridge index for this controller
+                for (int i = 0; i < _catridgeControllers.length; i++) {
+                  if (_catridgeControllers[i].length > 1 && _catridgeControllers[i][1] == controller) {
+                    Future.delayed(Duration(milliseconds: 300), () {
+                      _validateSealAndUpdateDetail(i, barcode);
+                    });
+                    break;
+                  }
+                }
+              }
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      print('Error opening barcode scanner: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal membuka scanner: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 }
+
 
 
 

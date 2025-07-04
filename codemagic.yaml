@@ -1,6 +1,6 @@
 workflows:
   android-debug:
-    name: Android Debug Build
+    name: Android Debug Build - DCT CRF
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
@@ -54,20 +54,31 @@ workflows:
           # Remove any existing XML icon files to prevent resource conflicts
           rm -f android/app/src/main/res/mipmap-*/ic_launcher.xml
           
-          # Get a simple placeholder icon from GitHub
-          curl -L https://raw.githubusercontent.com/flutter/website/main/src/_assets/image/flutter-logomark-square-logo.png -o icon.png || touch icon.png
-          
-          # Create icons in all required sizes - PNG ONLY (no XML)
-          convert icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png || echo "Icon conversion failed, using placeholder"
-          convert icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png || echo "Icon conversion failed, using placeholder"
-          convert icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png || echo "Icon conversion failed, using placeholder"
-          convert icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png || echo "Icon conversion failed, using placeholder"
-          convert icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png || echo "Icon conversion failed, using placeholder"
-          
-          # If ImageMagick fails, create simple color squares as icons
-          if [ ! -f "android/app/src/main/res/mipmap-hdpi/ic_launcher.png" ]; then
+          # Use the actual app icon from assets/images/app_icon.png
+          if [ -f "assets/images/app_icon.png" ]; then
+            echo "Using app_icon.png from assets/images/"
+            
+            # Create icons in all required sizes using the actual app icon
+            convert assets/images/app_icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png || echo "Icon conversion failed for hdpi"
+            convert assets/images/app_icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png || echo "Icon conversion failed for mdpi"
+            convert assets/images/app_icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png || echo "Icon conversion failed for xhdpi"
+            convert assets/images/app_icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png || echo "Icon conversion failed for xxhdpi"
+            convert assets/images/app_icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png || echo "Icon conversion failed for xxxhdpi"
+            
+            echo "App icon successfully converted to all sizes"
+          else
+            echo "app_icon.png not found, using placeholder"
+            # Fallback to placeholder if file doesn't exist
             for dir in android/app/src/main/res/mipmap-*; do
               convert -size 72x72 xc:#0056A4 "$dir/ic_launcher.png" || echo "Failed to create icon in $dir"
+            done
+          fi
+          
+          # If ImageMagick fails, copy the original PNG to all directories
+          if [ ! -f "android/app/src/main/res/mipmap-hdpi/ic_launcher.png" ] && [ -f "assets/images/app_icon.png" ]; then
+            echo "ImageMagick failed, copying original PNG to all directories"
+            for dir in android/app/src/main/res/mipmap-*; do
+              cp "assets/images/app_icon.png" "$dir/ic_launcher.png" || echo "Failed to copy icon to $dir"
             done
           fi
           
@@ -77,6 +88,7 @@ workflows:
           
           # Check Android setup
           flutter doctor -v
+          
       - name: Setup Gradle wrapper
         script: |
           # Check Android directory structure 
@@ -106,7 +118,7 @@ workflows:
           
       - name: Build APK with Flutter
         script: |
-          # Configure Gradle for maximum compatibility
+          # Configure Gradle for maximum compatibility and mobile_scanner support
           export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
           
           # Ensure no XML launcher icons exist
@@ -117,8 +129,12 @@ workflows:
           ls -la android/app/src/main/res/values/
           ls -la android/app/src/main/res/drawable/
           
+          # Verify app icon is properly set
+          echo "Verifying app icon files:"
+          find android/app/src/main/res/mipmap-* -name "ic_launcher.png" -exec ls -la {} \;
+          
           # Build using Flutter's default mode
-          echo "Building debug APK with Flutter..."
+          echo "Building debug APK with Flutter for DCT CRF Android..."
           flutter build apk --debug
           
           # If that fails, try with specific target platform
@@ -143,14 +159,14 @@ workflows:
             # Export Flutter-built APK
             mkdir -p "$FCI_EXPORT_DIR"
             timestamp=$(date +"%Y%m%d%H%M")
-            cp "$FLUTTER_APK_PATH" "$FCI_EXPORT_DIR/crf-debug-${timestamp}.apk"
-            echo "Flutter APK successfully exported"
+            cp "$FLUTTER_APK_PATH" "$FCI_EXPORT_DIR/DCT-CRF-Android-debug-${timestamp}.apk"
+            echo "Flutter APK successfully exported as DCT-CRF-Android-debug-${timestamp}.apk"
           elif [ -f "$GRADLE_APK_PATH" ]; then
             # Export Gradle-built APK
             mkdir -p "$FCI_EXPORT_DIR"
             timestamp=$(date +"%Y%m%d%H%M")
-            cp "$GRADLE_APK_PATH" "$FCI_EXPORT_DIR/crf-debug-${timestamp}.apk"
-            echo "Gradle APK successfully exported"
+            cp "$GRADLE_APK_PATH" "$FCI_EXPORT_DIR/DCT-CRF-Android-debug-${timestamp}.apk"
+            echo "Gradle APK successfully exported as DCT-CRF-Android-debug-${timestamp}.apk"
           else
             # If all builds failed, create a dummy APK for debugging
             echo "All build attempts failed."
@@ -171,20 +187,20 @@ workflows:
             # Create artifact directories if they don't exist
             mkdir -p "$FCI_BUILD_OUTPUT_DIR" "$FCI_EXPORT_DIR" "$FCI_ARTIFACT_ROOT"
             
-            # Copy to all possible artifact locations
-            cp "$APK_PATH" "$FCI_BUILD_OUTPUT_DIR/crf-debug-final.apk"
-            cp "$APK_PATH" "$FCI_ARTIFACT_ROOT/crf-debug-final.apk"
-            cp "$APK_PATH" "$CM_EXPORT_DIR/crf-debug-final.apk" 2>/dev/null || echo "CM_EXPORT_DIR not available"
+            # Copy to all possible artifact locations with proper naming
+            cp "$APK_PATH" "$FCI_BUILD_OUTPUT_DIR/DCT-CRF-Android-final.apk"
+            cp "$APK_PATH" "$FCI_ARTIFACT_ROOT/DCT-CRF-Android-final.apk"
+            cp "$APK_PATH" "$CM_EXPORT_DIR/DCT-CRF-Android-final.apk" 2>/dev/null || echo "CM_EXPORT_DIR not available"
             
-            echo "APK copied to all artifact locations"
+            echo "APK copied to all artifact locations as DCT-CRF-Android-final.apk"
           elif [ -f "$GRADLE_APK_PATH" ]; then
             mkdir -p "$FCI_BUILD_OUTPUT_DIR" "$FCI_EXPORT_DIR" "$FCI_ARTIFACT_ROOT"
             
-            cp "$GRADLE_APK_PATH" "$FCI_BUILD_OUTPUT_DIR/crf-debug-final.apk"
-            cp "$GRADLE_APK_PATH" "$FCI_ARTIFACT_ROOT/crf-debug-final.apk"
-            cp "$GRADLE_APK_PATH" "$CM_EXPORT_DIR/crf-debug-final.apk" 2>/dev/null || echo "CM_EXPORT_DIR not available"
+            cp "$GRADLE_APK_PATH" "$FCI_BUILD_OUTPUT_DIR/DCT-CRF-Android-final.apk"
+            cp "$GRADLE_APK_PATH" "$FCI_ARTIFACT_ROOT/DCT-CRF-Android-final.apk"
+            cp "$GRADLE_APK_PATH" "$CM_EXPORT_DIR/DCT-CRF-Android-final.apk" 2>/dev/null || echo "CM_EXPORT_DIR not available"
             
-            echo "Gradle APK copied to all artifact locations"
+            echo "Gradle APK copied to all artifact locations as DCT-CRF-Android-final.apk"
           else
             echo "No APK found to export"
           fi

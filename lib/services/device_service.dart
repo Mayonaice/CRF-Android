@@ -7,7 +7,7 @@ class DeviceService {
   static final DeviceInfoPlugin _deviceInfoPlugin = DeviceInfoPlugin();
   
   // Testing mode - set to true for testing with registered AndroidID
-  static const bool _isTestingMode = true;  // Set to false for production
+  static const bool _isTestingMode = false;  // Set to false for production
   static const String _testingAndroidId = 'fd39d4157a8541a1';  // Registered AndroidID for testing
   
   /// Get Android ID in consistent 16-character hex format

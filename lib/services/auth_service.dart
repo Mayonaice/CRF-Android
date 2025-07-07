@@ -30,13 +30,9 @@ class AuthService {
 
   // Platform detection helper
   String _getClientType() {
-    if (kIsWeb) {
-      // For web platform (Edge testing), return 'WEB' to bypass AndroidID validation
-      return 'WEB';
-    } else {
-      // For mobile platform, return 'Android' 
-      return 'Android';
-    }
+    // Always return 'Android' for Flutter app, regardless of platform
+    // This ensures we always use CRFAndroid_SP_Login with full validation
+    return 'Android';
   }
 
   // Load saved base URL if available
@@ -92,11 +88,11 @@ class AuthService {
   }
 
   // Get available branches for user (Step 1 of 2-step login)
+  // No AndroidID validation here - only basic credential check
   Future<Map<String, dynamic>> getUserBranches(String username, String password, String noMeja) async {
     try {
-      // Get client type and Android ID for device validation
+      // Get client type but don't send AndroidID for branches check
       final clientType = _getClientType();
-      final androidId = clientType == 'WEB' ? 'WEB_BYPASS' : await DeviceService.getDeviceId();
       
       final response = await _tryRequestWithFallback(
         requestFn: (baseUrl) => http.post(
@@ -107,7 +103,7 @@ class AuthService {
             'Password': password,
             'NoMeja': noMeja,
             'ClientType': clientType,
-            'AndroidId': androidId, // Add Android ID for device validation (or bypass for web)
+            // No AndroidId parameter - skip AndroidID validation for branches
           }),
         ),
       );
@@ -130,17 +126,6 @@ class AuthService {
           'data': responseData['data']
         };
       } else {
-        // Check for AndroidID validation error
-        if (responseData['message'] != null && 
-            responseData['message'].toString().contains('AndroidID belum terdaftar')) {
-          return {
-            'success': false,
-            'message': responseData['message'],
-            'errorType': 'ANDROID_ID_ERROR',
-            'androidId': androidId,
-          };
-        }
-        
         return {
           'success': false,
           'message': responseData['message'] ?? 'Failed to get branches (${response.statusCode})',
@@ -160,22 +145,35 @@ class AuthService {
     try {
       // Get client type and Android ID for device validation
       final clientType = _getClientType();
-      final androidId = clientType == 'WEB' ? 'WEB_BYPASS' : await DeviceService.getDeviceId();
+      final androidId = await DeviceService.getDeviceId();
+      
+      print('🚀 DEBUG LOGIN: username=$username, noMeja=$noMeja');
+      print('🚀 DEBUG LOGIN: clientType=$clientType');
+      print('🚀 DEBUG LOGIN: androidId=$androidId');
+      print('🚀 DEBUG LOGIN: selectedBranch=$selectedBranch');
+      print('🚀 DEBUG LOGIN: baseUrl=$_currentBaseUrl');
+      
+      final requestBody = {
+        'Username': username,
+        'Password': password,
+        'NoMeja': noMeja,
+        'ClientType': clientType,  // Identify this request platform
+        'AndroidId': androidId,    // Add Android ID for device validation (or bypass for web)
+        if (selectedBranch != null) 'SelectedBranch': selectedBranch,
+      };
+      
+      print('🚀 DEBUG LOGIN: Request body = ${json.encode(requestBody)}');
       
       final response = await _tryRequestWithFallback(
         requestFn: (baseUrl) => http.post(
           Uri.parse('$baseUrl/CRF/login'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode({
-            'Username': username,
-            'Password': password,
-            'NoMeja': noMeja,
-            'ClientType': clientType,  // Identify this request platform
-            'AndroidId': androidId,    // Add Android ID for device validation (or bypass for web)
-            if (selectedBranch != null) 'SelectedBranch': selectedBranch,
-          }),
+          body: json.encode(requestBody),
         ),
       );
+
+      print('🚀 DEBUG LOGIN: Response status = ${response.statusCode}');
+      print('🚀 DEBUG LOGIN: Response body = ${response.body}');
 
       // Check if we have a valid JSON response
       Map<String, dynamic> responseData;
@@ -191,6 +189,7 @@ class AuthService {
       }
       
       if (response.statusCode == 200 && responseData['success'] == true) {
+        print('🚀 DEBUG LOGIN: SUCCESS!');
         // Save token and user data
         if (responseData['data'] != null) {
           await saveToken(responseData['data']['token'] ?? '');
@@ -207,6 +206,7 @@ class AuthService {
           };
         }
       } else {
+        print('🚀 DEBUG LOGIN: FAILED - ${responseData['message']}');
         // Check for AndroidID validation error specifically
         if (responseData['message'] != null && 
             (responseData['message'].toString().contains('AndroidID belum terdaftar') ||
@@ -225,6 +225,7 @@ class AuthService {
         };
       }
     } catch (e) {
+      print('🚀 DEBUG LOGIN: EXCEPTION = $e');
       debugPrint('Login error: $e');
       return {
         'success': false,

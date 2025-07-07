@@ -68,17 +68,11 @@ class _LoginPageState extends State<LoginPage> {
   // Load Android ID
   Future<void> _loadAndroidId() async {
     try {
-      // Check if running on web platform for bypass
-      if (kIsWeb) {
-        setState(() {
-          _androidId = 'WEB_BYPASS (Edge Testing)';
-        });
-      } else {
-        final deviceId = await DeviceService.getDeviceId();
-        setState(() {
-          _androidId = deviceId;
-        });
-      }
+      // Get AndroidID regardless of platform - no special handling for web
+      final deviceId = await DeviceService.getDeviceId();
+      setState(() {
+        _androidId = deviceId;
+      });
     } catch (e) {
       setState(() {
         _androidId = 'Unknown';
@@ -168,11 +162,6 @@ class _LoginPageState extends State<LoginPage> {
           HapticFeedback.lightImpact();
         }
       } else {
-        // Check for AndroidID validation error specifically
-        if (result['errorType'] == 'ANDROID_ID_ERROR') {
-          _showAndroidIdErrorDialog(result['message'] ?? 'AndroidID belum terdaftar, silahkan hubungi tim COMSEC');
-        }
-        
         // Clear branches on error but don't show popup yet (user might still be typing)
         setState(() {
           _availableBranches.clear();

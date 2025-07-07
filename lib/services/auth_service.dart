@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import 'package:flutter/foundation.dart';
+import 'device_service.dart';
 
 class AuthService {
   // Make base URL more flexible - allow for fallback
@@ -25,6 +26,17 @@ class AuthService {
   AuthService._internal() {
     // Initialize by loading saved base URL or using primary
     _loadBaseUrl();
+  }
+
+  // Platform detection helper
+  String _getClientType() {
+    if (kIsWeb) {
+      // For web platform (Edge testing), return 'WEB' to bypass AndroidID validation
+      return 'WEB';
+    } else {
+      // For mobile platform, return 'Android' 
+      return 'Android';
+    }
   }
 
   // Load saved base URL if available
@@ -82,6 +94,10 @@ class AuthService {
   // Get available branches for user (Step 1 of 2-step login)
   Future<Map<String, dynamic>> getUserBranches(String username, String password, String noMeja) async {
     try {
+      // Get client type and Android ID for device validation
+      final clientType = _getClientType();
+      final androidId = clientType == 'WEB' ? 'WEB_BYPASS' : await DeviceService.getDeviceId();
+      
       final response = await _tryRequestWithFallback(
         requestFn: (baseUrl) => http.post(
           Uri.parse('$baseUrl/CRF/get-user-branches'),
@@ -90,7 +106,8 @@ class AuthService {
             'Username': username,
             'Password': password,
             'NoMeja': noMeja,
-            'ClientType': 'Android'
+            'ClientType': clientType,
+            'AndroidId': androidId, // Add Android ID for device validation (or bypass for web)
           }),
         ),
       );
@@ -113,6 +130,17 @@ class AuthService {
           'data': responseData['data']
         };
       } else {
+        // Check for AndroidID validation error
+        if (responseData['message'] != null && 
+            responseData['message'].toString().contains('AndroidID belum terdaftar')) {
+          return {
+            'success': false,
+            'message': responseData['message'],
+            'errorType': 'ANDROID_ID_ERROR',
+            'androidId': androidId,
+          };
+        }
+        
         return {
           'success': false,
           'message': responseData['message'] ?? 'Failed to get branches (${response.statusCode})',
@@ -127,9 +155,13 @@ class AuthService {
     }
   }
 
-  // Login method with enhanced error handling (Step 2 of 2-step login)
+  // Login method with enhanced error handling and Android ID check (Step 2 of 2-step login)
   Future<Map<String, dynamic>> login(String username, String password, String noMeja, {String? selectedBranch}) async {
     try {
+      // Get client type and Android ID for device validation
+      final clientType = _getClientType();
+      final androidId = clientType == 'WEB' ? 'WEB_BYPASS' : await DeviceService.getDeviceId();
+      
       final response = await _tryRequestWithFallback(
         requestFn: (baseUrl) => http.post(
           Uri.parse('$baseUrl/CRF/login'),
@@ -138,7 +170,8 @@ class AuthService {
             'Username': username,
             'Password': password,
             'NoMeja': noMeja,
-            'ClientType': 'Android',  // Identify this request is from Android app
+            'ClientType': clientType,  // Identify this request platform
+            'AndroidId': androidId,    // Add Android ID for device validation (or bypass for web)
             if (selectedBranch != null) 'SelectedBranch': selectedBranch,
           }),
         ),
@@ -174,6 +207,18 @@ class AuthService {
           };
         }
       } else {
+        // Check for AndroidID validation error specifically
+        if (responseData['message'] != null && 
+            (responseData['message'].toString().contains('AndroidID belum terdaftar') ||
+             responseData['errorType'] == 'ANDROID_ID_ERROR')) {
+          return {
+            'success': false,
+            'message': 'AndroidID belum terdaftar, silahkan hubungi tim COMSEC',
+            'errorType': 'ANDROID_ID_ERROR',
+            'androidId': androidId,
+          };
+        }
+        
         return {
           'success': false,
           'message': responseData['message'] ?? 'Login failed (${response.statusCode})',

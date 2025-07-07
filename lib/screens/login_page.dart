@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'home_page.dart';
 import '../services/auth_service.dart';
+import '../services/device_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
@@ -22,6 +24,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _isPasswordVisible = false;
   bool _isLoadingBranches = false;
   List<Map<String, dynamic>> _availableBranches = [];
+  String _androidId = 'Loading...'; // Store Android ID
   
   // Auth service
   final AuthService _authService = AuthService();
@@ -42,6 +45,9 @@ class _LoginPageState extends State<LoginPage> {
     // Check if user is already logged in
     _checkLoginStatus();
     
+    // Load Android ID
+    _loadAndroidId();
+    
     // Add listeners to auto-fetch branches when all 3 fields are filled
     _usernameController.addListener(_onFieldChanged);
     _passwordController.addListener(_onFieldChanged);
@@ -56,6 +62,27 @@ class _LoginPageState extends State<LoginPage> {
         context,
         MaterialPageRoute(builder: (context) => const HomePage()),
       );
+    }
+  }
+
+  // Load Android ID
+  Future<void> _loadAndroidId() async {
+    try {
+      // Check if running on web platform for bypass
+      if (kIsWeb) {
+        setState(() {
+          _androidId = 'WEB_BYPASS (Edge Testing)';
+        });
+      } else {
+        final deviceId = await DeviceService.getDeviceId();
+        setState(() {
+          _androidId = deviceId;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _androidId = 'Unknown';
+      });
     }
   }
 
@@ -141,6 +168,11 @@ class _LoginPageState extends State<LoginPage> {
           HapticFeedback.lightImpact();
         }
       } else {
+        // Check for AndroidID validation error specifically
+        if (result['errorType'] == 'ANDROID_ID_ERROR') {
+          _showAndroidIdErrorDialog(result['message'] ?? 'AndroidID belum terdaftar, silahkan hubungi tim COMSEC');
+        }
+        
         // Clear branches on error but don't show popup yet (user might still be typing)
         setState(() {
           _availableBranches.clear();
@@ -212,7 +244,12 @@ class _LoginPageState extends State<LoginPage> {
           );
         }
       } else {
-        _showErrorDialog('Login Failed', result['message'] ?? 'Invalid credentials');
+        // Check for AndroidID validation error specifically
+        if (result['errorType'] == 'ANDROID_ID_ERROR') {
+          _showAndroidIdErrorDialog(result['message'] ?? 'AndroidID belum terdaftar, silahkan hubungi tim COMSEC');
+        } else {
+          _showErrorDialog('Login Failed', result['message'] ?? 'Invalid credentials');
+        }
       }
     } catch (e) {
       _showErrorDialog('Connection Error', 'Error: $e');
@@ -239,6 +276,101 @@ class _LoginPageState extends State<LoginPage> {
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  void _showAndroidIdErrorDialog(String message) {
+    if (mounted) {
+      // Strong haptic feedback for AndroidID error
+      HapticFeedback.heavyImpact();
+      
+      showDialog(
+        context: context,
+        barrierDismissible: false, // User must tap OK to dismiss
+        builder: (context) => AlertDialog(
+          icon: const Icon(
+            Icons.security_outlined,
+            size: 48,
+            color: Colors.red,
+          ),
+          title: const Text(
+            'AndroidID Tidak Terdaftar',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.red,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                message,
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.android, color: Colors.green),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Android ID Anda:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            _androidId,
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Untuk mendaftarkan AndroidID ini, silahkan hubungi tim COMSEC dengan menyertakan AndroidID di atas.',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
+              child: const Text(
+                'Mengerti',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
@@ -562,20 +694,29 @@ class _LoginPageState extends State<LoginPage> {
                           const SizedBox(height: 20),
                           
                           // Android ID text at bottom with Android icon
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.android, color: Colors.white),
-                              const SizedBox(width: 5),
-                              Text(
-                                'Android ID : 1234Uas61234',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: isTablet ? 18 : 16,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.android, color: Colors.green),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Android ID : $_androidId',
+                                  style: TextStyle(
+                                    color: Colors.black87,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: isTablet ? 16 : 14,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                           
                           // Spacer untuk memberikan ruang

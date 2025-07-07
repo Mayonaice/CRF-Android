@@ -689,47 +689,88 @@ class _LoginPageState extends State<LoginPage> {
                           
                           const SizedBox(height: 20),
                           
-                          // Android ID text at bottom with Android icon - WITH REFRESH BUTTON
+                          // Android ID display - Enhanced for registration awareness
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            margin: const EdgeInsets.symmetric(horizontal: 20),
+                            padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.9),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.grey.shade300),
+                              color: Colors.white.withOpacity(0.95),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.orange.shade300, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 4,
+                                  spreadRadius: 1,
+                                ),
+                              ],
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
+                            child: Column(
                               children: [
-                                const Icon(Icons.android, color: Colors.green),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Android ID : $_androidId',
-                                  style: TextStyle(
-                                    color: Colors.black87,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: isTablet ? 16 : 14,
+                                Row(
+                                  children: [
+                                    Icon(Icons.phone_android, color: Colors.orange.shade700, size: 20),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'AndroidID Device (Wajib Terdaftar)',
+                                        style: TextStyle(
+                                          color: Colors.orange.shade800,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: isTablet ? 16 : 14,
+                                        ),
+                                      ),
+                                    ),
+                                    // Refresh button
+                                    GestureDetector(
+                                      onTap: () {
+                                        HapticFeedback.lightImpact();
+                                        _loadAndroidId();
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.shade100,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(
+                                          Icons.refresh,
+                                          size: 16,
+                                          color: Colors.orange.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.grey.shade300),
+                                  ),
+                                  child: Text(
+                                    _androidId,
+                                    style: TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: isTablet ? 14 : 12,
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    textAlign: TextAlign.center,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                // Refresh button to reload AndroidID
-                                GestureDetector(
-                                  onTap: () {
-                                    HapticFeedback.lightImpact();
-                                    _loadAndroidId(); // Force refresh AndroidID
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade100,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Icon(
-                                      Icons.refresh,
-                                      size: 16,
-                                      color: Colors.blue.shade700,
-                                    ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'AndroidID ini harus terdaftar di COMSEC sebelum login',
+                                  style: TextStyle(
+                                    fontSize: isTablet ? 12 : 10,
+                                    color: Colors.orange.shade700,
+                                    fontStyle: FontStyle.italic,
                                   ),
+                                  textAlign: TextAlign.center,
                                 ),
                               ],
                             ),

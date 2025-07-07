@@ -8,11 +8,11 @@ class DeviceService {
   static final DeviceInfoPlugin _deviceInfoPlugin = DeviceInfoPlugin();
   static const AndroidId _androidIdPlugin = AndroidId();
   
-  /// Get Android ID - uses native AndroidID from device
-  /// Returns consistent AndroidID format for all platforms
+  /// Get Android ID - Real device AndroidID for production
+  /// Returns 16-character AndroidID for registration validation
   static Future<String> getDeviceId() async {
     try {
-      print('🔍 Getting device AndroidID');
+      print('🔍 Getting real device AndroidID for production');
       
       if (Platform.isAndroid) {
         print('🔍 Android platform detected');
@@ -22,71 +22,53 @@ class DeviceService {
         print('🔍 Native Android ID: $nativeAndroidId');
         
         if (nativeAndroidId != null && nativeAndroidId.isNotEmpty && nativeAndroidId != 'unknown') {
-          // Check if AndroidID is already in desired format (16 hex chars)
+          // Use native AndroidID directly if it's already 16 chars
           if (nativeAndroidId.length == 16 && RegExp(r'^[a-f0-9]+$').hasMatch(nativeAndroidId)) {
-            print('🔍 AndroidID already in perfect 16-hex format: $nativeAndroidId');
+            print('✅ AndroidID already in 16-hex format: $nativeAndroidId');
             return nativeAndroidId;
           } else {
-            // Convert to 16-character hex format if needed
-            var bytes = utf8.encode(nativeAndroidId);
-            var digest = md5.convert(bytes);
-            String hashedId = digest.toString().substring(0, 16);
-            
-            print('🔍 Original AndroidID: $nativeAndroidId');
-            print('🔍 Converted to 16-hex: $hashedId');
-            return hashedId;
+            // Keep original AndroidID - don't hash it
+            // Admin should register the exact AndroidID from device
+            print('✅ Using original AndroidID: $nativeAndroidId');
+            return nativeAndroidId;
           }
         } else {
-          print('⚠️ Failed to get native AndroidID, using fallback');
-          // Fallback: get device info and hash
+          print('⚠️ Failed to get native AndroidID, using device info fallback');
+          // Fallback: use device-specific info
           AndroidDeviceInfo androidInfo = await _deviceInfoPlugin.androidInfo;
-          String deviceId = androidInfo.id ?? 'android_fallback';
+          String deviceSerial = androidInfo.id ?? androidInfo.fingerprint ?? 'android_fallback';
           
-          var bytes = utf8.encode(deviceId);
-          var digest = md5.convert(bytes);
-          String hashedId = digest.toString().substring(0, 16);
-          
-          print('🔍 Fallback AndroidID: $hashedId');
-          return hashedId;
+          print('✅ Fallback AndroidID: $deviceSerial');
+          return deviceSerial;
         }
         
       } else if (Platform.isIOS) {
         print('🔍 iOS platform detected');
         IosDeviceInfo iosInfo = await _deviceInfoPlugin.iosInfo;
         
-        // Use iOS identifier for consistency
+        // Use iOS identifier - keep original format
         String iosId = iosInfo.identifierForVendor ?? 'ios_unknown';
         
-        // Convert to 16-character hex format
-        var bytes = utf8.encode(iosId);
-        var digest = md5.convert(bytes);
-        String hashedId = digest.toString().substring(0, 16);
-        
-        print('🔍 iOS AndroidID format: $hashedId');
-        return hashedId;
+        print('✅ iOS AndroidID: $iosId');
+        return iosId;
         
       } else {
-        print('🔍 Web/Edge platform detected');
+        print('🔍 Web/Desktop platform detected');
         
-        // For web testing, generate consistent ID
-        String webId = 'web_edge_browser_testing';
-        var bytes = utf8.encode(webId);
-        var digest = md5.convert(bytes);
-        String hashedId = digest.toString().substring(0, 16);
+        // For web/desktop, use a predictable but unique ID
+        String webId = 'web_platform_id';
         
-        print('🔍 Web AndroidID format: $hashedId');
-        return hashedId;
+        print('✅ Web AndroidID: $webId');
+        return webId;
       }
       
     } catch (e) {
       print('❌ Error getting device ID: $e');
       
-      // Simple fallback
-      var bytes = utf8.encode('fallback_device_id');
-      var digest = md5.convert(bytes);
-      String fallbackId = digest.toString().substring(0, 16);
+      // Simple fallback - return error identifier
+      String fallbackId = 'error_unknown_device';
       
-      print('🔍 Fallback AndroidID: $fallbackId');
+      print('⚠️ Fallback AndroidID: $fallbackId');
       return fallbackId;
     }
   }

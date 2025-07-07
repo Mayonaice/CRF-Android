@@ -2,145 +2,138 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:crypto/crypto.dart';
+import 'package:android_id/android_id.dart';
 
 class DeviceService {
   static final DeviceInfoPlugin _deviceInfoPlugin = DeviceInfoPlugin();
+  static const AndroidId _androidIdPlugin = AndroidId();
   
-  // Testing mode - set to true for testing with registered AndroidID
-  static const bool _isTestingMode = false;  // Set to false for production
-  static const String _testingAndroidId = 'fd39d4157a8541a1';  // Registered AndroidID for testing
-  
-  /// Get Android ID in consistent 16-character hex format
-  /// Always returns format like: 77e6a1b7af9e8b2b (16 characters, lowercase hex)
+  /// Get Android ID - uses native AndroidID from device
+  /// Returns consistent AndroidID format for all platforms
   static Future<String> getDeviceId() async {
     try {
-      print('🔍 DEBUG: Platform detection started');
-      print('🔍 DEBUG: Testing mode: $_isTestingMode');
-      print('🔍 DEBUG: Platform.isAndroid: ${Platform.isAndroid}');
-      print('🔍 DEBUG: Platform.isIOS: ${Platform.isIOS}');
-      print('🔍 DEBUG: Platform.operatingSystem: ${Platform.operatingSystem}');
-      
-      // If testing mode is enabled, always return registered AndroidID
-      if (_isTestingMode) {
-        print('🔍 DEBUG: Testing mode enabled - using registered AndroidID: $_testingAndroidId');
-        return _testingAndroidId;
-      }
-      
-      String deviceIdentifier = '';
+      print('🔍 Getting device AndroidID');
       
       if (Platform.isAndroid) {
-        print('🔍 DEBUG: Detected Android platform');
-        AndroidDeviceInfo androidInfo = await _deviceInfoPlugin.androidInfo;
+        print('🔍 Android platform detected');
         
-        // Create unique device identifier from multiple properties for consistency
-        deviceIdentifier = '${androidInfo.id ?? 'unknown'}_${androidInfo.brand ?? ''}_${androidInfo.model ?? ''}_${androidInfo.product ?? ''}_${androidInfo.manufacturer ?? ''}';
+        // Get native Android ID using android_id package
+        String? nativeAndroidId = await _androidIdPlugin.getId();
+        print('🔍 Native Android ID: $nativeAndroidId');
         
-        print('🔍 DEBUG: Raw device identifier: $deviceIdentifier');
+        if (nativeAndroidId != null && nativeAndroidId.isNotEmpty && nativeAndroidId != 'unknown') {
+          // Check if AndroidID is already in desired format (16 hex chars)
+          if (nativeAndroidId.length == 16 && RegExp(r'^[a-f0-9]+$').hasMatch(nativeAndroidId)) {
+            print('🔍 AndroidID already in perfect 16-hex format: $nativeAndroidId');
+            return nativeAndroidId;
+          } else {
+            // Convert to 16-character hex format if needed
+            var bytes = utf8.encode(nativeAndroidId);
+            var digest = md5.convert(bytes);
+            String hashedId = digest.toString().substring(0, 16);
+            
+            print('🔍 Original AndroidID: $nativeAndroidId');
+            print('🔍 Converted to 16-hex: $hashedId');
+            return hashedId;
+          }
+        } else {
+          print('⚠️ Failed to get native AndroidID, using fallback');
+          // Fallback: get device info and hash
+          AndroidDeviceInfo androidInfo = await _deviceInfoPlugin.androidInfo;
+          String deviceId = androidInfo.id ?? 'android_fallback';
+          
+          var bytes = utf8.encode(deviceId);
+          var digest = md5.convert(bytes);
+          String hashedId = digest.toString().substring(0, 16);
+          
+          print('🔍 Fallback AndroidID: $hashedId');
+          return hashedId;
+        }
         
       } else if (Platform.isIOS) {
-        print('🔍 DEBUG: Detected iOS platform');
+        print('🔍 iOS platform detected');
         IosDeviceInfo iosInfo = await _deviceInfoPlugin.iosInfo;
         
-        // Create unique device identifier from iOS properties
-        deviceIdentifier = '${iosInfo.identifierForVendor ?? 'unknown'}_${iosInfo.model ?? ''}_${iosInfo.name ?? ''}_${iosInfo.systemName ?? ''}';
+        // Use iOS identifier for consistency
+        String iosId = iosInfo.identifierForVendor ?? 'ios_unknown';
         
-        print('🔍 DEBUG: Raw iOS identifier: $deviceIdentifier');
+        // Convert to 16-character hex format
+        var bytes = utf8.encode(iosId);
+        var digest = md5.convert(bytes);
+        String hashedId = digest.toString().substring(0, 16);
+        
+        print('🔍 iOS AndroidID format: $hashedId');
+        return hashedId;
         
       } else {
-        print('🔍 DEBUG: Detected WEB platform (Edge testing)');
+        print('🔍 Web/Edge platform detected');
         
-        // For Edge testing, use a registered AndroidID from database
-        // But still process through MD5 to maintain consistent format
-        deviceIdentifier = 'web_edge_testing_device_registered_w117';
+        // For web testing, generate consistent ID
+        String webId = 'web_edge_browser_testing';
+        var bytes = utf8.encode(webId);
+        var digest = md5.convert(bytes);
+        String hashedId = digest.toString().substring(0, 16);
         
-        print('🔍 DEBUG: Web testing identifier: $deviceIdentifier');
+        print('🔍 Web AndroidID format: $hashedId');
+        return hashedId;
       }
-      
-      // ALWAYS generate 16-character hex format using MD5
-      print('🔍 DEBUG: Processing device identifier through MD5: $deviceIdentifier');
-      
-      var bytes = utf8.encode(deviceIdentifier);
-      var digest = md5.convert(bytes);
-      String hashedId = digest.toString();
-      
-      // Take first 16 characters for consistent format like: 77e6a1b7af9e8b2b
-      String result = hashedId.substring(0, 16);
-      
-      // Special handling for Edge testing - return known registered AndroidID
-      if (!Platform.isAndroid && !Platform.isIOS) {
-        // For Edge/Web testing, override with registered AndroidID
-        result = _testingAndroidId;  // Use registered AndroidID from W-117
-        print('🔍 DEBUG: Override for Edge testing with registered ID: $result');
-      }
-      
-      print('🔍 DEBUG: Final AndroidID (16 hex chars): $result');
-      return result;
       
     } catch (e) {
-      print('🔍 DEBUG: Exception caught: $e');
-      print('Error getting device ID: $e');
+      print('❌ Error getting device ID: $e');
       
-      // Fallback: Always return 16-character hex format
-      String fallbackId = _testingAndroidId;  // Registered AndroidID for fallback
-      print('🔍 DEBUG: Using fallback AndroidID: $fallbackId');
+      // Simple fallback
+      var bytes = utf8.encode('fallback_device_id');
+      var digest = md5.convert(bytes);
+      String fallbackId = digest.toString().substring(0, 16);
+      
+      print('🔍 Fallback AndroidID: $fallbackId');
       return fallbackId;
     }
   }
   
-  /// Get detailed device information (for debugging)
+  /// Get detailed device information
   static Future<Map<String, String>> getDeviceInfo() async {
     try {
-      // Always include the generated AndroidID for consistency
       String generatedAndroidId = await getDeviceId();
       
       if (Platform.isAndroid) {
         AndroidDeviceInfo androidInfo = await _deviceInfoPlugin.androidInfo;
+        String? nativeAndroidId = await _androidIdPlugin.getId();
+        
         return {
-          'deviceId': generatedAndroidId,  // Use our generated 16-char format
-          'originalId': androidInfo.id ?? 'unknown',  // Keep original for reference
+          'deviceId': generatedAndroidId,
+          'nativeAndroidId': nativeAndroidId ?? 'unknown',
+          'originalId': androidInfo.id ?? 'unknown',
           'brand': androidInfo.brand ?? 'unknown',
           'model': androidInfo.model ?? 'unknown',
           'manufacturer': androidInfo.manufacturer ?? 'unknown',
-          'product': androidInfo.product ?? 'unknown',
           'androidVersion': androidInfo.version.release ?? 'unknown',
-          'sdkInt': androidInfo.version.sdkInt.toString(),
           'platform': 'Android',
-          'testingMode': _isTestingMode ? 'Testing with registered AndroidID' : 'Production mode',
         };
       } else if (Platform.isIOS) {
         IosDeviceInfo iosInfo = await _deviceInfoPlugin.iosInfo;
         return {
-          'deviceId': generatedAndroidId,  // Use our generated 16-char format
-          'originalId': iosInfo.identifierForVendor ?? 'unknown',  // Keep original for reference
+          'deviceId': generatedAndroidId,
+          'originalId': iosInfo.identifierForVendor ?? 'unknown',
           'name': iosInfo.name ?? 'unknown',
           'model': iosInfo.model ?? 'unknown',
           'systemName': iosInfo.systemName ?? 'unknown',
           'systemVersion': iosInfo.systemVersion ?? 'unknown',
           'platform': 'iOS',
-          'testingMode': _isTestingMode ? 'Testing with registered AndroidID' : 'Production mode',
         };
       } else {
         return {
-          'deviceId': generatedAndroidId,  // Use our generated 16-char format
+          'deviceId': generatedAndroidId,
           'platform': Platform.operatingSystem,
-          'testingMode': 'Edge/Web with registered AndroidID',
         };
       }
     } catch (e) {
-      print('Error getting device info: $e');
+      print('❌ Error getting device info: $e');
       return {
-        'deviceId': _testingAndroidId,  // Fallback to registered AndroidID
+        'deviceId': 'error_fallback_id',
         'error': e.toString(),
         'platform': 'Unknown',
-        'testingMode': 'Fallback mode',
       };
     }
   }
-  
-  /// Toggle testing mode (for development purposes)
-  /// In production, this should be removed or always return false
-  static bool get isTestingMode => _isTestingMode;
-  
-  /// Get the testing AndroidID being used
-  static String get testingAndroidId => _testingAndroidId;
 } 

@@ -65,17 +65,24 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // Load Android ID
+  // Load Android ID - FORCE REFRESH from new package
   Future<void> _loadAndroidId() async {
+    setState(() {
+      _androidId = 'Loading...'; // Show loading state
+    });
+    
     try {
-      // Get AndroidID regardless of platform - no special handling for web
+      // FORCE get fresh AndroidID from new android_id package
       final deviceId = await DeviceService.getDeviceId();
+      print('🔄 REFRESHED AndroidID: $deviceId');
+      
       setState(() {
         _androidId = deviceId;
       });
     } catch (e) {
+      print('❌ Failed to load AndroidID: $e');
       setState(() {
-        _androidId = 'Unknown';
+        _androidId = 'Error: $e';
       });
     }
   }
@@ -682,7 +689,7 @@ class _LoginPageState extends State<LoginPage> {
                           
                           const SizedBox(height: 20),
                           
-                          // Android ID text at bottom with Android icon
+                          // Android ID text at bottom with Android icon - WITH REFRESH BUTTON
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                             decoration: BoxDecoration(
@@ -702,6 +709,26 @@ class _LoginPageState extends State<LoginPage> {
                                     color: Colors.black87,
                                     fontWeight: FontWeight.bold,
                                     fontSize: isTablet ? 16 : 14,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Refresh button to reload AndroidID
+                                GestureDetector(
+                                  onTap: () {
+                                    HapticFeedback.lightImpact();
+                                    _loadAndroidId(); // Force refresh AndroidID
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade100,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(
+                                      Icons.refresh,
+                                      size: 16,
+                                      color: Colors.blue.shade700,
+                                    ),
                                   ),
                                 ),
                               ],

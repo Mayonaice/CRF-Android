@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'prepare_mode_screen.dart';
 import '../services/auth_service.dart';
+import '../widgets/error_dialogs.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);

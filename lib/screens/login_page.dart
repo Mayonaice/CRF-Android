@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'home_page.dart';
 import '../services/auth_service.dart';
 import '../services/device_service.dart';
+import '../widgets/error_dialogs.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
@@ -197,12 +198,23 @@ class _LoginPageState extends State<LoginPage> {
     }
     
     if (_availableBranches.isEmpty) {
-      _showErrorDialog('No Access', 'Please ensure all fields are correct. No CRF branches available for this user.');
+      ErrorDialogs.showErrorDialog(
+        context,
+        title: 'Tidak Ada Akses',
+        message: 'Pastikan semua field sudah benar. Tidak ada cabang CRF yang tersedia untuk user ini.',
+        icon: Icons.business_outlined,
+      );
       return;
     }
     
     if (_selectedBranch == null && _availableBranches.length > 1) {
-      _showErrorDialog('Branch Required', 'Please select a branch to continue.');
+      ErrorDialogs.showErrorDialog(
+        context,
+        title: 'Pilih Cabang',
+        message: 'Silahkan pilih cabang untuk melanjutkan login.',
+        icon: Icons.location_on_outlined,
+        iconColor: Colors.orange,
+      );
       return;
     }
 
@@ -232,23 +244,52 @@ class _LoginPageState extends State<LoginPage> {
         // Haptic feedback for Android feel
         HapticFeedback.mediumImpact();
         
-        // Navigate to home screen
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const HomePage()),
-          );
-        }
+        // Show success dialog briefly then navigate
+        ErrorDialogs.showSuccessDialog(
+          context,
+          title: 'Login Berhasil!',
+          message: 'Selamat datang di aplikasi CRF',
+          buttonText: 'Lanjutkan',
+          onPressed: () {
+            Navigator.pop(context); // Close dialog
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const HomePage()),
+              );
+            }
+          },
+        );
       } else {
         // Check for AndroidID validation error specifically
         if (result['errorType'] == 'ANDROID_ID_ERROR') {
-          _showAndroidIdErrorDialog(result['message'] ?? 'AndroidID belum terdaftar, silahkan hubungi tim COMSEC');
+          ErrorDialogs.showAndroidIdErrorDialog(
+            context,
+            message: result['message'] ?? 'AndroidID belum terdaftar, silahkan hubungi tim COMSEC',
+            androidId: _androidId,
+          );
+        } else if (result['message']?.toString().contains('Connection error') == true ||
+                   result['message']?.toString().contains('Timeout') == true) {
+          ErrorDialogs.showConnectionErrorDialog(
+            context,
+            message: result['message'] ?? 'Koneksi ke server bermasalah',
+            onRetry: _performLogin,
+          );
         } else {
-          _showErrorDialog('Login Failed', result['message'] ?? 'Invalid credentials');
+          ErrorDialogs.showErrorDialog(
+            context,
+            title: 'Login Gagal',
+            message: result['message'] ?? 'Username atau password tidak valid',
+            icon: Icons.login_outlined,
+          );
         }
       }
     } catch (e) {
-      _showErrorDialog('Connection Error', 'Error: $e');
+      ErrorDialogs.showConnectionErrorDialog(
+        context,
+        message: 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.',
+        onRetry: _performLogin,
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -258,121 +299,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _showErrorDialog(String title, String message) {
-    if (mounted) {
-      // Haptic feedback for error
-      HapticFeedback.vibrate();
-      
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
-  void _showAndroidIdErrorDialog(String message) {
-    if (mounted) {
-      // Strong haptic feedback for AndroidID error
-      HapticFeedback.heavyImpact();
-      
-      showDialog(
-        context: context,
-        barrierDismissible: false, // User must tap OK to dismiss
-        builder: (context) => AlertDialog(
-          icon: const Icon(
-            Icons.security_outlined,
-            size: 48,
-            color: Colors.red,
-          ),
-          title: const Text(
-            'AndroidID Tidak Terdaftar',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.red,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                message,
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.android, color: Colors.green),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Android ID Anda:',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                          Text(
-                            _androidId,
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Untuk mendaftarkan AndroidID ini, silahkan hubungi tim COMSEC dengan menyertakan AndroidID di atas.',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontStyle: FontStyle.italic,
-                  color: Colors.grey,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              ),
-              child: const Text(
-                'Mengerti',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-  }
+  // Old error dialog methods removed - now using ErrorDialogs widget
 
   @override
   Widget build(BuildContext context) {

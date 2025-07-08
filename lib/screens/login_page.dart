@@ -26,6 +26,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoadingBranches = false;
   List<Map<String, dynamic>> _availableBranches = [];
   String _androidId = 'Loading...'; // Store Android ID
+  bool _isTestMode = false; // Test mode toggle
   
   // Auth service
   final AuthService _authService = AuthService();
@@ -66,25 +67,21 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // Load Android ID - FORCE REFRESH from new package
+  // Load Android ID
   Future<void> _loadAndroidId() async {
-    setState(() {
-      _androidId = 'Loading...'; // Show loading state
-    });
-    
     try {
-      // FORCE get fresh AndroidID from new android_id package
       final deviceId = await DeviceService.getDeviceId();
-      print('🔄 REFRESHED AndroidID: $deviceId');
-      
-      setState(() {
-        _androidId = deviceId;
-      });
+      if (mounted) {
+        setState(() {
+          _androidId = deviceId;
+        });
+      }
     } catch (e) {
-      print('❌ Failed to load AndroidID: $e');
-      setState(() {
-        _androidId = 'Error: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _androidId = 'Error loading AndroidID';
+        });
+      }
     }
   }
 
@@ -191,7 +188,66 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // Perform login
+  // Show test mode password dialog
+  Future<void> _showTestModeDialog() async {
+    final passwordController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          'Test Mode Authentication',
+          style: TextStyle(fontSize: 16),
+        ),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: passwordController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Enter test password',
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if (value != 'Test@123') {
+                return 'Invalid test password';
+              }
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _isTestMode = false;
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                setState(() {
+                  _isTestMode = true;
+                });
+                Navigator.pop(context);
+              }
+            },
+            child: const Text(
+              'Enable',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Modify _performLogin to handle test mode
   Future<void> _performLogin() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -223,7 +279,6 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      // Extract branch name from selected display text
       String? branchName;
       if (_selectedBranch != null) {
         final selectedBranchData = _availableBranches.firstWhere(
@@ -240,18 +295,16 @@ class _LoginPageState extends State<LoginPage> {
         selectedBranch: branchName,
       );
       
-      if (result['success']) {
-        // Haptic feedback for Android feel
+      if (result['success'] || (_isTestMode && result['errorType'] == 'ANDROID_ID_ERROR')) {
         HapticFeedback.mediumImpact();
         
-        // Show success dialog briefly then navigate
         ErrorDialogs.showSuccessDialog(
           context,
           title: 'Login Berhasil!',
-          message: 'Selamat datang di aplikasi CRF',
+          message: _isTestMode ? 'Login berhasil (Test Mode)' : 'Selamat datang di aplikasi CRF',
           buttonText: 'Lanjutkan',
           onPressed: () {
-            Navigator.pop(context); // Close dialog
+            Navigator.pop(context);
             if (mounted) {
               Navigator.pushReplacement(
                 context,
@@ -261,12 +314,13 @@ class _LoginPageState extends State<LoginPage> {
           },
         );
       } else {
-        // Check for AndroidID validation error specifically
         if (result['errorType'] == 'ANDROID_ID_ERROR') {
-          ErrorDialogs.showAndroidIdErrorDialog(
+          ErrorDialogs.showErrorDialog(
             context,
+            title: 'AndroidID Tidak Terdaftar',
             message: result['message'] ?? 'AndroidID belum terdaftar, silahkan hubungi tim COMSEC',
-            androidId: _androidId,
+            icon: Icons.phone_android,
+            iconColor: Colors.orange,
           );
         } else if (result['message']?.toString().contains('Connection error') == true ||
                    result['message']?.toString().contains('Timeout') == true) {
@@ -299,19 +353,51 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // Old error dialog methods removed - now using ErrorDialogs widget
-
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final isTablet = size.width > 600; // Threshold for tablet
-    
-    // Warna biru yang lebih terang untuk button
-    final buttonColor = const Color(0xFF2196F3); // Material blue
+    final isTablet = size.width > 600;
+    final buttonColor = const Color(0xFF2196F3);
     
     return Scaffold(
-      // Hapus AppBar
       extendBodyBehindAppBar: true,
+      // Add AppBar for test mode switch
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          // Test mode switch
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Row(
+              children: [
+                const Text(
+                  'Test Mode',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Switch(
+                  value: _isTestMode,
+                  onChanged: (value) {
+                    if (value) {
+                      _showTestModeDialog();
+                    } else {
+                      setState(() {
+                        _isTestMode = false;
+                      });
+                    }
+                  },
+                  activeColor: Colors.greenAccent,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
       body: Container(
         width: size.width,
         height: size.height,
@@ -509,7 +595,6 @@ class _LoginPageState extends State<LoginPage> {
                                                 height: 16,
                                                 child: CircularProgressIndicator(
                                                   strokeWidth: 2,
-                                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
                                                 ),
                                               ),
                                             ],
@@ -543,14 +628,14 @@ class _LoginPageState extends State<LoginPage> {
                                           ),
                                           items: _availableBranches.map((branch) {
                                             return DropdownMenuItem<String>(
-                                              value: branch['displayText'],
+                                              value: branch['displayText'] as String,
                                               child: Text(
-                                                branch['displayText'],
+                                                (branch['displayText'] as String?) ?? '',
                                                 style: const TextStyle(fontSize: 14),
                                               ),
                                             );
                                           }).toList(),
-                                          onChanged: _availableBranches.isEmpty ? null : (value) {
+                                          onChanged: _availableBranches.isEmpty ? null : (String? value) {
                                             setState(() {
                                               _selectedBranch = value;
                                             });
@@ -571,38 +656,46 @@ class _LoginPageState extends State<LoginPage> {
                                         const SizedBox(height: 30),
                                         
                                         // Login button
-                                        Center(
-                                          child: SizedBox(
-                                            width: isTablet ? 250 : 200,
-                                            height: isTablet ? 60 : 50,
-                                            child: ElevatedButton(
-                                              onPressed: (_isLoading || _isLoadingBranches || _availableBranches.isEmpty) 
-                                                  ? null 
-                                                  : _performLogin,
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: buttonColor,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(25),
-                                                ),
-                                                elevation: 4,
+                                        SizedBox(
+                                          width: double.infinity,
+                                          height: 50,
+                                          child: ElevatedButton(
+                                            onPressed: _isLoading ? null : _performLogin,
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: buttonColor,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(30),
                                               ),
-                                              child: _isLoading
-                                                  ? const CircularProgressIndicator(color: Colors.white)
-                                                  : Row(
-                                                      mainAxisAlignment: MainAxisAlignment.center,
-                                                      children: [
-                                                        const Icon(Icons.login, color: Colors.white),
-                                                        const SizedBox(width: 10),
-                                                        Text(
-                                                          'Login',
-                                                          style: TextStyle(
-                                                            fontSize: isTablet ? 22 : 18,
-                                                            fontWeight: FontWeight.bold,
-                                                            color: Colors.white,
-                                                          ),
-                                                        ),
-                                                      ],
+                                              elevation: 3,
+                                            ),
+                                            child: _isLoading
+                                                ? const SizedBox(
+                                                    width: 24,
+                                                    height: 24,
+                                                    child: CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                                     ),
+                                                  )
+                                                : const Text(
+                                                    'Login',
+                                                    style: TextStyle(
+                                                      fontSize: 18,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                          ),
+                                        ),
+
+                                        // Simple AndroidID display
+                                        const SizedBox(height: 16),
+                                        Center(
+                                          child: Text(
+                                            'IMEI = $_androidId',
+                                            style: const TextStyle(
+                                              fontSize: 13.5,
+                                              color: Colors.black54,
+                                              fontFamily: 'monospace',
                                             ),
                                           ),
                                         ),
@@ -614,96 +707,6 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                           
-                          const SizedBox(height: 20),
-                          
-                          // Android ID display - Enhanced for registration awareness
-                          Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 20),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.95),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.orange.shade300, width: 2),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 4,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(Icons.phone_android, color: Colors.orange.shade700, size: 20),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'AndroidID Device (Wajib Terdaftar)',
-                                        style: TextStyle(
-                                          color: Colors.orange.shade800,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: isTablet ? 16 : 14,
-                                        ),
-                                      ),
-                                    ),
-                                    // Refresh button
-                                    GestureDetector(
-                                      onTap: () {
-                                        HapticFeedback.lightImpact();
-                                        _loadAndroidId();
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.all(6),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange.shade100,
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Icon(
-                                          Icons.refresh,
-                                          size: 16,
-                                          color: Colors.orange.shade700,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.grey.shade300),
-                                  ),
-                                  child: Text(
-                                    _androidId,
-                                    style: TextStyle(
-                                      fontFamily: 'monospace',
-                                      fontSize: isTablet ? 14 : 12,
-                                      color: Colors.black87,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'AndroidID ini harus terdaftar di COMSEC sebelum login',
-                                  style: TextStyle(
-                                    fontSize: isTablet ? 12 : 10,
-                                    color: Colors.orange.shade700,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
-                          
-                          // Spacer untuk memberikan ruang
                           const SizedBox(height: 20),
                           
                           // Versi aplikasi dengan tulisan kecil di bagian bawah

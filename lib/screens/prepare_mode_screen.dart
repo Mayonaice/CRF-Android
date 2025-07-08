@@ -224,12 +224,28 @@ class _PrepareModePageState extends State<PrepareModePage> {
       // Get required standValue from prepare data for validation
       int? requiredStandValue = _prepareData?.standValue;
       
+      // Get list of existing catridge codes
+      List<String> existingCatridges = [];
+      for (var item in _detailCatridgeItems) {
+        if (item.noCatridge.isNotEmpty) {
+          existingCatridges.add(item.noCatridge);
+        }
+      }
+      if (_divertDetailItem?.noCatridge.isNotEmpty == true) {
+        existingCatridges.add(_divertDetailItem!.noCatridge);
+      }
+      if (_pocketDetailItem?.noCatridge.isNotEmpty == true) {
+        existingCatridges.add(_pocketDetailItem!.noCatridge);
+      }
+      
       print('Using requiredStandValue for validation: $requiredStandValue');
       
       final response = await _apiService.getCatridgeDetails(
         branchCode, 
         catridgeCode, 
-        requiredStandValue: requiredStandValue
+        requiredStandValue: requiredStandValue,
+        requiredType: 'C', // Main catridge must be type C
+        existingCatridges: existingCatridges,
       );
       
       print('Catridge lookup response: ${response.success}, data count: ${response.data.length}, message: ${response.message}');
@@ -1815,18 +1831,12 @@ class _PrepareModePageState extends State<PrepareModePage> {
   }
   
   Widget _buildDetailCatridgeSection(bool isSmallScreen) {
-    // Debug logging
-    print('=== BUILDING DETAIL CATRIDGE SECTION ===');
-    print('Detail catridge items count: ${_detailCatridgeItems.length}');
-    for (int i = 0; i < _detailCatridgeItems.length; i++) {
-      print('Item $i: ${_detailCatridgeItems[i].noCatridge} - ${_detailCatridgeItems[i].sealCatridge}');
-    }
-    
     return Container(
       margin: EdgeInsets.only(bottom: isSmallScreen ? 15 : 25),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Main Catridge Details
           Text(
             'Detail Catridge',
             style: TextStyle(
@@ -1843,7 +1853,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: Text(
-                'No catridge data available (${_detailCatridgeItems.length} items)',
+                'No catridge data available',
                 style: TextStyle(
                   fontSize: isSmallScreen ? 12 : 14,
                   fontStyle: FontStyle.italic,
@@ -1851,6 +1861,52 @@ class _PrepareModePageState extends State<PrepareModePage> {
                 ),
               ),
             ),
+            
+          // Divider between sections
+          if (_divertDetailItem != null || _pocketDetailItem != null)
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: isSmallScreen ? 15 : 25),
+              child: Container(
+                height: 1,
+                color: Colors.grey.shade300,
+              ),
+            ),
+            
+          // Divert Details if exists
+          if (_divertDetailItem != null) ...[
+            Text(
+              'Detail Divert',
+              style: TextStyle(
+                fontSize: isSmallScreen ? 14 : 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: isSmallScreen ? 8 : 15),
+            _buildDetailCatridgeItem(_divertDetailItem!, isSmallScreen),
+          ],
+          
+          // Divider between divert and pocket
+          if (_divertDetailItem != null && _pocketDetailItem != null)
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: isSmallScreen ? 15 : 25),
+              child: Container(
+                height: 1,
+                color: Colors.grey.shade300,
+              ),
+            ),
+            
+          // Pocket Details if exists
+          if (_pocketDetailItem != null) ...[
+            Text(
+              'Detail Pocket',
+              style: TextStyle(
+                fontSize: isSmallScreen ? 14 : 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: isSmallScreen ? 8 : 15),
+            _buildDetailCatridgeItem(_pocketDetailItem!, isSmallScreen),
+          ],
         ],
       ),
     );
@@ -3094,24 +3150,26 @@ class _PrepareModePageState extends State<PrepareModePage> {
         branchCode = _prepareData!.branchCode;
       }
       
+      // Get list of existing catridge codes
+      List<String> existingCatridges = [];
+      for (var item in _detailCatridgeItems) {
+        if (item.noCatridge.isNotEmpty) {
+          existingCatridges.add(item.noCatridge);
+        }
+      }
+      if (_pocketDetailItem?.noCatridge.isNotEmpty == true) {
+        existingCatridges.add(_pocketDetailItem!.noCatridge);
+      }
+      
       final response = await _apiService.getCatridgeDetails(
         branchCode, 
         catridgeCode,
+        requiredType: 'D', // Must be type D for divert
+        existingCatridges: existingCatridges,
       );
       
       if (response.success && response.data.isNotEmpty && mounted) {
         final catridgeData = response.data.first;
-        
-        // Validate catridge type
-        if (catridgeData.typeCatridge != 'D') {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Tipe Catridge yang dimasukkan tidak sesuai'),
-              backgroundColor: Colors.red,
-            ),
-          );
-          return;
-        }
         
         // Calculate total
         int denomAmount = _prepareData?.tipeDenom == 'A100' ? 100000 : 50000;
@@ -3218,24 +3276,26 @@ class _PrepareModePageState extends State<PrepareModePage> {
         branchCode = _prepareData!.branchCode;
       }
       
+      // Get list of existing catridge codes
+      List<String> existingCatridges = [];
+      for (var item in _detailCatridgeItems) {
+        if (item.noCatridge.isNotEmpty) {
+          existingCatridges.add(item.noCatridge);
+        }
+      }
+      if (_divertDetailItem?.noCatridge.isNotEmpty == true) {
+        existingCatridges.add(_divertDetailItem!.noCatridge);
+      }
+      
       final response = await _apiService.getCatridgeDetails(
         branchCode, 
         catridgeCode,
+        requiredType: 'P', // Must be type P for pocket
+        existingCatridges: existingCatridges,
       );
       
       if (response.success && response.data.isNotEmpty && mounted) {
         final catridgeData = response.data.first;
-        
-        // Validate catridge type
-        if (catridgeData.typeCatridge != 'P') {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Tipe Catridge yang dimasukkan tidak sesuai'),
-              backgroundColor: Colors.red,
-            ),
-          );
-          return;
-        }
         
         // Calculate total
         int denomAmount = _prepareData?.tipeDenom == 'A100' ? 100000 : 50000;

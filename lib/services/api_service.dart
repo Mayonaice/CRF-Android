@@ -101,10 +101,25 @@ class ApiService {
     }
   }
 
-  // Get Catridge details by code with standValue validation
-  Future<CatridgeResponse> getCatridgeDetails(String branchCode, String catridgeCode, {int? requiredStandValue}) async {
+  // Get Catridge details by code with standValue and type validation
+  Future<CatridgeResponse> getCatridgeDetails(
+    String branchCode, 
+    String catridgeCode, {
+    int? requiredStandValue,
+    String? requiredType,
+    List<String>? existingCatridges,
+  }) async {
     try {
       final requestHeaders = await headers;
+      
+      // Check for duplicate catridge
+      if (existingCatridges != null && existingCatridges.contains(catridgeCode)) {
+        return CatridgeResponse(
+          success: false,
+          message: 'Catridge sudah digunakan di section lain',
+          data: [],
+        );
+      }
       
       final response = await _tryRequestWithFallback(
         requestFn: (baseUrl) {
@@ -112,6 +127,9 @@ class ApiService {
           String url = '$baseUrl/CRF/catridge/list?branchCode=$branchCode&catridgeCode=$catridgeCode';
           if (requiredStandValue != null) {
             url += '&requiredStandValue=$requiredStandValue';
+          }
+          if (requiredType != null) {
+            url += '&requiredType=$requiredType';
           }
           
           print('Catridge lookup URL: $url');
@@ -128,11 +146,25 @@ class ApiService {
           print('Raw API Response: ${response.body}');
           print('Parsed JSON: $jsonData');
           final catridgeResponse = CatridgeResponse.fromJson(jsonData);
+          
+          // Validate catridge type if required
+          if (requiredType != null && catridgeResponse.data.isNotEmpty) {
+            final catridge = catridgeResponse.data.first;
+            if (catridge.typeCatridge != requiredType) {
+              return CatridgeResponse(
+                success: false,
+                message: 'Tipe Catridge tidak sesuai (${catridge.typeCatridge})',
+                data: [],
+              );
+            }
+          }
+          
           print('CatridgeResponse data count: ${catridgeResponse.data.length}');
           if (catridgeResponse.data.isNotEmpty) {
             print('First catridge standValue: ${catridgeResponse.data.first.standValue}');
+            print('First catridge type: ${catridgeResponse.data.first.typeCatridge}');
           } else {
-            print('No catridge found - likely failed exact match or standValue validation');
+            print('No catridge found - likely failed validation');
           }
           return catridgeResponse;
         } catch (e) {
@@ -140,7 +172,6 @@ class ApiService {
           throw Exception('Invalid catridge data format from server');
         }
       } else if (response.statusCode == 401) {
-        // Handle auth error - try to clear token and redirect to login
         await _authService.logout();
         throw Exception('Session expired: Please login again');
       } else {

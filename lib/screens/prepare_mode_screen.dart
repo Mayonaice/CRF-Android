@@ -36,6 +36,30 @@ class _PrepareModePageState extends State<PrepareModePage> {
   
   // Detail catridge data for the right panel
   List<DetailCatridgeItem> _detailCatridgeItems = [];
+
+  // Divert controllers
+  final List<TextEditingController> _divertControllers = [
+    TextEditingController(), // No Catridge
+    TextEditingController(), // Seal Catridge
+    TextEditingController(), // Bag Code
+    TextEditingController(), // Seal Code
+    TextEditingController(), // Seal Code Return
+  ];
+
+  // Pocket controllers
+  final List<TextEditingController> _pocketControllers = [
+    TextEditingController(), // No Catridge
+    TextEditingController(), // Seal Catridge
+    TextEditingController(), // Bag Code
+    TextEditingController(), // Seal Code
+    TextEditingController(), // Seal Code Return
+  ];
+
+  // Divert and Pocket data
+  CatridgeData? _divertCatridgeData;
+  CatridgeData? _pocketCatridgeData;
+  DetailCatridgeItem? _divertDetailItem;
+  DetailCatridgeItem? _pocketDetailItem;
   
   // Approval form state
   bool _showApprovalForm = false;
@@ -564,6 +588,65 @@ class _PrepareModePageState extends State<PrepareModePage> {
       List<String> successMessages = [];
       List<String> errorMessages = [];
       
+      // Function to insert catridge with type
+      Future<void> insertCatridge({
+        required String noCatridge,
+        required String sealCatridge,
+        required String bagCode,
+        required String sealCode,
+        required String sealReturn,
+        required String typeCatridgeTrx,
+        required String section,
+      }) async {
+        try {
+          // Get current user data for userInput
+          String userInput = 'UNKNOWN';
+          try {
+            final userData = await _authService.getUserData();
+            if (userData != null) {
+              userInput = userData['nik'] ?? userData['username'] ?? userData['userCode'] ?? 'UNKNOWN';
+            }
+          } catch (e) {
+            print('Error getting user data: $e');
+            userInput = 'UNKNOWN';
+          }
+          
+          // Ensure denomination code is not empty
+          String finalDenomCode = _prepareData!.denomCode;
+          if (finalDenomCode.isEmpty) finalDenomCode = 'TEST';
+          
+          final catridgeResponse = await _apiService.insertAtmCatridge(
+            idTool: _prepareData!.id,
+            bagCode: bagCode.isEmpty ? 'TEST' : bagCode,
+            catridgeCode: noCatridge,
+            sealCode: sealCode.isEmpty ? 'TEST' : sealCode,
+            catridgeSeal: sealCatridge.isEmpty ? 'TEST' : sealCatridge,
+            denomCode: finalDenomCode,
+            qty: '1',
+            userInput: userInput,
+            sealReturn: sealReturn,
+            scanCatStatus: "TEST",
+            scanCatStatusRemark: "TEST",
+            scanSealStatus: "TEST", 
+            scanSealStatusRemark: "TEST",
+            difCatAlasan: "TEST",
+            difCatRemark: "TEST",
+            typeCatridgeTrx: typeCatridgeTrx,
+          );
+          
+          if (catridgeResponse.success) {
+            successMessages.add('$section: ${catridgeResponse.message}');
+            print('$section success: ${catridgeResponse.message}');
+          } else {
+            errorMessages.add('$section: ${catridgeResponse.message}');
+            print('$section error: ${catridgeResponse.message}');
+          }
+        } catch (e) {
+          errorMessages.add('$section: ${e.toString()}');
+          print('$section exception: $e');
+        }
+      }
+      
       for (int i = 0; i < _detailCatridgeItems.length; i++) {
         var item = _detailCatridgeItems[i];
         print('Processing catridge ${i + 1}: ${item.noCatridge}');
@@ -590,38 +673,6 @@ class _PrepareModePageState extends State<PrepareModePage> {
         if (sealCode.isEmpty) sealCode = 'TEST';
         // Do NOT set sealReturn to TEST - it must be from form field only
         
-        // Get current user data for userInput
-        String userInput = 'UNKNOWN';
-        try {
-          final userData = await _authService.getUserData();
-          if (userData != null) {
-            // Try to get NIK first, then username as fallback
-            userInput = userData['nik'] ?? userData['username'] ?? userData['userCode'] ?? 'UNKNOWN';
-          }
-        } catch (e) {
-          print('Error getting user data: $e');
-          userInput = 'UNKNOWN';
-        }
-        
-        // Ensure denomination code is not empty
-        String finalDenomCode = _prepareData!.denomCode;
-        if (finalDenomCode.isEmpty) finalDenomCode = 'TEST';
-        
-        // Ensure catridge seal is not empty
-        String finalCatridgeSeal = item.sealCatridge;
-        if (finalCatridgeSeal.isEmpty || finalCatridgeSeal.contains('Error')) {
-          finalCatridgeSeal = 'TEST';
-        }
-        
-        print('Catridge ${i + 1} data:');
-        print('  bagCode: $bagCode');
-        print('  sealCode: $sealCode');
-        print('  sealReturn: $sealReturn (from form field only)');
-        print('  catridgeSeal: $finalCatridgeSeal');
-        print('  denomCode: $finalDenomCode');
-        print('  qty: ${item.value}');
-        print('  userInput: $userInput (from logged-in user)');
-        
         // Validate required fields before API call
         if (sealReturn.isEmpty) {
           errorMessages.add('Catridge ${i + 1}: Seal Code Return harus diisi');
@@ -629,39 +680,50 @@ class _PrepareModePageState extends State<PrepareModePage> {
           continue; // Skip this catridge and continue to next
         }
         
-        try {
-          final catridgeResponse = await _apiService.insertAtmCatridge(
-            idTool: _prepareData!.id,
-            bagCode: bagCode,
-            catridgeCode: item.noCatridge,
-            sealCode: sealCode,
-            catridgeSeal: finalCatridgeSeal,
-            denomCode: finalDenomCode,
-            qty: item.value.toString(),
-            userInput: userInput, // Use actual logged-in user
-            sealReturn: sealReturn, // Must be from form field only
-            // Send TEST values for all 6 fields
-            scanCatStatus: "TEST",
-            scanCatStatusRemark: "TEST",
-            scanSealStatus: "TEST", 
-            scanSealStatusRemark: "TEST",
-            difCatAlasan: "TEST",
-            difCatRemark: "TEST",
-          );
-          
-          if (catridgeResponse.success) {
-            successMessages.add('Catridge ${i + 1}: ${catridgeResponse.message}');
-            print('Catridge ${i + 1} success: ${catridgeResponse.message}');
-          } else {
-            errorMessages.add('Catridge ${i + 1}: ${catridgeResponse.message}');
-            print('Catridge ${i + 1} error: ${catridgeResponse.message}');
-          }
-        } catch (e) {
-          errorMessages.add('Catridge ${i + 1}: ${e.toString()}');
-          print('Catridge ${i + 1} exception: $e');
-        }
+        // Insert main catridge with type C
+        await insertCatridge(
+          noCatridge: item.noCatridge,
+          sealCatridge: item.sealCatridge,
+          bagCode: bagCode,
+          sealCode: sealCode,
+          sealReturn: sealReturn,
+          typeCatridgeTrx: 'C',
+          section: 'Catridge ${i + 1}',
+        );
       }
       
+      // Insert Divert catridge if exists
+      if (_divertDetailItem != null) {
+        String sealReturn = _divertControllers[4].text.trim();
+        if (sealReturn.isNotEmpty) {
+          await insertCatridge(
+            noCatridge: _divertDetailItem!.noCatridge,
+            sealCatridge: _divertDetailItem!.sealCatridge,
+            bagCode: _divertControllers[2].text.trim(),
+            sealCode: _divertControllers[3].text.trim(),
+            sealReturn: sealReturn,
+            typeCatridgeTrx: 'D',
+            section: 'Divert',
+          );
+        }
+      }
+
+      // Insert Pocket catridge if exists
+      if (_pocketDetailItem != null) {
+        String sealReturn = _pocketControllers[4].text.trim();
+        if (sealReturn.isNotEmpty) {
+          await insertCatridge(
+            noCatridge: _pocketDetailItem!.noCatridge,
+            sealCatridge: _pocketDetailItem!.sealCatridge,
+            bagCode: _pocketControllers[2].text.trim(),
+            sealCode: _pocketControllers[3].text.trim(),
+            sealReturn: sealReturn,
+            typeCatridgeTrx: 'P',
+            section: 'Pocket',
+          );
+        }
+      }
+
       // Show results
       if (errorMessages.isEmpty) {
         // All success
@@ -891,6 +953,12 @@ class _PrepareModePageState extends State<PrepareModePage> {
                                   // Dynamic catridge sections
                                   for (int i = 0; i < _catridgeControllers.length; i++)
                                     _buildCatridgeSection(i + 1, _catridgeControllers[i], _denomValues[i], isSmallScreen),
+
+                                  // Divert section (single)
+                                  _buildDivertSection(isSmallScreen),
+
+                                  // Pocket section (single)
+                                  _buildPocketSection(isSmallScreen),
                                 ],
                               ),
                               
@@ -941,6 +1009,12 @@ class _PrepareModePageState extends State<PrepareModePage> {
                                     // Dynamic catridge sections
                                     for (int i = 0; i < _catridgeControllers.length; i++)
                                       _buildCatridgeSection(i + 1, _catridgeControllers[i], _denomValues[i], isSmallScreen),
+
+                                    // Divert section (single)
+                                    _buildDivertSection(isSmallScreen),
+
+                                    // Pocket section (single)
+                                    _buildPocketSection(isSmallScreen),
                                   ],
                                 ),
                               ),
@@ -1569,6 +1643,8 @@ class _PrepareModePageState extends State<PrepareModePage> {
     required TextEditingController controller,
     required bool isSmallScreen,
     int? catridgeIndex,
+    Function(String)? onCatridgeChange,
+    Function(String)? onSealChange,
   }) {
     return Container(
       height: isSmallScreen ? 32 : 36,
@@ -1618,24 +1694,40 @@ class _PrepareModePageState extends State<PrepareModePage> {
                       ),
                       onChanged: (value) {
                         // Step 1: If this is a catridge code field, lookup catridge and create detail
-                        if (label == 'No. Catridge' && catridgeIndex != null) {
-                          print('No. Catridge changed: $value for index $catridgeIndex');
-                          // Debounce the lookup to avoid too many API calls
-                          Future.delayed(Duration(milliseconds: 500), () {
-                            if (controller.text == value && value.isNotEmpty) {
-                              _lookupCatridgeAndCreateDetail(catridgeIndex, value);
-                            }
-                          });
+                        if (label == 'No. Catridge') {
+                          if (catridgeIndex != null) {
+                            // For main catridge section
+                            Future.delayed(Duration(milliseconds: 500), () {
+                              if (controller.text == value && value.isNotEmpty) {
+                                _lookupCatridgeAndCreateDetail(catridgeIndex, value);
+                              }
+                            });
+                          } else if (onCatridgeChange != null) {
+                            // For Divert/Pocket sections
+                            Future.delayed(Duration(milliseconds: 500), () {
+                              if (controller.text == value && value.isNotEmpty) {
+                                onCatridgeChange(value);
+                              }
+                            });
+                          }
                         }
                         // Step 2: If this is a seal catridge field, validate seal and update detail
-                        else if (label == 'Seal Catridge' && catridgeIndex != null) {
-                          print('Seal Catridge changed: $value for index $catridgeIndex');
-                          // Debounce the validation to avoid too many API calls
-                          Future.delayed(Duration(milliseconds: 500), () {
-                            if (controller.text == value && value.isNotEmpty) {
-                              _validateSealAndUpdateDetail(catridgeIndex, value);
-                            }
-                          });
+                        else if (label == 'Seal Catridge') {
+                          if (catridgeIndex != null) {
+                            // For main catridge section
+                            Future.delayed(Duration(milliseconds: 500), () {
+                              if (controller.text == value && value.isNotEmpty) {
+                                _validateSealAndUpdateDetail(catridgeIndex, value);
+                              }
+                            });
+                          } else if (onSealChange != null) {
+                            // For Divert/Pocket sections
+                            Future.delayed(Duration(milliseconds: 500), () {
+                              if (controller.text == value && value.isNotEmpty) {
+                                onSealChange(value);
+                              }
+                            });
+                          }
                         }
                       },
                     ),
@@ -2573,6 +2665,666 @@ class _PrepareModePageState extends State<PrepareModePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Gagal membuka scanner: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Build Divert section
+  Widget _buildDivertSection(bool isSmallScreen) {
+    return Container(
+      margin: EdgeInsets.only(bottom: isSmallScreen ? 10 : 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Divert title
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                flex: 2,
+                child: Text(
+                  'Divert',
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 12 : 18,
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: isSmallScreen ? 6 : 15),
+          
+          // Fields
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left side - All 5 fields in single column
+              Expanded(
+                flex: isSmallScreen ? 3 : 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // No. Catridge field
+                    _buildCompactField(
+                      label: 'No. Catridge', 
+                      controller: _divertControllers[0],
+                      isSmallScreen: isSmallScreen,
+                      onCatridgeChange: (value) => _lookupDivertCatridge(value),
+                    ),
+                    SizedBox(height: isSmallScreen ? 6 : 10),
+                    
+                    // Seal Catridge field
+                    _buildCompactField(
+                      label: 'Seal Catridge', 
+                      controller: _divertControllers[1],
+                      isSmallScreen: isSmallScreen,
+                      onSealChange: (value) => _validateDivertSeal(value),
+                    ),
+                    SizedBox(height: isSmallScreen ? 6 : 10),
+                    
+                    // Bag Code field
+                    _buildCompactField(
+                      label: 'Bag Code', 
+                      controller: _divertControllers[2],
+                      isSmallScreen: isSmallScreen,
+                    ),
+                    SizedBox(height: isSmallScreen ? 6 : 10),
+                    
+                    // Seal Code field
+                    _buildCompactField(
+                      label: 'Seal Code', 
+                      controller: _divertControllers[3],
+                      isSmallScreen: isSmallScreen,
+                    ),
+                    SizedBox(height: isSmallScreen ? 6 : 10),
+                    
+                    // Seal Code Return field
+                    _buildCompactField(
+                      label: 'Seal Code Return', 
+                      controller: _divertControllers[4],
+                      isSmallScreen: isSmallScreen,
+                    ),
+                  ],
+                ),
+              ),
+              
+              SizedBox(width: isSmallScreen ? 12 : 16),
+              
+              // Right side - Denom details
+              Expanded(
+                flex: isSmallScreen ? 2 : 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Money image
+                    Container(
+                      height: isSmallScreen ? 110 : 135,
+                      width: double.infinity,
+                      margin: EdgeInsets.symmetric(vertical: isSmallScreen ? 8 : 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.currency_exchange,
+                            size: isSmallScreen ? 45 : 60,
+                            color: Colors.orange,
+                          ),
+                          SizedBox(height: isSmallScreen ? 5 : 8),
+                          Text(
+                            'Divert',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Value and Lembar info
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.symmetric(vertical: isSmallScreen ? 9 : 11),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: Colors.grey.shade300),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Value',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            _divertDetailItem?.value.toString() ?? '—',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 15,
+                            ),
+                          ),
+                          Text(
+                            'Lembar',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 15,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Total Nominal box
+                    Container(
+                      margin: EdgeInsets.only(top: isSmallScreen ? 11 : 16),
+                      padding: EdgeInsets.symmetric(
+                        vertical: isSmallScreen ? 11 : 13, 
+                        horizontal: isSmallScreen ? 9 : 11
+                      ),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFDCF8C6),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            'Total Nominal',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: isSmallScreen ? 5 : 8),
+                          Text(
+                            _divertDetailItem?.total ?? '—',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 15 : 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          
+          // Divider
+          Padding(
+            padding: EdgeInsets.only(top: isSmallScreen ? 15 : 25),
+            child: Container(
+              height: 1,
+              color: Colors.grey.shade300,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Build Pocket section
+  Widget _buildPocketSection(bool isSmallScreen) {
+    return Container(
+      margin: EdgeInsets.only(bottom: isSmallScreen ? 10 : 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Pocket title
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                flex: 2,
+                child: Text(
+                  'Pocket',
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 12 : 18,
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: isSmallScreen ? 6 : 15),
+          
+          // Fields
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left side - All 5 fields in single column
+              Expanded(
+                flex: isSmallScreen ? 3 : 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // No. Catridge field
+                    _buildCompactField(
+                      label: 'No. Catridge', 
+                      controller: _pocketControllers[0],
+                      isSmallScreen: isSmallScreen,
+                      onCatridgeChange: (value) => _lookupPocketCatridge(value),
+                    ),
+                    SizedBox(height: isSmallScreen ? 6 : 10),
+                    
+                    // Seal Catridge field
+                    _buildCompactField(
+                      label: 'Seal Catridge', 
+                      controller: _pocketControllers[1],
+                      isSmallScreen: isSmallScreen,
+                      onSealChange: (value) => _validatePocketSeal(value),
+                    ),
+                    SizedBox(height: isSmallScreen ? 6 : 10),
+                    
+                    // Bag Code field
+                    _buildCompactField(
+                      label: 'Bag Code', 
+                      controller: _pocketControllers[2],
+                      isSmallScreen: isSmallScreen,
+                    ),
+                    SizedBox(height: isSmallScreen ? 6 : 10),
+                    
+                    // Seal Code field
+                    _buildCompactField(
+                      label: 'Seal Code', 
+                      controller: _pocketControllers[3],
+                      isSmallScreen: isSmallScreen,
+                    ),
+                    SizedBox(height: isSmallScreen ? 6 : 10),
+                    
+                    // Seal Code Return field
+                    _buildCompactField(
+                      label: 'Seal Code Return', 
+                      controller: _pocketControllers[4],
+                      isSmallScreen: isSmallScreen,
+                    ),
+                  ],
+                ),
+              ),
+              
+              SizedBox(width: isSmallScreen ? 12 : 16),
+              
+              // Right side - Denom details
+              Expanded(
+                flex: isSmallScreen ? 2 : 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Money image
+                    Container(
+                      height: isSmallScreen ? 110 : 135,
+                      width: double.infinity,
+                      margin: EdgeInsets.symmetric(vertical: isSmallScreen ? 8 : 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.currency_exchange,
+                            size: isSmallScreen ? 45 : 60,
+                            color: Colors.purple,
+                          ),
+                          SizedBox(height: isSmallScreen ? 5 : 8),
+                          Text(
+                            'Pocket',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Value and Lembar info
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.symmetric(vertical: isSmallScreen ? 9 : 11),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: Colors.grey.shade300),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Value',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            _pocketDetailItem?.value.toString() ?? '—',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 15,
+                            ),
+                          ),
+                          Text(
+                            'Lembar',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 15,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Total Nominal box
+                    Container(
+                      margin: EdgeInsets.only(top: isSmallScreen ? 11 : 16),
+                      padding: EdgeInsets.symmetric(
+                        vertical: isSmallScreen ? 11 : 13, 
+                        horizontal: isSmallScreen ? 9 : 11
+                      ),
+                      decoration: BoxDecoration(
+                        color: Color(0xFFDCF8C6),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            'Total Nominal',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 13 : 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: isSmallScreen ? 5 : 8),
+                          Text(
+                            _pocketDetailItem?.total ?? '—',
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 15 : 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          
+          // Divider
+          Padding(
+            padding: EdgeInsets.only(top: isSmallScreen ? 15 : 25),
+            child: Container(
+              height: 1,
+              color: Colors.grey.shade300,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Lookup Divert catridge
+  Future<void> _lookupDivertCatridge(String catridgeCode) async {
+    if (catridgeCode.isEmpty || !mounted) return;
+    
+    try {
+      // Get branch code
+      String branchCode = "1";
+      if (_prepareData != null && _prepareData!.branchCode.isNotEmpty) {
+        branchCode = _prepareData!.branchCode;
+      }
+      
+      final response = await _apiService.getCatridgeDetails(
+        branchCode, 
+        catridgeCode,
+      );
+      
+      if (response.success && response.data.isNotEmpty && mounted) {
+        final catridgeData = response.data.first;
+        
+        // Validate catridge type
+        if (catridgeData.typeCatridge != 'D') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Tipe Catridge yang dimasukkan tidak sesuai'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+        
+        // Calculate total
+        int denomAmount = _prepareData?.tipeDenom == 'A100' ? 100000 : 50000;
+        int totalNominal = denomAmount * (catridgeData.standValue);
+        String formattedTotal = _formatCurrency(totalNominal);
+        
+        setState(() {
+          _divertCatridgeData = catridgeData;
+          _divertDetailItem = DetailCatridgeItem(
+            index: 1,
+            noCatridge: catridgeCode,
+            sealCatridge: '',
+            value: catridgeData.standValue,
+            total: formattedTotal,
+            denom: denomAmount == 100000 ? 'Rp 100.000' : 'Rp 50.000',
+          );
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Divert catridge found: ${catridgeData.code}')),
+        );
+      } else {
+        setState(() {
+          _divertCatridgeData = null;
+          _divertDetailItem = null;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response.message),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _divertCatridgeData = null;
+        _divertDetailItem = null;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Validate Divert seal
+  Future<void> _validateDivertSeal(String sealCode) async {
+    if (sealCode.isEmpty || !mounted) return;
+    
+    try {
+      final response = await _apiService.validateSeal(sealCode);
+      
+      if (response.success && response.data != null && 
+          response.data!.validationStatus == 'SUCCESS' && mounted) {
+        setState(() {
+          if (_divertDetailItem != null) {
+            _divertDetailItem = DetailCatridgeItem(
+              index: _divertDetailItem!.index,
+              noCatridge: _divertDetailItem!.noCatridge,
+              sealCatridge: response.data!.validatedSealCode,
+              value: _divertDetailItem!.value,
+              total: _divertDetailItem!.total,
+              denom: _divertDetailItem!.denom,
+            );
+          }
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Seal berhasil divalidasi'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response.message),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Lookup Pocket catridge
+  Future<void> _lookupPocketCatridge(String catridgeCode) async {
+    if (catridgeCode.isEmpty || !mounted) return;
+    
+    try {
+      // Get branch code
+      String branchCode = "1";
+      if (_prepareData != null && _prepareData!.branchCode.isNotEmpty) {
+        branchCode = _prepareData!.branchCode;
+      }
+      
+      final response = await _apiService.getCatridgeDetails(
+        branchCode, 
+        catridgeCode,
+      );
+      
+      if (response.success && response.data.isNotEmpty && mounted) {
+        final catridgeData = response.data.first;
+        
+        // Validate catridge type
+        if (catridgeData.typeCatridge != 'P') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Tipe Catridge yang dimasukkan tidak sesuai'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+        
+        // Calculate total
+        int denomAmount = _prepareData?.tipeDenom == 'A100' ? 100000 : 50000;
+        int totalNominal = denomAmount * (catridgeData.standValue);
+        String formattedTotal = _formatCurrency(totalNominal);
+        
+        setState(() {
+          _pocketCatridgeData = catridgeData;
+          _pocketDetailItem = DetailCatridgeItem(
+            index: 1,
+            noCatridge: catridgeCode,
+            sealCatridge: '',
+            value: catridgeData.standValue,
+            total: formattedTotal,
+            denom: denomAmount == 100000 ? 'Rp 100.000' : 'Rp 50.000',
+          );
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Pocket catridge found: ${catridgeData.code}')),
+        );
+      } else {
+        setState(() {
+          _pocketCatridgeData = null;
+          _pocketDetailItem = null;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response.message),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _pocketCatridgeData = null;
+        _pocketDetailItem = null;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Validate Pocket seal
+  Future<void> _validatePocketSeal(String sealCode) async {
+    if (sealCode.isEmpty || !mounted) return;
+    
+    try {
+      final response = await _apiService.validateSeal(sealCode);
+      
+      if (response.success && response.data != null && 
+          response.data!.validationStatus == 'SUCCESS' && mounted) {
+        setState(() {
+          if (_pocketDetailItem != null) {
+            _pocketDetailItem = DetailCatridgeItem(
+              index: _pocketDetailItem!.index,
+              noCatridge: _pocketDetailItem!.noCatridge,
+              sealCatridge: response.data!.validatedSealCode,
+              value: _pocketDetailItem!.value,
+              total: _pocketDetailItem!.total,
+              denom: _pocketDetailItem!.denom,
+            );
+          }
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Seal berhasil divalidasi'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response.message),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );

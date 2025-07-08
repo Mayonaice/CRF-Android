@@ -27,6 +27,7 @@ class CatridgeDetail {
   final String seal;
   final int denom;
   final int value;
+  final String typeCatridgeTrx;
 
   CatridgeDetail({
     required this.id,
@@ -34,6 +35,7 @@ class CatridgeDetail {
     required this.seal,
     required this.denom,
     required this.value,
+    this.typeCatridgeTrx = 'C',
   });
 
   factory CatridgeDetail.fromJson(Map<String, dynamic> json) {
@@ -43,6 +45,7 @@ class CatridgeDetail {
       seal: json['seal'] ?? '',
       denom: json['denom'] ?? 0,
       value: json['value'] ?? 0,
+      typeCatridgeTrx: json['typeCatridgeTrx'] ?? 'C',
     );
   }
 }
@@ -104,6 +107,8 @@ class ATMPrepareReplenishData {
   final bool isNoBag;
   final bool isMDM;
   final List<CatridgeDetail> listCatridge;
+  final CatridgeDetail? divertCatridge;
+  final CatridgeDetail? pocketCatridge;
 
   ATMPrepareReplenishData({
     required this.id,
@@ -162,6 +167,8 @@ class ATMPrepareReplenishData {
     required this.isNoBag,
     required this.isMDM,
     required this.listCatridge,
+    this.divertCatridge,
+    this.pocketCatridge,
   });
 
   factory ATMPrepareReplenishData.fromJson(Map<String, dynamic> json) {
@@ -183,6 +190,7 @@ class ATMPrepareReplenishData {
           seal: json['catridgeSeal'] ?? '',
           denom: json['denomCass1'] ?? 0,
           value: json['value'] ?? 0,
+          typeCatridgeTrx: 'C',
         ));
       }
       
@@ -201,9 +209,27 @@ class ATMPrepareReplenishData {
                   i == 5 ? (json['denomCass6'] ?? 0) :
                   i == 6 ? (json['denomCass7'] ?? 0) : 0,
             value: 0,
+            typeCatridgeTrx: 'C',
           ));
         }
       }
+    }
+
+    // Parse divert and pocket catridge if present
+    CatridgeDetail? divertCatridge;
+    if (json['divertCatridge'] != null) {
+      divertCatridge = CatridgeDetail.fromJson({
+        ...json['divertCatridge'],
+        'typeCatridgeTrx': 'D',
+      });
+    }
+
+    CatridgeDetail? pocketCatridge;
+    if (json['pocketCatridge'] != null) {
+      pocketCatridge = CatridgeDetail.fromJson({
+        ...json['pocketCatridge'],
+        'typeCatridgeTrx': 'P',
+      });
     }
     
     return ATMPrepareReplenishData(
@@ -263,6 +289,8 @@ class ATMPrepareReplenishData {
       isNoBag: json['isNoBag'] ?? false,
       isMDM: json['isMDM'] ?? false,
       listCatridge: catridgeList,
+      divertCatridge: divertCatridge,
+      pocketCatridge: pocketCatridge,
     );
   }
 }

@@ -265,6 +265,7 @@ class ApiService {
     String scanSealStatusRemark = "TEST",
     String difCatAlasan = "TEST",
     String difCatRemark = "TEST",
+    String typeCatridgeTrx = "C", // Default to 'C' for backward compatibility
   }) async {
     try {
       final requestHeaders = await headers;
@@ -285,6 +286,7 @@ class ApiService {
         "ScanSealStatusRemark": scanSealStatusRemark,
         "DifCatAlasan": difCatAlasan,
         "DifCatRemark": difCatRemark,
+        "TypeCatridgeTrx": typeCatridgeTrx,
       };
       
       print('ATM Catridge insert request: ${json.encode(requestBody)}');

@@ -9,6 +9,7 @@ import 'screens/device_info_screen.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
+import 'screens/return_page.dart';
 
 // Global error handler
 void _handleError(Object error, StackTrace stack) {
@@ -308,7 +309,7 @@ class _MyAppState extends State<MyApp> {
         '/login': (context) => const LoginPage(),
         '/home': (context) => const HomePage(),
         '/prepare_mode': (context) => const PrepareModePage(),
-        '/return_mode': (context) => const ReturnModePage(),
+        '/return_page': (context) => const ReturnModePage(),
         '/profile': (context) => const ProfileMenuScreen(),
         '/device_info': (context) => const DeviceInfoScreen(),
       },

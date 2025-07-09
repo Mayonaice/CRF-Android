@@ -326,11 +326,13 @@ class CatridgeResponse {
   final bool success;
   final String message;
   final List<CatridgeData> data;
+  final String? errorType;
 
   CatridgeResponse({
     required this.success,
     required this.message,
     required this.data,
+    this.errorType,
   });
 
   factory CatridgeResponse.fromJson(Map<String, dynamic> json) {
@@ -343,6 +345,7 @@ class CatridgeResponse {
       success: json['success'] ?? false,
       message: json['message'] ?? '',
       data: catridgeList,
+      errorType: json['errorType'],
     );
   }
 }
@@ -423,18 +426,28 @@ class ApiResponse {
   final bool success;
   final String message;
   final dynamic data;
+  final String? status;  // Added for SP response compatibility
+  final int? insertedId; // Added for insert operations
 
   ApiResponse({
     required this.success,
     required this.message,
     this.data,
+    this.status,
+    this.insertedId,
   });
 
   factory ApiResponse.fromJson(Map<String, dynamic> json) {
+    // Handle both API controller response and direct SP response
+    bool isSuccess = json['success'] ?? (json['Status']?.toString().toLowerCase() == 'success');
+    String msg = json['message'] ?? json['Message'] ?? '';
+    
     return ApiResponse(
-      success: json['success'] ?? false,
-      message: json['message'] ?? '',
+      success: isSuccess,
+      message: msg,
       data: json['data'],
+      status: json['Status']?.toString(),
+      insertedId: json['InsertedId'] != null ? int.tryParse(json['InsertedId'].toString()) : null,
     );
   }
 }

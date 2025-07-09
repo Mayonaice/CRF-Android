@@ -31,6 +31,9 @@ class _LoginPageState extends State<LoginPage> {
   // Auth service
   final AuthService _authService = AuthService();
 
+  // Add controller for token input
+  final TextEditingController _tokenController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -93,6 +96,7 @@ class _LoginPageState extends State<LoginPage> {
     _usernameController.dispose();
     _passwordController.dispose();
     _noMejaController.dispose();
+    _tokenController.dispose();
     super.dispose();
   }
 
@@ -247,6 +251,80 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  // Show token input dialog
+  Future<void> _showTokenInputDialog() async {
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Test Mode Login'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Masukkan token Bearer yang valid:'),
+              SizedBox(height: 10),
+              TextField(
+                controller: _tokenController,
+                decoration: InputDecoration(
+                  hintText: 'Bearer token...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                setState(() => _isTestMode = false);
+                Navigator.of(context).pop();
+              },
+              child: Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () => _loginWithToken(),
+              child: Text('Login'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Login with token
+  Future<void> _loginWithToken() async {
+    String token = _tokenController.text.trim();
+    if (token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Token tidak boleh kosong')),
+      );
+      return;
+    }
+
+    // Remove 'Bearer ' prefix if present
+    if (token.toLowerCase().startsWith('bearer ')) {
+      token = token.substring(7);
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final result = await _authService.loginWithToken(token);
+      
+      if (result['success']) {
+        Navigator.of(context).pop(); // Close dialog
+        Navigator.pushReplacementNamed(context, '/home');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'])),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   // Modify _performLogin to handle test mode
   Future<void> _performLogin() async {
     if (!_formKey.currentState!.validate()) {
@@ -384,7 +462,7 @@ class _LoginPageState extends State<LoginPage> {
                   value: _isTestMode,
                   onChanged: (value) {
                     if (value) {
-                      _showTestModeDialog();
+                      _showTokenInputDialog();
                     } else {
                       setState(() {
                         _isTestMode = false;

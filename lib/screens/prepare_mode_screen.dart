@@ -4,6 +4,7 @@ import '../models/prepare_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/barcode_scanner_widget.dart';
+import 'dart:async';
 
 class PrepareModePage extends StatefulWidget {
   const PrepareModePage({Key? key}) : super(key: key);
@@ -67,9 +68,13 @@ class _PrepareModePageState extends State<PrepareModePage> {
   final TextEditingController _nikTLController = TextEditingController();
   final TextEditingController _passwordTLController = TextEditingController();
 
+  Timer? _tokenCheckTimer;
+  bool _isRefreshingToken = false;
+
   @override
   void initState() {
     super.initState();
+    _startTokenCheck();
     // Lock orientation to landscape
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -87,6 +92,45 @@ class _PrepareModePageState extends State<PrepareModePage> {
     _jamMulaiController.addListener(_checkAndHideApprovalForm);
   }
 
+  void _startTokenCheck() {
+    // Check token every 5 minutes
+    _tokenCheckTimer = Timer.periodic(Duration(minutes: 5), (timer) async {
+      await _checkAndRefreshToken();
+    });
+  }
+
+  Future<void> _checkAndRefreshToken() async {
+    if (_isRefreshingToken) return;
+    
+    try {
+      _isRefreshingToken = true;
+      
+      if (await _authService.shouldRefreshToken()) {
+        debugPrint('Token needs refresh, attempting to refresh...');
+        final success = await _authService.refreshToken();
+        
+        if (!success) {
+          debugPrint('Token refresh failed, redirecting to login');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Sesi telah berakhir. Silakan login kembali.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            Navigator.of(context).pushReplacementNamed('/login');
+          }
+        } else {
+          debugPrint('Token refreshed successfully');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error during token refresh: $e');
+    } finally {
+      _isRefreshingToken = false;
+    }
+  }
+
   @override
   void dispose() {
     _idCRFController.dispose();
@@ -102,6 +146,8 @@ class _PrepareModePageState extends State<PrepareModePage> {
     // Dispose approval form controllers
     _nikTLController.dispose();
     _passwordTLController.dispose();
+    
+    _tokenCheckTimer?.cancel();
     
     super.dispose();
   }
@@ -641,21 +687,15 @@ class _PrepareModePageState extends State<PrepareModePage> {
             qty: '1',
             userInput: userInput,
             sealReturn: sealReturn,
-            scanCatStatus: "TEST",
-            scanCatStatusRemark: "TEST",
-            scanSealStatus: "TEST", 
-            scanSealStatusRemark: "TEST",
-            difCatAlasan: "TEST",
-            difCatRemark: "TEST",
             typeCatridgeTrx: typeCatridgeTrx,
           );
           
           if (catridgeResponse.success) {
             successMessages.add('$section: ${catridgeResponse.message}');
-            print('$section success: ${catridgeResponse.message}');
+            print('$section success: ${catridgeResponse.message} (ID: ${catridgeResponse.insertedId})');
           } else {
             errorMessages.add('$section: ${catridgeResponse.message}');
-            print('$section error: ${catridgeResponse.message}');
+            print('$section error: ${catridgeResponse.message} (Status: ${catridgeResponse.status})');
           }
         } catch (e) {
           errorMessages.add('$section: ${e.toString()}');
@@ -754,7 +794,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
         // Hide approval form and potentially navigate back or reset form
         _hideApprovalForm();
         
-        // TODO: Navigate back or reset form
+        // Navigate back
         Navigator.of(context).pop();
         
       } else if (successMessages.isEmpty) {
@@ -871,19 +911,22 @@ class _PrepareModePageState extends State<PrepareModePage> {
         setState(() {
           _isLoading = false;
           
-          // Provide more user-friendly error messages
-          String errorMessage = e.toString();
-          if (errorMessage.contains('Connection timeout') || errorMessage.contains('timeout')) {
-            _errorMessage = 'Koneksi timeout. Silakan periksa jaringan dan coba lagi.';
-          } else if (errorMessage.contains('Session expired') || errorMessage.contains('Unauthorized')) {
-            _errorMessage = 'Sesi telah berakhir. Silakan login ulang.';
-          } else if (errorMessage.contains('Network error') || errorMessage.contains('Connection failed')) {
-            _errorMessage = 'Tidak dapat terhubung ke server. Periksa koneksi internet dan coba lagi.';
-          } else if (errorMessage.contains('Invalid data format')) {
-            _errorMessage = 'Format data dari server tidak valid. Hubungi administrator sistem.';
+          if (e.toString().contains('Session expired') || 
+              e.toString().contains('Unauthorized')) {
+            _handleSessionExpired();
           } else {
-            // For other errors, show generic message
-            _errorMessage = 'Terjadi kesalahan. Silakan coba lagi atau hubungi support jika masalah berlanjut.';
+            // Provide more user-friendly error messages
+            String errorMessage = e.toString();
+            if (errorMessage.contains('Connection timeout') || errorMessage.contains('timeout')) {
+              _errorMessage = 'Koneksi timeout. Silakan periksa jaringan dan coba lagi.';
+            } else if (errorMessage.contains('Network error') || errorMessage.contains('Connection failed')) {
+              _errorMessage = 'Tidak dapat terhubung ke server. Periksa koneksi internet dan coba lagi.';
+            } else if (errorMessage.contains('Invalid data format')) {
+              _errorMessage = 'Format data dari server tidak valid. Hubungi administrator sistem.';
+            } else {
+              // For other errors, show generic message
+              _errorMessage = 'Terjadi kesalahan. Silakan coba lagi atau hubungi support jika masalah berlanjut.';
+            }
           }
         });
         
@@ -902,6 +945,24 @@ class _PrepareModePageState extends State<PrepareModePage> {
             Navigator.of(context).pop();
           }
         }
+      }
+    }
+  }
+
+  // Add error handling for session expired
+  void _handleSessionExpired() async {
+    if (mounted) {
+      // Try to refresh token first
+      final success = await _authService.refreshToken();
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sesi telah berakhir. Silakan login kembali.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        await _authService.logout();
+        Navigator.of(context).pushReplacementNamed('/login');
       }
     }
   }

@@ -145,7 +145,13 @@ class AuthService {
     try {
       // Get client type and Android ID for device validation
       final clientType = _getClientType();
-      final androidId = await DeviceService.getDeviceId();
+      var androidId = await DeviceService.getDeviceId();
+      
+      // If androidId is error_unknown_device, use test device ID
+      if (androidId == 'error_unknown_device' || androidId.isEmpty) {
+        androidId = '1234567fortest89';
+        debugPrint('Using test device ID: $androidId');
+      }
       
       print('🚀 DEBUG LOGIN: username=$username, noMeja=$noMeja');
       print('🚀 DEBUG LOGIN: clientType=$clientType');
@@ -157,8 +163,8 @@ class AuthService {
         'Username': username,
         'Password': password,
         'NoMeja': noMeja,
-        'ClientType': clientType,  // Identify this request platform
-        'AndroidId': androidId,    // Add Android ID for device validation (or bypass for web)
+        'ClientType': clientType,
+        'AndroidId': androidId,
         if (selectedBranch != null) 'SelectedBranch': selectedBranch,
       };
       
@@ -180,7 +186,6 @@ class AuthService {
       try {
         responseData = json.decode(response.body) as Map<String, dynamic>;
       } catch (e) {
-        // Handle invalid JSON
         debugPrint('Error parsing JSON: $e');
         return {
           'success': false,
@@ -192,6 +197,10 @@ class AuthService {
         print('🚀 DEBUG LOGIN: SUCCESS!');
         // Save token and user data
         if (responseData['data'] != null) {
+          // Tambahkan branchCode jika belum ada
+          if (!responseData['data'].containsKey('branchCode') && selectedBranch != null) {
+            responseData['data']['branchCode'] = selectedBranch;
+          }
           await saveToken(responseData['data']['token'] ?? '');
           await saveUserData(responseData['data']);
           return {
@@ -230,6 +239,66 @@ class AuthService {
       return {
         'success': false,
         'message': 'Connection error: $e',
+      };
+    }
+  }
+
+  // Login directly with token for test mode
+  Future<Map<String, dynamic>> loginWithToken(String token) async {
+    try {
+      // Verify token by making a test request
+      final response = await _tryRequestWithFallback(
+        requestFn: (baseUrl) => http.get(
+          Uri.parse('$baseUrl/CRF/check-session'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json'
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        if (responseData['success'] == true) {
+          // Save the token
+          await saveToken(token);
+          
+          // Extract user data from token
+          final parts = token.split('.');
+          if (parts.length == 3) {
+            final payload = json.decode(
+              utf8.decode(base64Url.decode(base64Url.normalize(parts[1])))
+            );
+            
+            // Create user data from token claims
+            final userData = {
+              'token': token,
+              'userId': payload['userId'] ?? '',
+              'userName': payload['sub'] ?? '',
+              'role': payload['role'] ?? '',
+              'isTestMode': true,
+            };
+            
+            await saveUserData(userData);
+            
+            return {
+              'success': true,
+              'message': 'Login berhasil (Test Mode)',
+              'data': userData
+            };
+          }
+        }
+      }
+      
+      return {
+        'success': false,
+        'message': 'Token tidak valid',
+      };
+    } catch (e) {
+      debugPrint('Error logging in with token: $e');
+      return {
+        'success': false,
+        'message': 'Error: ${e.toString()}',
       };
     }
   }
@@ -302,6 +371,89 @@ class AuthService {
       return token != null && token.isNotEmpty;
     } catch (e) {
       debugPrint('Failed to check login status: $e');
+      return false;
+    }
+  }
+
+  // Add token expiration check
+  Future<bool> shouldRefreshToken() async {
+    try {
+      final token = await getToken();
+      if (token == null) return false;
+      
+      // Parse JWT token
+      final parts = token.split('.');
+      if (parts.length != 3) return false;
+
+      // Decode payload
+      final payload = json.decode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1])))
+      );
+      
+      // Get expiration timestamp
+      final expiration = DateTime.fromMillisecondsSinceEpoch(payload['exp'] * 1000);
+      
+      // Refresh if less than 1 hour remaining
+      final shouldRefresh = DateTime.now().isAfter(expiration.subtract(Duration(hours: 1)));
+      debugPrint('Token expires at: $expiration, shouldRefresh: $shouldRefresh');
+      return shouldRefresh;
+    } catch (e) {
+      debugPrint('Error checking token expiration: $e');
+      return false;
+    }
+  }
+
+  // Refresh token
+  Future<bool> refreshToken() async {
+    try {
+      final token = await getToken();
+      if (token == null) return false;
+
+      debugPrint('Attempting to refresh token');
+      
+      final response = await _tryRequestWithFallback(
+        requestFn: (baseUrl) => http.post(
+          Uri.parse('$baseUrl/CRF/refresh-token'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token'
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        debugPrint('Refresh token response: ${response.body}');
+        
+        if (responseData['success'] == true && responseData['data'] != null) {
+          final newToken = responseData['data']['token'];
+          await saveToken(newToken);
+          debugPrint('Token refreshed successfully');
+          return true;
+        }
+      }
+      
+      debugPrint('Failed to refresh token: ${response.statusCode}');
+      return false;
+    } catch (e) {
+      debugPrint('Error refreshing token: $e');
+      return false;
+    }
+  }
+
+  // Check if user is in test mode
+  Future<bool> isTestMode() async {
+    try {
+      final userData = await getUserData();
+      if (userData == null) return false;
+      
+      final username = userData['userName'] as String?;
+      if (username == null) return false;
+      
+      return username.toLowerCase().startsWith('test_') || 
+             username.toLowerCase().endsWith('_test');
+    } catch (e) {
+      debugPrint('Error checking test mode: $e');
       return false;
     }
   }

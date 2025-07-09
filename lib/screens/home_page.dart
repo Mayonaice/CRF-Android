@@ -320,7 +320,7 @@ class _HomePageState extends State<HomePage> {
                                   context: context,
                                   title: 'Return\nMode',
                                   iconAsset: 'assets/images/ReturnModeIcon.png',
-                                  route: '/return_mode',
+                                  route: '/return_page',
                                   isSmallScreen: isSmallScreen,
                                 ),
                               ],

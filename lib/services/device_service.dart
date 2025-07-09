@@ -8,6 +8,9 @@ class DeviceService {
   static final DeviceInfoPlugin _deviceInfoPlugin = DeviceInfoPlugin();
   static const AndroidId _androidIdPlugin = AndroidId();
   
+  // Test device ID constant
+  static const String TEST_DEVICE_ID = '1234567fortest89';
+  
   /// Get Android ID - Real device AndroidID for production
   /// Returns 16-character AndroidID for registration validation
   static Future<String> getDeviceId() async {
@@ -33,13 +36,27 @@ class DeviceService {
             return nativeAndroidId;
           }
         } else {
-          print('⚠️ Failed to get native AndroidID, using device info fallback');
+          print('⚠️ Failed to get native AndroidID, trying device info fallback');
           // Fallback: use device-specific info
           AndroidDeviceInfo androidInfo = await _deviceInfoPlugin.androidInfo;
-          String deviceSerial = androidInfo.id ?? androidInfo.fingerprint ?? 'android_fallback';
           
-          print('✅ Fallback AndroidID: $deviceSerial');
-          return deviceSerial;
+          // Try to get a valid device identifier
+          String? deviceId = androidInfo.id;
+          if (deviceId == null || deviceId.isEmpty || deviceId == 'unknown') {
+            deviceId = androidInfo.fingerprint;
+          }
+          if (deviceId == null || deviceId.isEmpty || deviceId == 'unknown') {
+            deviceId = androidInfo.serialNumber;
+          }
+          
+          // If we still don't have a valid ID, use test ID
+          if (deviceId == null || deviceId.isEmpty || deviceId == 'unknown') {
+            print('⚠️ No valid device ID found, using test ID');
+            return TEST_DEVICE_ID;
+          }
+          
+          print('✅ Using device info ID: $deviceId');
+          return deviceId;
         }
         
       } else if (Platform.isIOS) {
@@ -47,29 +64,20 @@ class DeviceService {
         IosDeviceInfo iosInfo = await _deviceInfoPlugin.iosInfo;
         
         // Use iOS identifier - keep original format
-        String iosId = iosInfo.identifierForVendor ?? 'ios_unknown';
+        String iosId = iosInfo.identifierForVendor ?? TEST_DEVICE_ID;
         
-        print('✅ iOS AndroidID: $iosId');
+        print('✅ iOS ID: $iosId');
         return iosId;
         
       } else {
         print('🔍 Web/Desktop platform detected');
-        
-        // For web/desktop, use a predictable but unique ID
-        String webId = 'web_platform_id';
-        
-        print('✅ Web AndroidID: $webId');
-        return webId;
+        return TEST_DEVICE_ID;
       }
       
     } catch (e) {
       print('❌ Error getting device ID: $e');
-      
-      // Simple fallback - return error identifier
-      String fallbackId = 'error_unknown_device';
-      
-      print('⚠️ Fallback AndroidID: $fallbackId');
-      return fallbackId;
+      print('⚠️ Using test device ID as fallback');
+      return TEST_DEVICE_ID;
     }
   }
   

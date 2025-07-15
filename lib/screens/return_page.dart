@@ -1691,10 +1691,12 @@ class _CartridgeSectionState extends State<CartridgeSection> {
               setState(() {
                 controller.text = barcode;
                 
-                // Mark field as valid
+                // Mark field as valid and scanned
                 if (label.contains('Catridge Fisik')) {
                   isCatridgeFisikValid = true;
                   catridgeFisikError = '';
+                  // Add this field to the scanned fields so the checkmark appears
+                  isNoCatridgeScanned = true;
                 }
               });
               
@@ -1953,6 +1955,9 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       isScanned = isBagCodeScanned;
     } else if (label.contains('Seal Code')) {
       isScanned = isSealCodeScanned;
+    } else if (label.contains('Catridge Fisik') && controller.text.isNotEmpty) {
+      // For Catridge Fisik, show checkmark if field is not empty and valid
+      isScanned = isCatridgeFisikValid && isNoCatridgeScanned;
     }
     
     return Column(
@@ -1982,7 +1987,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                           scale: 0.5,
                           child: const CircularProgressIndicator(),
                         )
-                      : isScanned && isValid && !isScanInput
+                      : isScanned && isValid
                           ? const Icon(Icons.check_circle, color: Colors.green)
                           : null,
                   enabledBorder: UnderlineInputBorder(

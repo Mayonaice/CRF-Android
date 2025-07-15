@@ -6,6 +6,7 @@ import 'screens/prepare_mode_screen.dart';
 import 'screens/return_mode_screen.dart';
 import 'screens/profile_menu_screen.dart';
 import 'screens/device_info_screen.dart';
+import 'screens/return_validation_screen.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
@@ -312,6 +313,7 @@ class _MyAppState extends State<MyApp> {
         '/return_page': (context) => const ReturnModePage(),
         '/profile': (context) => const ProfileMenuScreen(),
         '/device_info': (context) => const DeviceInfoScreen(),
+        '/return-validation': (context) => const ReturnValidationScreen(),
       },
       // Global error handling for navigator
       navigatorKey: GlobalKey<NavigatorState>(),

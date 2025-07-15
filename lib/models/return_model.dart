@@ -1,3 +1,179 @@
+// Import shared models from prepare_model.dart instead of duplicating them
+import 'prepare_model.dart' show ApiResponse, TLSupervisorValidationResponse;
+import 'dart:convert'; // Added for jsonDecode
+
+// Model untuk response validasi dan replenish dari API
+class ValidateAndGetReplenishResponse {
+  final bool success;
+  final String message;
+  final ValidateAndGetReplenishData? data;
+
+  ValidateAndGetReplenishResponse({
+    required this.success,
+    required this.message,
+    this.data,
+  });
+
+  factory ValidateAndGetReplenishResponse.fromJson(Map<String, dynamic> json) {
+    return ValidateAndGetReplenishResponse(
+      success: json['success'] ?? false,
+      message: json['message'] ?? '',
+      data: json['data'] != null ? ValidateAndGetReplenishData.fromJson(json['data']) : null,
+    );
+  }
+}
+
+class ValidateAndGetReplenishData {
+  final String validationStatus;
+  final String errorCode;
+  final String errorMessage;
+  final String atmCode;
+  final String idToolPrepare;
+  final int currentIdTool;
+  final List<CatridgeReplenishData> catridges;
+
+  ValidateAndGetReplenishData({
+    required this.validationStatus,
+    required this.errorCode,
+    required this.errorMessage,
+    required this.atmCode,
+    required this.idToolPrepare,
+    required this.currentIdTool,
+    required this.catridges,
+  });
+
+  factory ValidateAndGetReplenishData.fromJson(Map<String, dynamic> json) {
+    List<CatridgeReplenishData> catridgesList = [];
+    
+    if (json['catridges'] != null) {
+      if (json['catridges'] is List) {
+        catridgesList = (json['catridges'] as List)
+            .map((item) => CatridgeReplenishData.fromJson(item))
+            .toList();
+      }
+    }
+    
+    return ValidateAndGetReplenishData(
+      validationStatus: json['validationStatus'] ?? '',
+      errorCode: json['errorCode'] ?? '',
+      errorMessage: json['errorMessage'] ?? '',
+      atmCode: json['atmCode'] ?? '',
+      idToolPrepare: json['idToolPrepare'] ?? '',
+      currentIdTool: json['currentIdTool'] ?? 0,
+      catridges: catridgesList,
+    );
+  }
+}
+
+// Model untuk response validasi return catridge dari API
+class ReturnCatridgeValidationResponse {
+  final bool success;
+  final String message;
+  final dynamic data;
+
+  ReturnCatridgeValidationResponse({
+    required this.success,
+    required this.message,
+    required this.data,
+  });
+
+  factory ReturnCatridgeValidationResponse.fromJson(Map<String, dynamic> json) {
+    return ReturnCatridgeValidationResponse(
+      success: json['success'] ?? false,
+      message: json['message'] ?? '',
+      data: json['data'] ?? {},
+    );
+  }
+}
+
+// Model untuk response catridge replenish dari API
+class CatridgeReplenishResponse {
+  final bool success;
+  final String message;
+  final List<CatridgeReplenishData> data;
+
+  CatridgeReplenishResponse({
+    required this.success,
+    required this.message,
+    required this.data,
+  });
+
+  factory CatridgeReplenishResponse.fromJson(Map<String, dynamic> json) {
+    List<CatridgeReplenishData> dataList = [];
+    
+    if (json['data'] != null) {
+      // Handle data if it's a JSON string
+      if (json['data'] is String) {
+        try {
+          final List<dynamic> parsedData = jsonDecode(json['data'] as String);
+          dataList = parsedData
+              .map((item) => CatridgeReplenishData.fromJson(item))
+              .toList();
+        } catch (e) {
+          print("Error parsing CatridgeReplenish data: $e");
+        }
+      } 
+      // Handle data if it's already a list
+      else if (json['data'] is List) {
+        dataList = (json['data'] as List)
+            .map((item) => CatridgeReplenishData.fromJson(item))
+            .toList();
+      }
+      // Handle data if it contains a 'catridges' field which is a list
+      else if (json['data'] is Map && json['data']['catridges'] is List) {
+        dataList = (json['data']['catridges'] as List)
+            .map((item) => CatridgeReplenishData.fromJson(item))
+            .toList();
+      }
+    }
+
+    return CatridgeReplenishResponse(
+      success: json['success'] ?? false,
+      message: json['message'] ?? '',
+      data: dataList,
+    );
+  }
+}
+
+// Model untuk data catridge replenish
+class CatridgeReplenishData {
+  final String dataType;
+  final String catridgeCode;
+  final String catridgeSeal;
+  final String atmCode;
+  final String tripType;
+  final String bagCode;
+  final String sealCode;
+  final String sealCodeReturn;
+  final String typeCatridgeTrx;
+
+  CatridgeReplenishData({
+    required this.dataType,
+    required this.catridgeCode,
+    required this.catridgeSeal,
+    required this.atmCode,
+    required this.tripType,
+    this.bagCode = '',
+    this.sealCode = '',
+    this.sealCodeReturn = '',
+    this.typeCatridgeTrx = '',
+  });
+
+  factory CatridgeReplenishData.fromJson(Map<String, dynamic> json) {
+    return CatridgeReplenishData(
+      dataType: json['dataType'] ?? 'REPLENISH_DATA',
+      catridgeCode: json['catridgeCode'] ?? json['CatridgeCode'] ?? '',
+      catridgeSeal: json['catridgeSeal'] ?? json['CatridgeSeal'] ?? '',
+      atmCode: json['atmCode'] ?? '',
+      tripType: json['tripType'] ?? '',
+      bagCode: json['bagCode'] ?? '',
+      sealCode: json['sealCode'] ?? '',
+      sealCodeReturn: json['sealCodeReturn'] ?? '',
+      typeCatridgeTrx: json['typeCatridgeTrx'] ?? '',
+    );
+  }
+}
+
 class ReturnCatridgeResponse {
   final bool success;
   final String message;
@@ -32,6 +208,10 @@ class ReturnCatridgeData {
   final String catridgeSeal;
   final String denomCode;
   final String typeCatridge;
+  final String? bagCode; // Tambahkan bagCode
+  final String? qty; // Tambahkan qty
+  final String? typeCatridgeTrx; // Add typeCatridgeTrx property
+  final String? sealCodeReturn; // Add sealCodeReturn property
 
   ReturnCatridgeData({
     required this.idTool,
@@ -39,6 +219,10 @@ class ReturnCatridgeData {
     required this.catridgeSeal,
     required this.denomCode,
     required this.typeCatridge,
+    this.bagCode, // Property opsional
+    this.qty, // Property opsional
+    this.typeCatridgeTrx, // Property opsional
+    this.sealCodeReturn, // Property opsional
   });
 
   factory ReturnCatridgeData.fromJson(Map<String, dynamic> json) {
@@ -48,6 +232,10 @@ class ReturnCatridgeData {
       catridgeSeal: json['catridgeSeal'] ?? '',
       denomCode: json['denomCode'] ?? '',
       typeCatridge: json['typeCatridge'] ?? '',
+      bagCode: json['bagCode'], // Tambahkan mapping untuk bagCode
+      qty: json['qty'], // Tambahkan mapping untuk qty
+      typeCatridgeTrx: json['typeCatridgeTrx'] ?? 'C', // Default to 'C' if not provided
+      sealCodeReturn: json['sealCodeReturn'], // Add mapping for sealCodeReturn
     );
   }
 }
@@ -217,4 +405,6 @@ class ReturnDataFromViewResponse {
           .toList(),
     );
   }
-} 
+}
+
+// Note: ApiResponse and TLSupervisorValidationResponse are imported from prepare_model.dart 

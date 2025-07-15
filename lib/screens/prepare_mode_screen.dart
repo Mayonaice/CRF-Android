@@ -3234,7 +3234,8 @@ class _PrepareModePageState extends State<PrepareModePage> {
         
         // Calculate total
         int denomAmount = _prepareData?.tipeDenom == 'A100' ? 100000 : 50000;
-        int totalNominal = denomAmount * (catridgeData.standValue);
+        int standValueInt = catridgeData.standValue.round();
+        int totalNominal = denomAmount * standValueInt;
         String formattedTotal = _formatCurrency(totalNominal);
         
         setState(() {
@@ -3243,7 +3244,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
             index: 1,
             noCatridge: catridgeCode,
             sealCatridge: '',
-            value: catridgeData.standValue,
+            value: standValueInt,
             total: formattedTotal,
             denom: denomAmount == 100000 ? 'Rp 100.000' : 'Rp 50.000',
           );
@@ -3360,7 +3361,8 @@ class _PrepareModePageState extends State<PrepareModePage> {
         
         // Calculate total
         int denomAmount = _prepareData?.tipeDenom == 'A100' ? 100000 : 50000;
-        int totalNominal = denomAmount * (catridgeData.standValue);
+        int standValueInt = catridgeData.standValue.round();
+        int totalNominal = denomAmount * standValueInt;
         String formattedTotal = _formatCurrency(totalNominal);
         
         setState(() {
@@ -3369,7 +3371,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
             index: 1,
             noCatridge: catridgeCode,
             sealCatridge: '',
-            value: catridgeData.standValue,
+            value: standValueInt,
             total: formattedTotal,
             denom: denomAmount == 100000 ? 'Rp 100.000' : 'Rp 50.000',
           );

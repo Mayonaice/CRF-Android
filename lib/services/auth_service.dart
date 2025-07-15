@@ -197,10 +197,15 @@ class AuthService {
         print('🚀 DEBUG LOGIN: SUCCESS!');
         // Save token and user data
         if (responseData['data'] != null) {
-          // Tambahkan branchCode jika belum ada
-          if (!responseData['data'].containsKey('branchCode') && selectedBranch != null) {
+          // Make sure groupId is saved as branchCode
+          if (responseData['data'].containsKey('groupId')) {
+            responseData['data']['branchCode'] = responseData['data']['groupId'];
+            print('🚀 DEBUG LOGIN: Setting branchCode from groupId: ${responseData['data']['groupId']}');
+          } else if (selectedBranch != null) {
             responseData['data']['branchCode'] = selectedBranch;
+            print('🚀 DEBUG LOGIN: Setting branchCode from selectedBranch: $selectedBranch');
           }
+          
           await saveToken(responseData['data']['token'] ?? '');
           await saveUserData(responseData['data']);
           return {

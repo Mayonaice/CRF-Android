@@ -44,6 +44,66 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  // Build function card for the bottom menu row
+  Widget _buildFunctionCard({
+    required String title,
+    required IconData icon,
+    required VoidCallback onTap,
+    required bool isSmallScreen,
+    bool isPrepare = false,
+    bool isReturn = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Card(
+        color: isPrepare 
+            ? Colors.blueAccent[200] // Prepare color
+            : isReturn 
+                ? Colors.red[400] // Return color
+                : Colors.white, // Default color
+        elevation: 5,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+          side: BorderSide(
+            color: isPrepare || isReturn ? Colors.transparent : Colors.grey[300]!,
+            width: 1,
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: isSmallScreen ? 10 : 18,
+            vertical: isSmallScreen ? 12 : 18,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: isSmallScreen ? 28 : 36,
+                color: isPrepare || isReturn ? Colors.white : Colors.blue[700],
+              ),
+              SizedBox(height: isSmallScreen ? 8 : 10),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: isSmallScreen ? 11 : 14,
+                  fontWeight: FontWeight.bold,
+                  color: isPrepare || isReturn ? Colors.white : Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Navigate to Return Validation Screen
+  void _navigateToReturnValidation() {
+    Navigator.pushNamed(context, '/return_validation');
+  }
+
   @override
   Widget build(BuildContext context) {
     // Get screen size for responsive layout
@@ -361,6 +421,15 @@ class _HomePageState extends State<HomePage> {
                                   isSmallScreen: isSmallScreen,
                                 ),
                               ],
+                            ),
+
+                            // Add Return Validation button
+                            SizedBox(height: isSmallScreen ? 4 : 8),
+                            _buildFunctionCard(
+                              title: 'Return Validation',
+                              icon: Icons.check_circle_outline,
+                              onTap: _navigateToReturnValidation,
+                              isSmallScreen: isSmallScreen,
                             ),
                           ],
                         ),

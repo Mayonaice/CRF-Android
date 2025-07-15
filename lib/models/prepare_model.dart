@@ -301,7 +301,7 @@ class CatridgeData {
   final String barCode;
   final String typeCatridge;
   final String codeBank;
-  final int standValue;
+  final num standValue;  // Changed from int to num to handle all numeric types
 
   CatridgeData({
     required this.code,
@@ -312,12 +312,48 @@ class CatridgeData {
   });
 
   factory CatridgeData.fromJson(Map<String, dynamic> json) {
+    // Handle potentially null or invalid format values
+    num standValue = 0;
+    try {
+      // Try to safely parse standValue
+      if (json['StandValue'] != null) {
+        if (json['StandValue'] is num) {
+          standValue = json['StandValue'];
+        } else if (json['StandValue'] is String) {
+          standValue = num.tryParse(json['StandValue']) ?? 0;
+        }
+      }
+    } catch (e) {
+      print('Error parsing StandValue: $e');
+    }
+    
+    // Make sure all string values are handled correctly
+    String code = '';
+    if (json['Code'] != null) {
+      code = json['Code'].toString();
+    }
+    
+    String barCode = '';
+    if (json['BarCode'] != null) {
+      barCode = json['BarCode'].toString();
+    }
+    
+    String typeCatridge = '';
+    if (json['TypeCatridge'] != null) {
+      typeCatridge = json['TypeCatridge'].toString();
+    }
+    
+    String codeBank = '';
+    if (json['CodeBank'] != null) {
+      codeBank = json['CodeBank'].toString();
+    }
+    
     return CatridgeData(
-      code: json['Code'] ?? '',
-      barCode: json['BarCode'] ?? '',
-      typeCatridge: json['TypeCatridge'] ?? '',
-      codeBank: json['CodeBank'] ?? '',
-      standValue: json['StandValue'] ?? 0,
+      code: code,
+      barCode: barCode,
+      typeCatridge: typeCatridge,
+      codeBank: codeBank,
+      standValue: standValue,
     );
   }
 }

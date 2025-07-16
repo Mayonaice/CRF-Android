@@ -622,10 +622,10 @@ class _ReturnModePageState extends State<ReturnModePage> {
       for (var key in _cartridgeSectionKeys) {
         if (key.currentState != null) {
           key.currentState!.setState(() {
-            key.currentState!.isNoCatridgeScanned = false;
-            key.currentState!.isNoSealScanned = false;
-            key.currentState!.isBagCodeScanned = false;
-            key.currentState!.isSealCodeScanned = false;
+            // Reset the scannedFields map for each section
+            key.currentState!.scannedFields.forEach((fieldKey, value) {
+              key.currentState!.scannedFields[fieldKey] = false;
+            });
           });
         }
       }
@@ -1064,11 +1064,14 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   bool isSealCodeReturnValid = true;
   bool isDenomValid = true;
 
-  // Scan validation state - track which fields have been scanned
-  bool isNoCatridgeScanned = false;
-  bool isNoSealScanned = false;
-  bool isBagCodeScanned = false;
-  bool isSealCodeScanned = false;
+  // NEW APPROACH: Use a map to track which fields have been scanned
+  Map<String, bool> scannedFields = {
+    'noCatridge': false,
+    'noSeal': false,
+    'catridgeFisik': false,
+    'bagCode': false,
+    'sealCode': false,
+  };
 
   // Error messages
   String noCatridgeError = '';
@@ -1163,6 +1166,11 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     
     setState(() {
       _isLoading = true;
+      
+      // Reset all scanned fields flags
+      scannedFields.forEach((key, value) {
+        scannedFields[key] = false;
+      });
     });
     
     try {
@@ -1221,17 +1229,13 @@ class _CartridgeSectionState extends State<CartridgeSection> {
             isBagCodeValid = true;
             isSealCodeReturnValid = true;
             
-            // IMPORTANT: Reset scan validation states - fields need to be scanned individually
-            isNoCatridgeScanned = false;
-            isNoSealScanned = false;
-            isBagCodeScanned = false;
-            isSealCodeScanned = false;
+            // IMPORTANT: Reset all scanned fields flags
+            scannedFields.forEach((key, value) {
+              scannedFields[key] = false;
+            });
             
             print('Scan states reset after API fetch:');
-            print('No. Catridge scanned: $isNoCatridgeScanned (${noCatridgeController.text})');
-            print('No. Seal scanned: $isNoSealScanned (${noSealController.text})');
-            print('Bag Code scanned: $isBagCodeScanned (${bagCodeController.text})');
-            print('Seal Code scanned: $isSealCodeScanned (${sealCodeReturnController.text})');
+            print('Scanned fields: $scannedFields');
           } else {
             print('No catridges data found in response or empty list');
           }
@@ -1409,7 +1413,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       _isValidating = false;
       isNoCatridgeValid = true;
       noCatridgeError = '';
-      // Note: We don't set isNoCatridgeScanned = true here
+      // Note: We don't set scan state here - it should be set only after scanning
       // because we want it to be set only after scanning
     });
   }
@@ -1438,7 +1442,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       _isValidating = false;
       isNoSealValid = true;
       noSealError = '';
-      // Note: We don't set isNoSealScanned = true here
+      // Note: We don't set scan state here - it should be set only after scanning
       // because we want it to be set only after scanning
     });
   }
@@ -1588,17 +1592,13 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       isBagCodeValid = true;
       isSealCodeReturnValid = true;
       
-      // IMPORTANT: Reset scan validation states - fields need to be scanned individually
-      isNoCatridgeScanned = false;
-      isNoSealScanned = false;
-      isBagCodeScanned = false;
-      isSealCodeScanned = false;
+      // IMPORTANT: Reset all scanned fields flags
+      scannedFields.forEach((key, value) {
+        scannedFields[key] = false;
+      });
       
       print('Scan states reset after loading data:');
-      print('No. Catridge scanned: $isNoCatridgeScanned (${noCatridgeController.text})');
-      print('No. Seal scanned: $isNoSealScanned (${noSealController.text})');
-      print('Bag Code scanned: $isBagCodeScanned (${bagCodeController.text})');
-      print('Seal Code scanned: $isSealCodeScanned (${sealCodeReturnController.text})');
+      print('Scanned fields: $scannedFields');
       
       setState(() {
         _isValidating = false;
@@ -1606,7 +1606,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     }
   }
 
-  // Check if all fields are valid
+  // Check if all forms are valid
   bool get isFormValid {
     return isNoCatridgeValid && 
            isNoSealValid && 
@@ -1624,10 +1624,10 @@ class _CartridgeSectionState extends State<CartridgeSection> {
            bagCodeController.text.isNotEmpty &&
            sealCodeReturnController.text.isNotEmpty &&
            // Check if required fields have been scanned
-           isNoCatridgeScanned &&
-           isNoSealScanned &&
-           isBagCodeScanned &&
-           isSealCodeScanned;
+           scannedFields['noCatridge'] == true &&
+           scannedFields['noSeal'] == true &&
+           scannedFields['bagCode'] == true &&
+           scannedFields['sealCode'] == true;
   }
 
   // Add validation method for scanned codes
@@ -1644,7 +1644,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   }
   
   // Add barcode scanner functionality for validation
-  Future<void> _openBarcodeScanner(String label, TextEditingController controller) async {
+  Future<void> _openBarcodeScanner(String label, TextEditingController controller, String fieldKey) async {
     try {
       print('Opening barcode scanner for field: $label');
       
@@ -1682,31 +1682,28 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 controller.text = barcode;
               }
               
-              // Mark field as valid after scanning
-              if (label.contains('No. Catridge')) {
-                isNoCatridgeValid = true;
-                noCatridgeError = '';
-                isNoCatridgeScanned = true; // Mark as scanned
-                print('No. Catridge scanned successfully: $barcode');
-              } else if (label.contains('No. Seal')) {
-                isNoSealValid = true;
-                noSealError = '';
-                isNoSealScanned = true; // Mark as scanned
-                print('No. Seal scanned successfully: $barcode');
-              } else if (label.contains('Bag Code')) {
-                isBagCodeValid = true;
-                bagCodeError = '';
-                isBagCodeScanned = true; // Mark as scanned
-                print('Bag Code scanned successfully: $barcode');
-              } else if (label.contains('Seal Code')) {
-                isSealCodeReturnValid = true;
-                sealCodeReturnError = '';
-                isSealCodeScanned = true; // Mark as scanned
-                print('Seal Code scanned successfully: $barcode');
-              }
-              
-              // Force rebuild to update UI with checkmarks
-              setState(() {});
+              // Mark field as scanned in the scannedFields map
+              setState(() {
+                if (fieldKey.isNotEmpty) {
+                  scannedFields[fieldKey] = true;
+                  print('Field $fieldKey marked as scanned');
+                }
+                
+                // Set field-specific validation flags
+                if (label.contains('No. Catridge')) {
+                  isNoCatridgeValid = true;
+                  noCatridgeError = '';
+                } else if (label.contains('No. Seal')) {
+                  isNoSealValid = true;
+                  noSealError = '';
+                } else if (label.contains('Bag Code')) {
+                  isBagCodeValid = true;
+                  bagCodeError = '';
+                } else if (label.contains('Seal Code')) {
+                  isSealCodeReturnValid = true;
+                  sealCodeReturnError = '';
+                }
+              });
               
               // Show success message
               ScaffoldMessenger.of(context).showSnackBar(
@@ -1735,7 +1732,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   }
   
   // Add barcode scanner functionality for input fields (not validation)
-  Future<void> _openBarcodeScannerForInput(String label, TextEditingController controller) async {
+  Future<void> _openBarcodeScannerForInput(String label, TextEditingController controller, String fieldKey) async {
     try {
       print('Opening barcode scanner for input field: $label');
       
@@ -1754,15 +1751,17 @@ class _CartridgeSectionState extends State<CartridgeSection> {
               controller.text = barcode;
               
               // Mark field as valid and scanned
-              if (label.contains('Catridge Fisik')) {
-                isCatridgeFisikValid = true;
-                catridgeFisikError = '';
-                isNoCatridgeScanned = true; // This ensures checkmark appears
-                print('Catridge Fisik scanned successfully: $barcode');
-              }
-              
-              // Force rebuild to update UI with checkmarks
-              setState(() {});
+              setState(() {
+                if (fieldKey.isNotEmpty) {
+                  scannedFields[fieldKey] = true;
+                  print('Field $fieldKey marked as scanned');
+                }
+                
+                if (label.contains('Catridge Fisik')) {
+                  isCatridgeFisikValid = true;
+                  catridgeFisikError = '';
+                }
+              });
               
               // Show success message
               ScaffoldMessenger.of(context).showSnackBar(
@@ -2014,18 +2013,24 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   ) {
     // Determine if this field has been validated by scanning
     bool isScanned = false;
+    String fieldKey = '';
+    
     if (label.contains('No. Catridge')) {
-      isScanned = isNoCatridgeScanned;
+      fieldKey = 'noCatridge';
     } else if (label.contains('No. Seal')) {
-      isScanned = isNoSealScanned;
+      fieldKey = 'noSeal';
     } else if (label.contains('Bag Code')) {
-      isScanned = isBagCodeScanned;
+      fieldKey = 'bagCode';
     } else if (label.contains('Seal Code')) {
-      isScanned = isSealCodeScanned;
+      fieldKey = 'sealCode';
     } else if (label.contains('Catridge Fisik')) {
-      // For Catridge Fisik, show checkmark if field is not empty and valid
-      isScanned = controller.text.isNotEmpty && isCatridgeFisikValid && isNoCatridgeScanned;
+      fieldKey = 'catridgeFisik';
     }
+    
+    // Check if this field has been scanned
+    isScanned = fieldKey.isNotEmpty ? scannedFields[fieldKey] ?? false : false;
+    
+    print('Building field: $label, isScanned=$isScanned, text=${controller.text}');
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2054,7 +2059,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                           scale: 0.5,
                           child: const CircularProgressIndicator(),
                         )
-                      : isScanned && isValid && controller.text.isNotEmpty
+                      : isScanned && controller.text.isNotEmpty
                           ? const Icon(Icons.check_circle, color: Colors.green)
                           : null,
                   enabledBorder: UnderlineInputBorder(
@@ -2076,9 +2081,9 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 onPressed: () {
                   // Implement barcode scanning
                   if (isScanInput) {
-                    _openBarcodeScannerForInput(label, controller);
+                    _openBarcodeScannerForInput(label, controller, fieldKey);
                   } else {
-                    _openBarcodeScanner(label, controller);
+                    _openBarcodeScanner(label, controller, fieldKey);
                   }
                 },
               ),

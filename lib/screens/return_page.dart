@@ -573,8 +573,19 @@ class _ReturnModePageState extends State<ReturnModePage> {
             print('Added key for catridge ${i+1}');
           }
           
-          // Ensure all sections will have scan validation states reset
-          // This is important so checkmarks don't appear until after scanning
+          // Reset scan status for all sections
+          Future.delayed(Duration.zero, () {
+            for (var key in _cartridgeSectionKeys) {
+              if (key.currentState != null) {
+                key.currentState!.setState(() {
+                  // Reset all scan validation flags
+                  key.currentState!.scannedFields.forEach((fieldKey, value) {
+                    key.currentState!.scannedFields[fieldKey] = false;
+                  });
+                });
+              }
+            }
+          });
           
           _errorMessage = '';
         } else {
@@ -1659,7 +1670,6 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         MaterialPageRoute(
           builder: (context) => BarcodeScannerWidget(
             title: 'Scan $cleanLabel',
-            forceShowCheckmark: true,
             onBarcodeDetected: (String barcode) {
               print('Barcode detected for $cleanLabel: $barcode');
               
@@ -1686,9 +1696,13 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 controller.text = barcode;
               }
               
-              // SIMPLIFIED APPROACH: Just set the scanned field to true
+              // Update scan status in parent widget
               setState(() {
-                scannedFields[fieldKey] = true;
+                // Explicitly set this field as scanned
+                if (fieldKey.isNotEmpty) {
+                  scannedFields[fieldKey] = true;
+                  print('Field $fieldKey marked as scanned with value: $barcode');
+                }
                 
                 // Set field-specific validation flags
                 if (label.contains('No. Catridge')) {
@@ -1704,9 +1718,6 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   isSealCodeReturnValid = true;
                   sealCodeReturnError = '';
                 }
-                
-                // Force rebuild to ensure checkmark appears
-                setState(() {});
               });
               
               // Show success message
@@ -1748,24 +1759,24 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         MaterialPageRoute(
           builder: (context) => BarcodeScannerWidget(
             title: 'Scan $cleanLabel',
-            forceShowCheckmark: true,
             onBarcodeDetected: (String barcode) {
               print('Barcode detected for $cleanLabel: $barcode');
               
               // Update the field with scanned barcode
               controller.text = barcode;
               
-              // SIMPLIFIED APPROACH: Just set the scanned field to true
+              // Update scan status in parent widget
               setState(() {
-                scannedFields[fieldKey] = true;
+                // Explicitly set this field as scanned
+                if (fieldKey.isNotEmpty) {
+                  scannedFields[fieldKey] = true;
+                  print('Input field $fieldKey marked as scanned with value: $barcode');
+                }
                 
                 if (label.contains('Catridge Fisik')) {
                   isCatridgeFisikValid = true;
                   catridgeFisikError = '';
                 }
-                
-                // Force rebuild to ensure checkmark appears
-                setState(() {});
               });
               
               // Show success message
@@ -2058,15 +2069,13 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   hintText: 'Masukkan $label',
                   contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                   isDense: true,
-                  // SIMPLIFIED: Show checkmark if field is scanned and has text
+                  // Show loading indicator when validating
                   suffixIcon: isLoading
                       ? Transform.scale(
                           scale: 0.5,
                           child: const CircularProgressIndicator(),
                         )
-                      : isScanned && controller.text.isNotEmpty
-                          ? const Icon(Icons.check_circle, color: Colors.green)
-                          : null,
+                      : null,
                   enabledBorder: UnderlineInputBorder(
                     borderSide: BorderSide(
                       color: isValid ? Colors.grey : Colors.red,
@@ -2092,6 +2101,23 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   }
                 },
               ),
+            // NEW: Add a validation status icon that shows empty circle or filled checkmark
+            Container(
+              width: 24,
+              height: 24,
+              margin: const EdgeInsets.only(left: 4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isScanned && controller.text.isNotEmpty ? Colors.green : Colors.grey,
+                  width: 2,
+                ),
+                color: isScanned && controller.text.isNotEmpty ? Colors.green : Colors.transparent,
+              ),
+              child: isScanned && controller.text.isNotEmpty
+                  ? const Icon(Icons.check, color: Colors.white, size: 16)
+                  : null,
+            ),
           ],
         ),
         if (errorText.isNotEmpty)

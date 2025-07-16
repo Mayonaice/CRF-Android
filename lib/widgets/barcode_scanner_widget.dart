@@ -197,12 +197,9 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
             DeviceOrientation.landscapeRight,
           ]);
           
-          // Call the callback function
-          widget.onBarcodeDetected(code);
-          
-          // Close the scanner screen safely
+          // Return the scanned barcode to the calling screen
           if (mounted && Navigator.of(context).canPop()) {
-            Navigator.of(context).pop();
+            Navigator.of(context).pop(code);
           }
         }
       }

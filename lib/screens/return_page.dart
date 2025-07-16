@@ -1661,6 +1661,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   Future<void> _openBarcodeScanner(String label, TextEditingController controller, String fieldKey) async {
     try {
       print('Opening barcode scanner for field: $label');
+      print('BEFORE SCAN: Field $fieldKey scan status: ${scannedFields[fieldKey]}');
       
       // Clean field label for display
       String cleanLabel = label.replaceAll(':', '').trim();
@@ -1696,29 +1697,28 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 controller.text = barcode;
               }
               
-              // Update scan status in parent widget
-              setState(() {
-                // Explicitly set this field as scanned
-                if (fieldKey.isNotEmpty) {
-                  scannedFields[fieldKey] = true;
-                  print('Field $fieldKey marked as scanned with value: $barcode');
-                }
-                
-                // Set field-specific validation flags
-                if (label.contains('No. Catridge')) {
-                  isNoCatridgeValid = true;
-                  noCatridgeError = '';
-                } else if (label.contains('No. Seal')) {
-                  isNoSealValid = true;
-                  noSealError = '';
-                } else if (label.contains('Bag Code')) {
-                  isBagCodeValid = true;
-                  bagCodeError = '';
-                } else if (label.contains('Seal Code')) {
-                  isSealCodeReturnValid = true;
-                  sealCodeReturnError = '';
-                }
-              });
+              // IMPORTANT: Directly update the scannedFields map
+              scannedFields[fieldKey] = true;
+              print('SCAN SUCCESS: Field $fieldKey marked as scanned with value: $barcode');
+              print('SCAN STATUS MAP: $scannedFields');
+              
+              // Set field-specific validation flags
+              if (label.contains('No. Catridge')) {
+                isNoCatridgeValid = true;
+                noCatridgeError = '';
+              } else if (label.contains('No. Seal')) {
+                isNoSealValid = true;
+                noSealError = '';
+              } else if (label.contains('Bag Code')) {
+                isBagCodeValid = true;
+                bagCodeError = '';
+              } else if (label.contains('Seal Code')) {
+                isSealCodeReturnValid = true;
+                sealCodeReturnError = '';
+              }
+              
+              // Force rebuild UI
+              _forceRebuild();
               
               // Show success message
               ScaffoldMessenger.of(context).showSnackBar(
@@ -1735,6 +1735,13 @@ class _CartridgeSectionState extends State<CartridgeSection> {
           ),
         ),
       );
+      
+      // Log scan status after returning from scanner
+      print('AFTER SCAN RETURN: Field $fieldKey scan status: ${scannedFields[fieldKey]}');
+      
+      // Force rebuild UI again after returning from scanner
+      _forceRebuild();
+      
     } catch (e) {
       print('Error opening barcode scanner: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1746,10 +1753,21 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     }
   }
   
+  // Helper method to force rebuild UI
+  void _forceRebuild() {
+    if (mounted) {
+      setState(() {
+        // This empty setState forces a rebuild
+        print('FORCING UI REBUILD');
+      });
+    }
+  }
+  
   // Add barcode scanner functionality for input fields (not validation)
   Future<void> _openBarcodeScannerForInput(String label, TextEditingController controller, String fieldKey) async {
     try {
       print('Opening barcode scanner for input field: $label');
+      print('BEFORE SCAN INPUT: Field $fieldKey scan status: ${scannedFields[fieldKey]}');
       
       // Clean field label for display
       String cleanLabel = label.replaceAll(':', '').trim();
@@ -1765,19 +1783,18 @@ class _CartridgeSectionState extends State<CartridgeSection> {
               // Update the field with scanned barcode
               controller.text = barcode;
               
-              // Update scan status in parent widget
-              setState(() {
-                // Explicitly set this field as scanned
-                if (fieldKey.isNotEmpty) {
-                  scannedFields[fieldKey] = true;
-                  print('Input field $fieldKey marked as scanned with value: $barcode');
-                }
-                
-                if (label.contains('Catridge Fisik')) {
-                  isCatridgeFisikValid = true;
-                  catridgeFisikError = '';
-                }
-              });
+              // IMPORTANT: Directly update the scannedFields map
+              scannedFields[fieldKey] = true;
+              print('INPUT SCAN SUCCESS: Field $fieldKey marked as scanned with value: $barcode');
+              print('SCAN STATUS MAP: $scannedFields');
+              
+              if (label.contains('Catridge Fisik')) {
+                isCatridgeFisikValid = true;
+                catridgeFisikError = '';
+              }
+              
+              // Force rebuild UI
+              _forceRebuild();
               
               // Show success message
               ScaffoldMessenger.of(context).showSnackBar(
@@ -1794,6 +1811,13 @@ class _CartridgeSectionState extends State<CartridgeSection> {
           ),
         ),
       );
+      
+      // Log scan status after returning from scanner
+      print('AFTER SCAN INPUT RETURN: Field $fieldKey scan status: ${scannedFields[fieldKey]}');
+      
+      // Force rebuild UI again after returning from scanner
+      _forceRebuild();
+      
     } catch (e) {
       print('Error opening barcode scanner: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2045,7 +2069,23 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     bool isScanned = fieldKey.isNotEmpty && scannedFields[fieldKey] == true;
     
     // Debug output
-    print('Building field: $label (key=$fieldKey), isScanned=$isScanned, text=${controller.text}');
+    print('BUILDING FIELD: $label (key=$fieldKey), isScanned=$isScanned, text=${controller.text}');
+    print('CURRENT SCAN MAP: $scannedFields');
+    
+    // Determine if we should show checkmark
+    bool showCheckmark = isScanned && controller.text.isNotEmpty;
+    
+    // Create circle decoration
+    BoxDecoration circleDecoration = BoxDecoration(
+      shape: BoxShape.circle,
+      border: Border.all(
+        color: showCheckmark ? Colors.green : Colors.grey,
+        width: 2,
+      ),
+      color: showCheckmark ? Colors.green : Colors.transparent,
+    );
+    
+    print('CHECKMARK STATUS: $label should show checkmark: $showCheckmark');
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2106,15 +2146,8 @@ class _CartridgeSectionState extends State<CartridgeSection> {
               width: 24,
               height: 24,
               margin: const EdgeInsets.only(left: 4),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isScanned && controller.text.isNotEmpty ? Colors.green : Colors.grey,
-                  width: 2,
-                ),
-                color: isScanned && controller.text.isNotEmpty ? Colors.green : Colors.transparent,
-              ),
-              child: isScanned && controller.text.isNotEmpty
+              decoration: circleDecoration,
+              child: showCheckmark
                   ? const Icon(Icons.check, color: Colors.white, size: 16)
                   : null,
             ),

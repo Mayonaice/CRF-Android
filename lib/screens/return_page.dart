@@ -1193,6 +1193,19 @@ class _CartridgeSectionState extends State<CartridgeSection> {
             isNoSealValid = noSealController.text.isNotEmpty;
             isBagCodeValid = true;
             isSealCodeReturnValid = true;
+            
+            // Set scan validation state for fields that have data from API
+            isNoCatridgeScanned = noCatridgeController.text.isNotEmpty;
+            isNoSealScanned = noSealController.text.isNotEmpty;
+            isBagCodeScanned = bagCodeController.text.isNotEmpty;
+            isSealCodeScanned = sealCodeReturnController.text.isNotEmpty;
+            
+            // Debug print the scan states
+            print('Scan states after API fetch:');
+            print('No. Catridge scanned: $isNoCatridgeScanned (${noCatridgeController.text})');
+            print('No. Seal scanned: $isNoSealScanned (${noSealController.text})');
+            print('Bag Code scanned: $isBagCodeScanned (${bagCodeController.text})');
+            print('Seal Code scanned: $isSealCodeScanned (${sealCodeReturnController.text})');
           } else {
             print('No catridges data found in response or empty list');
           }
@@ -1543,12 +1556,21 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       isNoSealValid = true;
       isCatridgeFisikValid = true;
       isBagCodeValid = true;
+      isSealCodeReturnValid = true;
       
-      // Reset scan validation state - fields need to be scanned
-      isNoCatridgeScanned = false;
-      isNoSealScanned = false;
-      isBagCodeScanned = false;
-      isSealCodeScanned = false;
+      // Set scan validation state for pre-filled fields that have data
+      // This ensures checkmarks appear for pre-populated fields
+      isNoCatridgeScanned = noCatridgeController.text.isNotEmpty;
+      isNoSealScanned = noSealController.text.isNotEmpty;
+      isBagCodeScanned = bagCodeController.text.isNotEmpty;
+      isSealCodeScanned = sealCodeReturnController.text.isNotEmpty;
+      
+      // Debug print the scan states
+      print('Scan states after loading data:');
+      print('No. Catridge scanned: $isNoCatridgeScanned (${noCatridgeController.text})');
+      print('No. Seal scanned: $isNoSealScanned (${noSealController.text})');
+      print('Bag Code scanned: $isBagCodeScanned (${bagCodeController.text})');
+      print('Seal Code scanned: $isSealCodeScanned (${sealCodeReturnController.text})');
       
       setState(() {
         _isValidating = false;
@@ -1633,18 +1655,22 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   isNoCatridgeValid = true;
                   noCatridgeError = '';
                   isNoCatridgeScanned = true; // Mark as scanned
+                  print('No. Catridge scanned successfully: $barcode');
                 } else if (label.contains('No. Seal')) {
                   isNoSealValid = true;
                   noSealError = '';
                   isNoSealScanned = true; // Mark as scanned
+                  print('No. Seal scanned successfully: $barcode');
                 } else if (label.contains('Bag Code')) {
                   isBagCodeValid = true;
                   bagCodeError = '';
                   isBagCodeScanned = true; // Mark as scanned
+                  print('Bag Code scanned successfully: $barcode');
                 } else if (label.contains('Seal Code')) {
                   isSealCodeReturnValid = true;
                   sealCodeReturnError = '';
                   isSealCodeScanned = true; // Mark as scanned
+                  print('Seal Code scanned successfully: $barcode');
                 }
               });
               
@@ -1695,8 +1721,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 if (label.contains('Catridge Fisik')) {
                   isCatridgeFisikValid = true;
                   catridgeFisikError = '';
-                  // Add this field to the scanned fields so the checkmark appears
-                  isNoCatridgeScanned = true;
+                  print('Catridge Fisik scanned successfully: $barcode');
                 }
               });
               
@@ -1955,9 +1980,9 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       isScanned = isBagCodeScanned;
     } else if (label.contains('Seal Code')) {
       isScanned = isSealCodeScanned;
-    } else if (label.contains('Catridge Fisik') && controller.text.isNotEmpty) {
+    } else if (label.contains('Catridge Fisik')) {
       // For Catridge Fisik, show checkmark if field is not empty and valid
-      isScanned = isCatridgeFisikValid && isNoCatridgeScanned;
+      isScanned = controller.text.isNotEmpty && isCatridgeFisikValid;
     }
     
     return Column(
@@ -1987,7 +2012,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                           scale: 0.5,
                           child: const CircularProgressIndicator(),
                         )
-                      : isScanned && isValid
+                      : isScanned && isValid && controller.text.isNotEmpty
                           ? const Icon(Icons.check_circle, color: Colors.green)
                           : null,
                   enabledBorder: UnderlineInputBorder(

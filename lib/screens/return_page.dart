@@ -626,6 +626,9 @@ class _ReturnModePageState extends State<ReturnModePage> {
             key.currentState!.scannedFields.forEach((fieldKey, value) {
               key.currentState!.scannedFields[fieldKey] = false;
             });
+            
+            // Force a rebuild to update the UI
+            key.currentState!.setState(() {});
           });
         }
       }
@@ -1656,6 +1659,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         MaterialPageRoute(
           builder: (context) => BarcodeScannerWidget(
             title: 'Scan $cleanLabel',
+            forceShowCheckmark: true,
             onBarcodeDetected: (String barcode) {
               print('Barcode detected for $cleanLabel: $barcode');
               
@@ -1682,12 +1686,9 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 controller.text = barcode;
               }
               
-              // Mark field as scanned in the scannedFields map
+              // SIMPLIFIED APPROACH: Just set the scanned field to true
               setState(() {
-                if (fieldKey.isNotEmpty) {
-                  scannedFields[fieldKey] = true;
-                  print('Field $fieldKey marked as scanned');
-                }
+                scannedFields[fieldKey] = true;
                 
                 // Set field-specific validation flags
                 if (label.contains('No. Catridge')) {
@@ -1703,6 +1704,9 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   isSealCodeReturnValid = true;
                   sealCodeReturnError = '';
                 }
+                
+                // Force rebuild to ensure checkmark appears
+                setState(() {});
               });
               
               // Show success message
@@ -1744,23 +1748,24 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         MaterialPageRoute(
           builder: (context) => BarcodeScannerWidget(
             title: 'Scan $cleanLabel',
+            forceShowCheckmark: true,
             onBarcodeDetected: (String barcode) {
               print('Barcode detected for $cleanLabel: $barcode');
               
               // Update the field with scanned barcode
               controller.text = barcode;
               
-              // Mark field as valid and scanned
+              // SIMPLIFIED APPROACH: Just set the scanned field to true
               setState(() {
-                if (fieldKey.isNotEmpty) {
-                  scannedFields[fieldKey] = true;
-                  print('Field $fieldKey marked as scanned');
-                }
+                scannedFields[fieldKey] = true;
                 
                 if (label.contains('Catridge Fisik')) {
                   isCatridgeFisikValid = true;
                   catridgeFisikError = '';
                 }
+                
+                // Force rebuild to ensure checkmark appears
+                setState(() {});
               });
               
               // Show success message
@@ -2011,10 +2016,8 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     bool readOnly = false,
     bool isScanInput = false}
   ) {
-    // Determine if this field has been validated by scanning
-    bool isScanned = false;
+    // Determine which field key to use
     String fieldKey = '';
-    
     if (label.contains('No. Catridge')) {
       fieldKey = 'noCatridge';
     } else if (label.contains('No. Seal')) {
@@ -2028,9 +2031,10 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     }
     
     // Check if this field has been scanned
-    isScanned = fieldKey.isNotEmpty ? scannedFields[fieldKey] ?? false : false;
+    bool isScanned = fieldKey.isNotEmpty && scannedFields[fieldKey] == true;
     
-    print('Building field: $label, isScanned=$isScanned, text=${controller.text}');
+    // Debug output
+    print('Building field: $label (key=$fieldKey), isScanned=$isScanned, text=${controller.text}');
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2054,6 +2058,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   hintText: 'Masukkan $label',
                   contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                   isDense: true,
+                  // SIMPLIFIED: Show checkmark if field is scanned and has text
                   suffixIcon: isLoading
                       ? Transform.scale(
                           scale: 0.5,

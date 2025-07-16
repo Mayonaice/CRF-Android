@@ -5,11 +5,13 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 class BarcodeScannerWidget extends StatefulWidget {
   final String title;
   final Function(String) onBarcodeDetected;
+  final bool forceShowCheckmark; // Add this parameter
 
   const BarcodeScannerWidget({
     Key? key,
     required this.title,
     required this.onBarcodeDetected,
+    this.forceShowCheckmark = true, // Default to true
   }) : super(key: key);
 
   @override
@@ -197,9 +199,15 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
             DeviceOrientation.landscapeRight,
           ]);
           
-          // Return the scanned barcode to the calling screen
-          if (mounted && Navigator.of(context).canPop()) {
-            Navigator.of(context).pop(code);
+          // Call the callback function with the scanned code
+          widget.onBarcodeDetected(code);
+          
+          // If forceShowCheckmark is true, we let the callback handle navigation
+          if (!widget.forceShowCheckmark) {
+            // Close the scanner screen safely
+            if (mounted && Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
           }
         }
       }

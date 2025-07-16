@@ -6,6 +6,13 @@ import '../models/return_model.dart';
 import 'dart:async'; // Import for Timer
 import '../widgets/barcode_scanner_widget.dart'; // Fix barcode scanner import
 
+// CHECKMARK FIX: This file has been updated to fix the checkmark display issue.
+// Changes made:
+// 1. Modified barcode scanning to handle results in parent methods instead of callbacks
+// 2. Added setState() calls to update UI after scanning
+// 3. Enhanced checkmark visibility in the UI
+// 4. Added debug logging to track scan states
+
 void main() {
   runApp(const ReturnModeApp());
 }
@@ -1056,6 +1063,25 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     }
     return branchCodeController.text;
   }
+  
+  // Add a method to force rebuild the UI
+  void _forceRebuild() {
+    if (mounted) {
+      setState(() {
+        // Just trigger rebuild
+        print("Forcing UI rebuild");
+      });
+    }
+  }
+
+  // NEW APPROACH: Use a map to track which fields have been scanned
+  Map<String, bool> scannedFields = {
+    'noCatridge': false,
+    'noSeal': false,
+    'catridgeFisik': false,
+    'bagCode': false,
+    'sealCode': false,
+  };
 
   final Map<String, TextEditingController> denomControllers = {
     '100K': TextEditingController(),
@@ -1077,15 +1103,6 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   bool isBagCodeValid = true;
   bool isSealCodeReturnValid = true;
   bool isDenomValid = true;
-
-  // NEW APPROACH: Use a map to track which fields have been scanned
-  Map<String, bool> scannedFields = {
-    'noCatridge': false,
-    'noSeal': false,
-    'catridgeFisik': false,
-    'bagCode': false,
-    'sealCode': false,
-  };
 
   // Error messages
   String noCatridgeError = '';
@@ -1667,80 +1684,83 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       String cleanLabel = label.replaceAll(':', '').trim();
       
       // Navigate to barcode scanner
-      await Navigator.of(context).push(
+      final result = await Navigator.push<String?>(
+        context,
         MaterialPageRoute(
           builder: (context) => BarcodeScannerWidget(
             title: 'Scan $cleanLabel',
             onBarcodeDetected: (String barcode) {
-              print('Barcode detected for $cleanLabel: $barcode');
-              
-              // Validate the scanned barcode matches the expected value
-              bool isValid = true;
-              if (controller.text.isNotEmpty) {
-                isValid = barcode == controller.text;
-              }
-              
-              if (!isValid) {
-                // Show error if scanned code doesn't match
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Kode tidak sesuai! Harap scan kode yang sesuai dengan $cleanLabel'),
-                    backgroundColor: Colors.red,
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
-                return;
-              }
-              
-              // Update the field with scanned barcode if it was empty
-              if (controller.text.isEmpty) {
-                controller.text = barcode;
-              }
-              
-              // IMPORTANT: Directly update the scannedFields map
-              scannedFields[fieldKey] = true;
-              print('SCAN SUCCESS: Field $fieldKey marked as scanned with value: $barcode');
-              print('SCAN STATUS MAP: $scannedFields');
-              
-              // Set field-specific validation flags
-              if (label.contains('No. Catridge')) {
-                isNoCatridgeValid = true;
-                noCatridgeError = '';
-              } else if (label.contains('No. Seal')) {
-                isNoSealValid = true;
-                noSealError = '';
-              } else if (label.contains('Bag Code')) {
-                isBagCodeValid = true;
-                bagCodeError = '';
-              } else if (label.contains('Seal Code')) {
-                isSealCodeReturnValid = true;
-                sealCodeReturnError = '';
-              }
-              
-              // Force rebuild UI
-              _forceRebuild();
-              
-              // Show success message
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('$cleanLabel berhasil divalidasi: $barcode'),
-                  backgroundColor: Colors.green,
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-              
-              // Close the scanner screen
-              Navigator.of(context).pop();
+              // Just return the barcode to handle in parent method
+              Navigator.of(context).pop(barcode);
             },
           ),
         ),
       );
       
+      // If barcode was scanned
+      if (result != null && result.isNotEmpty) {
+        print('Scanned barcode for $cleanLabel: $result');
+        
+        // Validate the scanned barcode matches the expected value
+        bool isValid = true;
+        if (controller.text.isNotEmpty) {
+          isValid = result == controller.text;
+        }
+        
+        if (!isValid) {
+          // Show error if scanned code doesn't match
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Kode tidak sesuai! Harap scan kode yang sesuai dengan $cleanLabel'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          return;
+        }
+        
+        // Update the field with scanned barcode if it was empty
+        if (controller.text.isEmpty) {
+          controller.text = result;
+        }
+        
+        // Update the scanned status with setState to trigger UI update
+        setState(() {
+          // IMPORTANT: Directly update the scannedFields map
+          scannedFields[fieldKey] = true;
+          print('SCAN SUCCESS: Field $fieldKey marked as scanned with value: $result');
+          print('SCAN STATUS MAP: $scannedFields');
+          
+          // Set field-specific validation flags
+          if (label.contains('No. Catridge')) {
+            isNoCatridgeValid = true;
+            noCatridgeError = '';
+          } else if (label.contains('No. Seal')) {
+            isNoSealValid = true;
+            noSealError = '';
+          } else if (label.contains('Bag Code')) {
+            isBagCodeValid = true;
+            bagCodeError = '';
+          } else if (label.contains('Seal Code')) {
+            isSealCodeReturnValid = true;
+            sealCodeReturnError = '';
+          }
+        });
+        
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$cleanLabel berhasil divalidasi: $result'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        print('No barcode scanned or scan cancelled for $cleanLabel');
+      }
+      
       // Log scan status after returning from scanner
       print('AFTER SCAN RETURN: Field $fieldKey scan status: ${scannedFields[fieldKey]}');
-      
-      // Force rebuild UI again after returning from scanner
-      _forceRebuild();
       
     } catch (e) {
       print('Error opening barcode scanner: $e');
@@ -1754,15 +1774,6 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   }
   
   // Helper method to force rebuild UI
-  void _forceRebuild() {
-    if (mounted) {
-      setState(() {
-        // This empty setState forces a rebuild
-        print('FORCING UI REBUILD');
-      });
-    }
-  }
-  
   // Add barcode scanner functionality for input fields (not validation)
   Future<void> _openBarcodeScannerForInput(String label, TextEditingController controller, String fieldKey) async {
     try {
@@ -1773,50 +1784,53 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       String cleanLabel = label.replaceAll(':', '').trim();
       
       // Navigate to barcode scanner
-      await Navigator.of(context).push(
+      final result = await Navigator.push<String?>(
+        context,
         MaterialPageRoute(
           builder: (context) => BarcodeScannerWidget(
             title: 'Scan $cleanLabel',
             onBarcodeDetected: (String barcode) {
-              print('Barcode detected for $cleanLabel: $barcode');
-              
-              // Update the field with scanned barcode
-              controller.text = barcode;
-              
-              // IMPORTANT: Directly update the scannedFields map
-              scannedFields[fieldKey] = true;
-              print('INPUT SCAN SUCCESS: Field $fieldKey marked as scanned with value: $barcode');
-              print('SCAN STATUS MAP: $scannedFields');
-              
-              if (label.contains('Catridge Fisik')) {
-                isCatridgeFisikValid = true;
-                catridgeFisikError = '';
-              }
-              
-              // Force rebuild UI
-              _forceRebuild();
-              
-              // Show success message
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('$cleanLabel berhasil diisi: $barcode'),
-                  backgroundColor: Colors.green,
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-              
-              // Close the scanner screen
-              Navigator.of(context).pop();
+              // Just return the barcode to handle in parent method
+              Navigator.of(context).pop(barcode);
             },
           ),
         ),
       );
       
+      // If barcode was scanned
+      if (result != null && result.isNotEmpty) {
+        print('Scanned barcode for $cleanLabel: $result');
+        
+        // Update the field with scanned barcode
+        controller.text = result;
+        
+        // Update the scanned status with setState to trigger UI update
+        setState(() {
+          // IMPORTANT: Directly update the scannedFields map
+          scannedFields[fieldKey] = true;
+          print('INPUT SCAN SUCCESS: Field $fieldKey marked as scanned with value: $result');
+          print('SCAN STATUS MAP: $scannedFields');
+          
+          if (label.contains('Catridge Fisik')) {
+            isCatridgeFisikValid = true;
+            catridgeFisikError = '';
+          }
+        });
+        
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$cleanLabel berhasil diisi: $result'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        print('No barcode scanned or scan cancelled for $cleanLabel');
+      }
+      
       // Log scan status after returning from scanner
       print('AFTER SCAN INPUT RETURN: Field $fieldKey scan status: ${scannedFields[fieldKey]}');
-      
-      // Force rebuild UI again after returning from scanner
-      _forceRebuild();
       
     } catch (e) {
       print('Error opening barcode scanner: $e');
@@ -1828,7 +1842,60 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       );
     }
   }
-  
+
+  // Add this method to the _CartridgeSectionState class
+  Future<void> _scanAndValidateField(String fieldName, TextEditingController controller) async {
+    try {
+      final result = await Navigator.push<String?>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => BarcodeScannerWidget(
+            title: 'Scan $fieldName',
+            onBarcodeDetected: (String barcode) {
+              // Just return the barcode and handle it in the parent method
+              Navigator.of(context).pop(barcode);
+            },
+            forceShowCheckmark: false, // Don't handle navigation in the scanner
+          ),
+        ),
+      );
+
+      if (result != null && result.isNotEmpty) {
+        print('Scanned barcode for $fieldName: $result');
+        
+        // Update the controller text
+        controller.text = result;
+        
+        // Get the field key based on the controller
+        String fieldKey = '';
+        if (controller == noCatridgeController) {
+          fieldKey = 'noCatridge';
+        } else if (controller == noSealController) {
+          fieldKey = 'noSeal';
+        } else if (controller == catridgeFisikController) {
+          fieldKey = 'catridgeFisik';
+        } else if (controller == bagCodeController) {
+          fieldKey = 'bagCode';
+        } else if (controller == sealCodeReturnController) {
+          fieldKey = 'sealCode';
+        }
+        
+        if (fieldKey.isNotEmpty) {
+          // Update the scan status
+          setState(() {
+            scannedFields[fieldKey] = true;
+            print('Updated scan status for $fieldKey to true');
+            print('Current scan status: $scannedFields');
+          });
+        }
+      } else {
+        print('Scan cancelled or empty result for $fieldName');
+      }
+    } catch (e) {
+      print('Error scanning $fieldName: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool shouldShow = widget.returnData != null || widget.title == 'Catridge 1';
@@ -1855,25 +1922,25 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
-                ),
               ),
+                ),
               // Remove the type: replenish_data text
             ],
           ),
           const SizedBox(height: 12),
           
-          // Hidden branch code field
-          Opacity(
-            opacity: 0,
-            child: SizedBox(
-              height: 0,
-              width: 0,
-              child: TextField(
-                controller: branchCodeController,
-                enabled: false,
+              // Hidden branch code field
+              Opacity(
+                opacity: 0,
+                child: SizedBox(
+                  height: 0,
+                  width: 0,
+                  child: TextField(
+                    controller: branchCodeController,
+                    enabled: false,
+                  ),
+                ),
               ),
-            ),
-          ),
           
           // Two-column layout for fields
           Row(
@@ -1960,7 +2027,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Remove WSID field
-                    
+          
                     // Kondisi Seal dropdown
           _buildDropdownField(
                       'Kondisi Seal',
@@ -2115,7 +2182,20 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                           scale: 0.5,
                           child: const CircularProgressIndicator(),
                         )
-                      : null,
+                      : showCheckmark
+                        ? Container(
+                            margin: const EdgeInsets.all(8.0),
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 16.0,
+                            ),
+                          )
+                        : null,
                   enabledBorder: UnderlineInputBorder(
                     borderSide: BorderSide(
                       color: isValid ? Colors.grey : Colors.red,
@@ -2150,7 +2230,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
               child: showCheckmark
                   ? const Icon(Icons.check, color: Colors.white, size: 16)
                   : null,
-            ),
+              ),
           ],
         ),
         if (errorText.isNotEmpty)
@@ -2167,7 +2247,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       ],
     );
   }
-  
+
   // Simple dropdown field with validation
   Widget _buildDropdownField(
     String label,

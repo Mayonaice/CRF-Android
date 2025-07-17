@@ -1068,8 +1068,8 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   void _forceRebuild() {
     if (mounted) {
       setState(() {
-        // Just trigger rebuild
-        print("Forcing UI rebuild for checkmark display");
+        // Force a complete UI rebuild to ensure checkmarks display properly
+        print("UI rebuild triggered - checkmarks should now be visible");
       });
     }
   }
@@ -1629,19 +1629,20 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       }
       
       // Reset validation state for pre-filled fields
-      isNoCatridgeValid = true;
-      isNoSealValid = true;
-      isCatridgeFisikValid = true;
-      isBagCodeValid = true;
-      isSealCodeReturnValid = true;
+      isNoCatridgeValid = noCatridgeController.text.isNotEmpty;
+      isNoSealValid = noSealController.text.isNotEmpty;
+      isCatridgeFisikValid = false; // This needs to be scanned
+      isBagCodeValid = bagCodeController.text.isNotEmpty;
+      isSealCodeReturnValid = sealCodeReturnController.text.isNotEmpty;
       
-      // IMPORTANT: Reset all scanned fields flags
+      // IMPORTANT: Reset all scanned fields flags because user needs to validate by scanning
       scannedFields.forEach((key, value) {
         scannedFields[key] = false;
       });
       
       print('Scan states reset after loading data:');
       print('Scanned fields: $scannedFields');
+      print('Loaded data - noCatridge: ${noCatridgeController.text}, noSeal: ${noSealController.text}, bagCode: ${bagCodeController.text}, sealCode: ${sealCodeReturnController.text}');
       
       setState(() {
         _isValidating = false;
@@ -1651,7 +1652,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
 
   // Check if all forms are valid
   bool get isFormValid {
-    return isNoCatridgeValid && 
+    bool formIsValid = isNoCatridgeValid && 
            isNoSealValid && 
            isCatridgeFisikValid && 
            isKondisiSealValid && 
@@ -1671,6 +1672,14 @@ class _CartridgeSectionState extends State<CartridgeSection> {
            scannedFields['noSeal'] == true &&
            scannedFields['bagCode'] == true &&
            scannedFields['sealCode'] == true;
+           
+    // Log validation status for debugging
+    if (!formIsValid) {
+      print('Form validation failed. Scan status: $scannedFields');
+      print('Required fields scanned: noCatridge=${scannedFields['noCatridge']}, noSeal=${scannedFields['noSeal']}, bagCode=${scannedFields['bagCode']}, sealCode=${scannedFields['sealCode']}');
+    }
+    
+    return formIsValid;
   }
 
   // Add validation method for scanned codes
@@ -1691,6 +1700,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     try {
       print('Opening barcode scanner for field: $label');
       print('BEFORE SCAN: Field $fieldKey scan status: ${scannedFields[fieldKey]}');
+      print('BEFORE SCAN: Controller text: ${controller.text}');
       
       // Clean field label for display
       String cleanLabel = label.replaceAll(':', '').trim();
@@ -1715,17 +1725,22 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         
         // Validate the scanned barcode matches the expected value
         bool isValid = true;
+        String validationMessage = '';
+        
         if (controller.text.isNotEmpty) {
           isValid = result == controller.text;
+          if (!isValid) {
+            validationMessage = 'Kode tidak sesuai! Harap scan kode yang sesuai dengan $cleanLabel.\nExpected: ${controller.text}\nScanned: $result';
+          }
         }
         
         if (!isValid) {
           // Show error if scanned code doesn't match
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Kode tidak sesuai! Harap scan kode yang sesuai dengan $cleanLabel'),
+              content: Text(validationMessage),
               backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
+              duration: const Duration(seconds: 4),
             ),
           );
           return;
@@ -1765,17 +1780,16 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$cleanLabel berhasil divalidasi: $result'),
+            content: Text('✓ $cleanLabel berhasil divalidasi: $result'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
         );
+        
+        print('AFTER SUCCESSFUL SCAN: Field $fieldKey scan status: ${scannedFields[fieldKey]}');
       } else {
         print('No barcode scanned or scan cancelled for $cleanLabel');
       }
-      
-      // Log scan status after returning from scanner
-      print('AFTER SCAN RETURN: Field $fieldKey scan status: ${scannedFields[fieldKey]}');
       
     } catch (e) {
       print('Error opening barcode scanner: $e');
@@ -1788,7 +1802,6 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     }
   }
   
-  // Helper method to force rebuild UI
   // Add barcode scanner functionality for input fields (not validation)
   Future<void> _openBarcodeScannerForInput(String label, TextEditingController controller, String fieldKey) async {
     try {
@@ -1838,17 +1851,16 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$cleanLabel berhasil diisi: $result'),
+            content: Text('✓ $cleanLabel berhasil diisi: $result'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
         );
+        
+        print('AFTER SUCCESSFUL INPUT SCAN: Field $fieldKey scan status: ${scannedFields[fieldKey]}');
       } else {
         print('No barcode scanned or scan cancelled for $cleanLabel');
       }
-      
-      // Log scan status after returning from scanner
-      print('AFTER SCAN INPUT RETURN: Field $fieldKey scan status: ${scannedFields[fieldKey]}');
       
     } catch (e) {
       print('Error opening barcode scanner: $e');
@@ -2165,14 +2177,13 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     // Check if this field has been scanned
     bool isScanned = fieldKey.isNotEmpty && scannedFields[fieldKey] == true;
     
-    // Debug output
-    print('BUILDING FIELD: $label (key=$fieldKey), isScanned=$isScanned, text=${controller.text}');
-    print('CURRENT SCAN MAP: $scannedFields');
-    
     // Determine if we should show checkmark
     bool showCheckmark = isScanned && controller.text.isNotEmpty;
     
-    print('CHECKMARK STATUS: $label should show checkmark: $showCheckmark');
+    // Only print debug info if something changed (to reduce spam)
+    if (showCheckmark) {
+      print('CHECKMARK DISPLAYED: $label is validated (scanned: $isScanned, hasText: ${controller.text.isNotEmpty})');
+    }
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2204,7 +2215,8 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                         )
                       : showCheckmark
                         ? Container(
-                            margin: const EdgeInsets.all(8.0),
+                            margin: const EdgeInsets.all(4.0),
+                            padding: const EdgeInsets.all(2.0),
                             decoration: const BoxDecoration(
                               color: Colors.green,
                               shape: BoxShape.circle,
@@ -2241,7 +2253,6 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   }
                 },
               ),
-            // REMOVE: The duplicate checkmark container that was here
           ],
         ),
         if (errorText.isNotEmpty)

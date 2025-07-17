@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../models/return_model.dart';
 import 'dart:async'; // Import for Timer
 import '../widgets/barcode_scanner_widget.dart'; // Fix barcode scanner import
+import '../widgets/checkmark_widget.dart'; // Add checkmark widget import
 
 // CHECKMARK FIX: This file has been updated to fix the checkmark display issue.
 // NEW APPROACH: Using stream-based barcode scanning for reliable checkmark validation
@@ -1152,32 +1153,27 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       print('🎯 CARTRIDGE [${widget.sectionId}]: Field updated with barcode: $barcode');
     }
     
-    // Update scan status
-    setState(() {
-      print('🎯 CARTRIDGE [${widget.sectionId}]: SETTING scannedFields[$fieldKey] = true');
-      scannedFields[fieldKey] = true;
-      
-      // Update validation flags
-      _updateValidationForField(fieldKey, barcode);
-    });
-    
-    // Force a rebuild to ensure UI updates
+    // CRITICAL: Only one setState call with all updates
     if (mounted) {
       setState(() {
-        // Force rebuild
+        print('🎯 CARTRIDGE [${widget.sectionId}]: SETTING scannedFields[$fieldKey] = true');
+        scannedFields[fieldKey] = true;
+        
+        // Update validation flags
+        _updateValidationForField(fieldKey, barcode);
+        
+        print('✅ CARTRIDGE [${widget.sectionId}]: $fieldKey validated with checkmark - scannedFields[$fieldKey] = ${scannedFields[fieldKey]}');
       });
+      
+      // Show success message AFTER setState
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ [$sectionId] $label berhasil divalidasi: $barcode'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
-    
-    print('✅ CARTRIDGE [${widget.sectionId}]: $fieldKey validated with checkmark - scannedFields[$fieldKey] = ${scannedFields[fieldKey]}');
-    
-    // Show success message
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('✅ [$sectionId] $label berhasil divalidasi: $barcode'),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
   
   // Helper method to get controller for field key
@@ -2137,19 +2133,16 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       fieldKey = 'catridgeFisik';
     }
     
-    // Check if this field has been scanned
+    // Check if this field has been scanned - SIMPLIFIED
     bool isScanned = fieldKey.isNotEmpty && scannedFields[fieldKey] == true;
     
-    // Determine if we should show checkmark
+    // SIMPLIFIED CHECKMARK LOGIC
     bool showCheckmark = isScanned && controller.text.isNotEmpty;
     
-    // ENHANCED DEBUG - Always log the checkmark status
-    print('🔍 CHECKMARK DEBUG [$sectionId]: $label');
-    print('   - fieldKey: $fieldKey');
-    print('   - isScanned: $isScanned (scannedFields[$fieldKey] = ${scannedFields[fieldKey]})');
-    print('   - hasText: ${controller.text.isNotEmpty} ("${controller.text}")');
-    print('   - showCheckmark: $showCheckmark');
-    print('   - scannedFields state: $scannedFields');
+    // DEBUG ONLY WHEN NEEDED
+    if (isScanned || showCheckmark) {
+      print('🔍 [$sectionId] CHECKMARK for $label: scanned=$isScanned, hasText=${controller.text.isNotEmpty}, show=$showCheckmark');
+    }
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2173,13 +2166,13 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   hintText: 'Masukkan $label',
                   contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                   isDense: true,
-                  // Show loading indicator when validating (but NOT checkmark here)
+                  // Show loading indicator when validating
                   suffixIcon: isLoading
                       ? Transform.scale(
                           scale: 0.5,
                           child: const CircularProgressIndicator(),
                         )
-                      : null, // Remove checkmark from suffixIcon
+                      : null,
                   enabledBorder: UnderlineInputBorder(
                     borderSide: BorderSide(
                       color: isValid ? Colors.grey : Colors.red,
@@ -2190,72 +2183,31 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   ),
                 ),
                 onEditingComplete: onEditingComplete,
-                readOnly: isScanInput ? false : readOnly, // Don't make scan input fields read-only
+                readOnly: isScanInput ? false : readOnly,
               ),
             ),
-            // SEPARATE CHECKMARK WIDGET - This should be more reliable
-            if (showCheckmark)
-              Container(
-                margin: const EdgeInsets.only(left: 8, bottom: 4),
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
-                  color: Colors.green,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.white,
-                  size: 16.0,
-                ),
-              ),
+            // DEDICATED CHECKMARK WIDGET - ALWAYS REBUILD
+            CheckmarkWidget(
+              isVisible: showCheckmark,
+              sectionId: sectionId,
+              fieldLabel: label,
+            ),
             if (hasScanner || isScanInput)
               IconButton(
                 icon: const Icon(Icons.qr_code_scanner, color: Colors.blue),
                 onPressed: () {
-                  print('🔍 SCANNER BUTTON PRESSED for $label (fieldKey: $fieldKey)');
-                  // Use unified barcode scanning approach
+                  print('🔍 [$sectionId] SCANNER BUTTON PRESSED for $label (fieldKey: $fieldKey)');
                   _openBarcodeScanner(label, controller, fieldKey);
                 },
               ),
-            // DEBUG: Add test button for web testing (when camera doesn't work)
+            // DEBUG BUTTON - REMOVE IN PRODUCTION
             if ((hasScanner || isScanInput) && controller.text.isNotEmpty)
               IconButton(
                 icon: const Icon(Icons.check_circle, color: Colors.orange),
                 tooltip: 'Test Validate (Debug)',
                 onPressed: () {
-                  print('🧪 DEBUG TEST BUTTON PRESSED for $label (fieldKey: $fieldKey)');
-                  // Simulate successful scan validation
-                  setState(() {
-                    print('🧪 DEBUG: Simulating scan validation for $fieldKey');
-                    scannedFields[fieldKey] = true;
-                    print('🧪 DEBUG: scannedFields[$fieldKey] = ${scannedFields[fieldKey]}');
-                    
-                    // Set field-specific validation flags
-                    if (label.contains('No. Catridge')) {
-                      isNoCatridgeValid = true;
-                      noCatridgeError = '';
-                    } else if (label.contains('No. Seal')) {
-                      isNoSealValid = true;
-                      noSealError = '';
-                    } else if (label.contains('Bag Code')) {
-                      isBagCodeValid = true;
-                      bagCodeError = '';
-                    } else if (label.contains('Seal Code')) {
-                      isSealCodeReturnValid = true;
-                      sealCodeReturnError = '';
-                    } else if (label.contains('Catridge Fisik')) {
-                      isCatridgeFisikValid = true;
-                      catridgeFisikError = '';
-                    }
-                  });
-                  
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('🧪 DEBUG: $label validated!'),
-                      backgroundColor: Colors.orange,
-                      duration: const Duration(seconds: 1),
-                    ),
-                  );
+                  print('🧪 [$sectionId] DEBUG TEST BUTTON for $label');
+                  _simulateSuccessfulScan(fieldKey, label);
                 },
               ),
           ],
@@ -2273,6 +2225,42 @@ class _CartridgeSectionState extends State<CartridgeSection> {
           ),
       ],
     );
+  }
+
+  // NEW: Simulate successful scan for testing
+  void _simulateSuccessfulScan(String fieldKey, String label) {
+    if (mounted) {
+      setState(() {
+        print('🧪 [$sectionId] SIMULATING scan validation for $fieldKey');
+        scannedFields[fieldKey] = true;
+        
+        // Set field-specific validation flags
+        if (label.contains('No. Catridge')) {
+          isNoCatridgeValid = true;
+          noCatridgeError = '';
+        } else if (label.contains('No. Seal')) {
+          isNoSealValid = true;
+          noSealError = '';
+        } else if (label.contains('Bag Code')) {
+          isBagCodeValid = true;
+          bagCodeError = '';
+        } else if (label.contains('Seal Code')) {
+          isSealCodeReturnValid = true;
+          sealCodeReturnError = '';
+        } else if (label.contains('Catridge Fisik')) {
+          isCatridgeFisikValid = true;
+          catridgeFisikError = '';
+        }
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('🧪 [$sectionId] $label validated (TEST)!'),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
   }
 
   // Simple dropdown field with validation
@@ -2557,5 +2545,6 @@ class DetailSection extends StatelessWidget {
         .toList();
   }
 }
+
 
 

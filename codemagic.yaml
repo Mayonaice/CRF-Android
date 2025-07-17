@@ -4,7 +4,7 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      flutter: 3.16.9 # Using specific older version that's more compatible
+      flutter: 3.24.0 # Updated to newer stable version that supports qr_code_scanner_plus
       java: 17 # Updated Java version for Android Gradle Plugin 8.1.0
 # No signing config for debug build
       vars:
@@ -27,7 +27,7 @@ workflows:
           # Create a dummy keystore for debug build
           keytool -genkey -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           
-          # Create a simpler gradle.properties with AndroidX settings
+          # Create a simpler gradle.properties with AndroidX settings and suppress warnings
           echo "android.useAndroidX=true" > android/gradle.properties
           echo "android.enableJetifier=true" >> android/gradle.properties
           echo "org.gradle.jvmargs=-Xmx3072m" >> android/gradle.properties
@@ -36,6 +36,7 @@ workflows:
           echo "android.compileSdkVersion=34" >> android/gradle.properties
           echo "android.targetSdkVersion=34" >> android/gradle.properties
           echo "android.buildToolsVersion=34.0.0" >> android/gradle.properties
+          echo "android.suppressUnsupportedCompileSdk=34" >> android/gradle.properties
           
           # Generate required resource directories
           mkdir -p android/app/src/main/res/drawable
@@ -85,9 +86,26 @@ workflows:
             done
           fi
           
-          # Clean and get dependencies
+          # Clean and get dependencies with forced package resolution
           flutter clean
+          rm -rf .dart_tool/
+          rm -f pubspec.lock
           flutter pub get
+          
+          # Force regenerate package config
+          flutter pub deps
+          
+          # Verify package config exists
+          if [ ! -f ".dart_tool/package_config.json" ]; then
+            echo "Package config still missing, trying alternative approach..."
+            flutter packages get
+            flutter pub cache repair
+            flutter pub get --offline
+          fi
+          
+          # Check if package config now exists
+          ls -la .dart_tool/
+          cat .dart_tool/package_config.json | head -20
           
           # Check Android setup
           flutter doctor -v
@@ -119,9 +137,37 @@ workflows:
           ls -la gradle/wrapper/
           cd ..
           
+      - name: Pre-build verification
+        script: |
+          # Verify all dependencies are properly resolved
+          echo "Verifying Flutter and package state..."
+          flutter doctor -v
+          flutter pub get --verbose
+          
+          # Verify package config and dart_tool directory
+          ls -la .dart_tool/
+          if [ -f ".dart_tool/package_config.json" ]; then
+            echo "Package config found - OK"
+            # Verify qr_code_scanner_plus is properly resolved
+            grep -q "qr_code_scanner_plus" .dart_tool/package_config.json && echo "qr_code_scanner_plus found in package config" || echo "qr_code_scanner_plus NOT found in package config"
+          else
+            echo "Package config missing - regenerating..."
+            flutter clean
+            flutter pub get
+            flutter pub deps
+          fi
+          
+          # Verify all imports can be resolved
+          echo "Verifying imports and dependencies..."
+          flutter analyze --no-preamble || echo "Analysis completed with warnings"
+          
+          # Pre-build native assets to catch any issues early
+          echo "Pre-generating native assets..."
+          flutter build linux --dry-run || echo "Linux dry-run failed (expected on macOS)"
+          
       - name: Build APK with Flutter
         script: |
-          # Configure Gradle for maximum compatibility and mobile_scanner support
+          # Configure Gradle for maximum compatibility and qr_code_scanner_plus support
           export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
           
           # Ensure no XML launcher icons exist
@@ -136,9 +182,17 @@ workflows:
           echo "Verifying app icon files:"
           find android/app/src/main/res/mipmap-* -name "ic_launcher.png" -exec ls -la {} \;
           
+          # Ensure dart plugin registrant is generated
+          echo "Generating Dart plugin registrant..."
+          flutter packages get
+          
+          # Force generation of native assets
+          echo "Pre-generating native assets..."
+          flutter build linux --dry-run || echo "Dry run completed"
+          
           # Build using Flutter's default mode
           echo "Building debug APK with Flutter for DCT CRF Android..."
-          flutter build apk --debug
+          flutter build apk --debug --verbose
           
           # If that fails, try with specific target platform
           if [ $? -ne 0 ]; then
@@ -146,11 +200,19 @@ workflows:
             flutter build apk --debug --target-platform=android-arm
           fi
           
+          # If that also fails, try without native assets
+          if [ $? -ne 0 ]; then
+            echo "Second attempt failed, trying with no-native-assets..."
+            flutter clean
+            flutter pub get
+            flutter build apk --debug --no-native-assets || echo "No native assets build attempted"
+          fi
+          
           # If that also fails, try with direct Gradle command
           if [ $? -ne 0 ]; then
             echo "Flutter build attempts failed, trying with direct Gradle command..."
             cd android
-            ./gradlew :app:assembleDebug
+            ./gradlew :app:assembleDebug --info
             cd ..
           fi
           

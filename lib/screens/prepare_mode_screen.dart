@@ -2725,66 +2725,58 @@ class _PrepareModePageState extends State<PrepareModePage> {
       String cleanLabel = fieldLabel.replaceAll(' :', '').trim();
       
       // Navigate to barcode scanner
-      final result = await Navigator.push<String?>(
-        context,
+      await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => BarcodeScannerWidget(
             title: 'Scan $cleanLabel',
             onBarcodeDetected: (String barcode) {
-              Navigator.of(context).pop(barcode);
+              print('Barcode detected for $cleanLabel: $barcode');
+              
+              // Fill the field with scanned barcode
+              setState(() {
+                controller.text = barcode;
+              });
+              
+              // Show success message
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('$cleanLabel berhasil diisi: $barcode'),
+                  backgroundColor: Colors.green,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+              
+              // Trigger the same logic as manual input
+              if (cleanLabel == 'ID CRF') {
+                // Trigger API call to fetch prepare data
+                Future.delayed(Duration(milliseconds: 300), () {
+                  _fetchPrepareData();
+                });
+              } else if (cleanLabel == 'No. Catridge') {
+                // Find catridge index for this controller
+                for (int i = 0; i < _catridgeControllers.length; i++) {
+                  if (_catridgeControllers[i].isNotEmpty && _catridgeControllers[i][0] == controller) {
+                    Future.delayed(Duration(milliseconds: 300), () {
+                      _lookupCatridgeAndCreateDetail(i, barcode);
+                    });
+                    break;
+                  }
+                }
+              } else if (cleanLabel == 'Seal Catridge') {
+                // Find catridge index for this controller
+                for (int i = 0; i < _catridgeControllers.length; i++) {
+                  if (_catridgeControllers[i].length > 1 && _catridgeControllers[i][1] == controller) {
+                    Future.delayed(Duration(milliseconds: 300), () {
+                      _validateSealAndUpdateDetail(i, barcode);
+                    });
+                    break;
+                  }
+                }
+              }
             },
           ),
         ),
       );
-      
-      // If barcode was scanned
-      if (result != null && result.isNotEmpty) {
-        print('Barcode detected for $cleanLabel: $result');
-        
-        // Fill the field with scanned barcode
-        setState(() {
-          controller.text = result;
-        });
-        
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$cleanLabel berhasil diisi: $result'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-        
-        // Trigger the same logic as manual input
-        if (cleanLabel == 'ID CRF') {
-          // Trigger API call to fetch prepare data
-          Future.delayed(Duration(milliseconds: 300), () {
-            _fetchPrepareData();
-          });
-        } else if (cleanLabel == 'No. Catridge') {
-          // Find catridge index for this controller
-          for (int i = 0; i < _catridgeControllers.length; i++) {
-            if (_catridgeControllers[i].isNotEmpty && _catridgeControllers[i][0] == controller) {
-              Future.delayed(Duration(milliseconds: 300), () {
-                _lookupCatridgeAndCreateDetail(i, result);
-              });
-              break;
-            }
-          }
-        } else if (cleanLabel == 'Seal Catridge') {
-          // Find catridge index for this controller
-          for (int i = 0; i < _catridgeControllers.length; i++) {
-            if (_catridgeControllers[i].length > 1 && _catridgeControllers[i][1] == controller) {
-              Future.delayed(Duration(milliseconds: 300), () {
-                _validateSealAndUpdateDetail(i, result);
-              });
-              break;
-            }
-          }
-        }
-      } else {
-        print('Scan cancelled or empty result for $cleanLabel');
-      }
     } catch (e) {
       print('Error opening barcode scanner: $e');
       ScaffoldMessenger.of(context).showSnackBar(

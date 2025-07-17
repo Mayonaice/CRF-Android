@@ -90,11 +90,30 @@ class _ReturnModePageState extends State<ReturnModePage> {
       final String barcode = result['barcode'];
       final String fieldKey = result['fieldKey'];
       final String label = result['label'];
+      final String? sectionId = result['sectionId']; // NEW: Get section ID
       
-      // Find the appropriate cartridge section and update its scan status
-      for (var key in _cartridgeSectionKeys) {
-        if (key.currentState != null) {
-          key.currentState!._handleStreamBarcodeResult(fieldKey, barcode, label);
+      // NEW: Only update the specific section that initiated the scan
+      if (sectionId != null) {
+        // Find the section with matching ID
+        for (int i = 0; i < _cartridgeSectionKeys.length; i++) {
+          final key = _cartridgeSectionKeys[i];
+          if (key.currentState != null) {
+            // Check if this is the target section
+            final state = key.currentState!;
+            if (state.sectionId == sectionId) {
+              print('🎯 TARGETING SPECIFIC SECTION: $sectionId');
+              state._handleStreamBarcodeResult(fieldKey, barcode, label);
+              break; // Stop after finding the target section
+            }
+          }
+        }
+      } else {
+        // Fallback: update all sections (old behavior)
+        print('🎯 NO SECTION ID - UPDATING ALL SECTIONS');
+        for (var key in _cartridgeSectionKeys) {
+          if (key.currentState != null) {
+            key.currentState!._handleStreamBarcodeResult(fieldKey, barcode, label);
+          }
         }
       }
     });
@@ -643,6 +662,7 @@ class _ReturnModePageState extends State<ReturnModePage> {
             title: 'Scan ID Tool',
             fieldKey: 'idTool',
             fieldLabel: 'ID Tool',
+            sectionId: null, // ID Tool doesn't belong to a specific section
             onBarcodeDetected: (String barcode) {
               // This will be handled by stream, but we still need the callback
               print('🎯 ID Tool callback: $barcode');
@@ -869,6 +889,7 @@ class _ReturnModePageState extends State<ReturnModePage> {
                                 title: sectionTitle,
                                 returnData: data,
                                 parentIdToolController: _idToolController,
+                                sectionId: 'section_$i', // NEW: Add unique section ID
                               ),
                               const SizedBox(height: 24),
                             ],
@@ -889,6 +910,7 @@ class _ReturnModePageState extends State<ReturnModePage> {
                             title: 'Catridge 1',
                             returnData: null,
                             parentIdToolController: _idToolController,
+                            sectionId: 'section_0', // NEW: Add unique section ID
                           ),
                           const SizedBox(height: 24),
                         ],
@@ -1043,12 +1065,14 @@ class CartridgeSection extends StatefulWidget {
   final String title;
   final ReturnCatridgeData? returnData;
   final TextEditingController parentIdToolController;
+  final String sectionId; // NEW: Add section ID
   
   const CartridgeSection({
     Key? key, 
     required this.title, 
     this.returnData,
     required this.parentIdToolController,
+    required this.sectionId, // NEW: Require section ID
   }) : super(key: key);
 
   @override
@@ -1063,6 +1087,9 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   // Modified to only have two options
   final List<String> kondisiSealOptions = ['Good', 'Bad'];
   final List<String> kondisiCatridgeOptions = ['New', 'Used'];
+  
+  // NEW: Getter for section ID
+  String get sectionId => widget.sectionId;
 
   final TextEditingController noCatridgeController = TextEditingController();
   final TextEditingController noSealController = TextEditingController();
@@ -1095,20 +1122,23 @@ class _CartridgeSectionState extends State<CartridgeSection> {
 
   // NEW: Method to handle barcode results from stream
   void _handleStreamBarcodeResult(String fieldKey, String barcode, String label) {
-    print('🎯 CARTRIDGE: Handling stream result for $fieldKey: $barcode');
+    print('🎯 CARTRIDGE [${widget.sectionId}]: Handling stream result for $fieldKey: $barcode');
+    print('🎯 CARTRIDGE [${widget.sectionId}]: Current scannedFields state: $scannedFields');
     
     // Get the appropriate controller
     TextEditingController? controller = _getControllerForFieldKey(fieldKey);
     if (controller == null) {
-      print('❌ No controller found for field: $fieldKey');
+      print('❌ CARTRIDGE [${widget.sectionId}]: No controller found for field: $fieldKey');
       return;
     }
+    
+    print('🎯 CARTRIDGE [${widget.sectionId}]: Controller current value: "${controller.text}"');
     
     // Validate barcode if field already has content
     if (controller.text.isNotEmpty && controller.text != barcode) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('❌ Kode tidak sesuai! Expected: ${controller.text}, Scanned: $barcode'),
+          content: Text('❌ [${widget.sectionId}] Kode tidak sesuai! Expected: ${controller.text}, Scanned: $barcode'),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 3),
         ),
@@ -1119,22 +1149,31 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     // Update the field if it's empty
     if (controller.text.isEmpty) {
       controller.text = barcode;
+      print('🎯 CARTRIDGE [${widget.sectionId}]: Field updated with barcode: $barcode');
     }
     
     // Update scan status
     setState(() {
+      print('🎯 CARTRIDGE [${widget.sectionId}]: SETTING scannedFields[$fieldKey] = true');
       scannedFields[fieldKey] = true;
       
       // Update validation flags
       _updateValidationForField(fieldKey, barcode);
     });
     
-    print('✅ CARTRIDGE: $fieldKey validated with checkmark');
+    // Force a rebuild to ensure UI updates
+    if (mounted) {
+      setState(() {
+        // Force rebuild
+      });
+    }
+    
+    print('✅ CARTRIDGE [${widget.sectionId}]: $fieldKey validated with checkmark - scannedFields[$fieldKey] = ${scannedFields[fieldKey]}');
     
     // Show success message
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('✅ $label berhasil divalidasi: $barcode'),
+        content: Text('✅ [$sectionId] $label berhasil divalidasi: $barcode'),
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 2),
       ),
@@ -1823,7 +1862,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   // NEW: Streamlined barcode scanner for validation using stream approach
   Future<void> _openBarcodeScanner(String label, TextEditingController controller, String fieldKey) async {
     try {
-      print('🎯 OPENING SCANNER: $label for field $fieldKey');
+      print('🎯 OPENING SCANNER: $label for field $fieldKey in section $sectionId');
       
       // Clean field label for display
       String cleanLabel = label.replaceAll(':', '').trim();
@@ -1836,15 +1875,16 @@ class _CartridgeSectionState extends State<CartridgeSection> {
             title: 'Scan $cleanLabel',
             fieldKey: fieldKey,
             fieldLabel: cleanLabel,
+            sectionId: sectionId, // NEW: Pass section ID to scanner
             onBarcodeDetected: (String barcode) {
               // Stream will handle the result, this is just for legacy compatibility
-              print('🎯 SCANNER CALLBACK: $barcode for $fieldKey');
+              print('🎯 SCANNER CALLBACK: $barcode for $fieldKey in section $sectionId');
             },
           ),
         ),
       );
       
-      print('🎯 SCANNER CLOSED: for $fieldKey');
+      print('🎯 SCANNER CLOSED: for $fieldKey in section $sectionId');
       
     } catch (e) {
       print('Error opening barcode scanner: $e');
@@ -2103,10 +2143,13 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     // Determine if we should show checkmark
     bool showCheckmark = isScanned && controller.text.isNotEmpty;
     
-    // Debug only when checkmark should show
-    if (showCheckmark) {
-      print('✅ CHECKMARK VISIBLE: $label (scanned: $isScanned, hasText: ${controller.text.isNotEmpty})');
-    }
+    // ENHANCED DEBUG - Always log the checkmark status
+    print('🔍 CHECKMARK DEBUG [$sectionId]: $label');
+    print('   - fieldKey: $fieldKey');
+    print('   - isScanned: $isScanned (scannedFields[$fieldKey] = ${scannedFields[fieldKey]})');
+    print('   - hasText: ${controller.text.isNotEmpty} ("${controller.text}")');
+    print('   - showCheckmark: $showCheckmark');
+    print('   - scannedFields state: $scannedFields');
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2514,3 +2557,5 @@ class DetailSection extends StatelessWidget {
         .toList();
   }
 }
+
+

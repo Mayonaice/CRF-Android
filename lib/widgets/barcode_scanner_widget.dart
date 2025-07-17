@@ -17,14 +17,16 @@ class BarcodeResultStream {
     required String barcode,
     required String fieldKey,
     required String label,
+    String? sectionId, // NEW: Add section ID to target specific section
   }) {
     _controller.add({
       'barcode': barcode,
       'fieldKey': fieldKey,
       'label': label,
+      'sectionId': sectionId, // NEW: Include section ID
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     });
-    print('🎯 STREAM: Barcode result added to stream - $fieldKey: $barcode');
+    print('🎯 STREAM: Barcode result added to stream - $fieldKey: $barcode for section: $sectionId');
   }
 
   void dispose() {
@@ -38,6 +40,7 @@ class BarcodeScannerWidget extends StatefulWidget {
   final bool forceShowCheckmark; // Add this parameter
   final String? fieldKey; // NEW: Add field key to identify which field is being scanned
   final String? fieldLabel; // NEW: Add field label
+  final String? sectionId; // NEW: Add section ID to target specific section
 
   const BarcodeScannerWidget({
     Key? key,
@@ -46,6 +49,7 @@ class BarcodeScannerWidget extends StatefulWidget {
     this.forceShowCheckmark = false, // Changed default to false
     this.fieldKey,
     this.fieldLabel,
+    this.sectionId, // NEW: Add section ID parameter
   }) : super(key: key);
 
   @override
@@ -208,6 +212,7 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
               barcode: code,
               fieldKey: widget.fieldKey!,
               label: widget.fieldLabel ?? widget.title,
+              sectionId: widget.sectionId, // NEW: Pass section ID to stream
             );
           }
           

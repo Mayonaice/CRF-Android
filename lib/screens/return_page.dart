@@ -1069,7 +1069,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     if (mounted) {
       setState(() {
         // Just trigger rebuild
-        print("Forcing UI rebuild");
+        print("Forcing UI rebuild for checkmark display");
       });
     }
   }
@@ -1130,6 +1130,18 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     
     // Set default branch code
     branchCodeController.text = _branchCode;
+    
+    // Initialize scannedFields map
+    scannedFields = {
+      'noCatridge': false,
+      'noSeal': false,
+      'catridgeFisik': false,
+      'bagCode': false,
+      'sealCode': false,
+    };
+    
+    // Debug log
+    print('INIT: scannedFields initialized: $scannedFields');
   }
 
   @override
@@ -1747,6 +1759,9 @@ class _CartridgeSectionState extends State<CartridgeSection> {
           }
         });
         
+        // Force rebuild to ensure checkmark displays properly
+        _forceRebuild();
+        
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1816,6 +1831,9 @@ class _CartridgeSectionState extends State<CartridgeSection> {
             catridgeFisikError = '';
           }
         });
+        
+        // Force rebuild to ensure checkmark displays properly
+        _forceRebuild();
         
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1887,6 +1905,18 @@ class _CartridgeSectionState extends State<CartridgeSection> {
             print('Updated scan status for $fieldKey to true');
             print('Current scan status: $scannedFields');
           });
+          
+          // Force rebuild to ensure checkmark displays properly
+          _forceRebuild();
+          
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$fieldName berhasil di-scan'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
         }
       } else {
         print('Scan cancelled or empty result for $fieldName');
@@ -2142,16 +2172,6 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     // Determine if we should show checkmark
     bool showCheckmark = isScanned && controller.text.isNotEmpty;
     
-    // Create circle decoration
-    BoxDecoration circleDecoration = BoxDecoration(
-      shape: BoxShape.circle,
-      border: Border.all(
-        color: showCheckmark ? Colors.green : Colors.grey,
-        width: 2,
-      ),
-      color: showCheckmark ? Colors.green : Colors.transparent,
-    );
-    
     print('CHECKMARK STATUS: $label should show checkmark: $showCheckmark');
     
     return Column(
@@ -2176,7 +2196,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   hintText: 'Masukkan $label',
                   contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                   isDense: true,
-                  // Show loading indicator when validating
+                  // Show loading indicator when validating or a checkmark when scanned
                   suffixIcon: isLoading
                       ? Transform.scale(
                           scale: 0.5,
@@ -2185,7 +2205,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                       : showCheckmark
                         ? Container(
                             margin: const EdgeInsets.all(8.0),
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               color: Colors.green,
                               shape: BoxShape.circle,
                             ),
@@ -2221,16 +2241,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   }
                 },
               ),
-            // NEW: Add a validation status icon that shows empty circle or filled checkmark
-            Container(
-              width: 24,
-              height: 24,
-              margin: const EdgeInsets.only(left: 4),
-              decoration: circleDecoration,
-              child: showCheckmark
-                  ? const Icon(Icons.check, color: Colors.white, size: 16)
-                  : null,
-              ),
+            // REMOVE: The duplicate checkmark container that was here
           ],
         ),
         if (errorText.isNotEmpty)

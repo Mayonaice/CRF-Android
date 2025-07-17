@@ -1066,11 +1066,18 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   
   // Add a method to force rebuild the UI
   void _forceRebuild() {
+    print('🔄 _forceRebuild() called');
+    print('🔄 mounted: $mounted');
     if (mounted) {
+      print('🔄 About to call setState() for rebuild');
       setState(() {
         // Force a complete UI rebuild to ensure checkmarks display properly
-        print("UI rebuild triggered - checkmarks should now be visible");
+        print("🔄 Inside setState() - UI rebuild triggered");
+        print("🔄 Current scannedFields in rebuild: $scannedFields");
       });
+      print('🔄 setState() completed');
+    } else {
+      print('❌ Widget not mounted, cannot rebuild');
     }
   }
 
@@ -1608,11 +1615,14 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   }
 
   void _loadReturnData() {
+    print('📊 _loadReturnData() called');
     if (widget.returnData != null) {
+      print('📊 Loading return data...');
       setState(() {
         _isValidating = true;
       });
       
+      print('📊 Setting controller values...');
       noCatridgeController.text = widget.returnData!.catridgeCode;
       noSealController.text = widget.returnData!.catridgeSeal;
       // Clear catridgeFisik field - it will be filled by scanning
@@ -1628,6 +1638,8 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         sealCodeReturnController.text = widget.returnData!.sealCodeReturn!;
       }
       
+      print('📊 Controller values set: noCatridge="${noCatridgeController.text}", noSeal="${noSealController.text}", bagCode="${bagCodeController.text}", sealCode="${sealCodeReturnController.text}"');
+      
       // Reset validation state for pre-filled fields
       isNoCatridgeValid = noCatridgeController.text.isNotEmpty;
       isNoSealValid = noSealController.text.isNotEmpty;
@@ -1635,10 +1647,14 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       isBagCodeValid = bagCodeController.text.isNotEmpty;
       isSealCodeReturnValid = sealCodeReturnController.text.isNotEmpty;
       
+      print('📊 Validation flags set: isNoCatridgeValid=$isNoCatridgeValid, isNoSealValid=$isNoSealValid, isBagCodeValid=$isBagCodeValid, isSealCodeReturnValid=$isSealCodeReturnValid');
+      
       // IMPORTANT: Reset all scanned fields flags because user needs to validate by scanning
+      print('📊 BEFORE RESET: scannedFields = $scannedFields');
       scannedFields.forEach((key, value) {
         scannedFields[key] = false;
       });
+      print('📊 AFTER RESET: scannedFields = $scannedFields');
       
       print('Scan states reset after loading data:');
       print('Scanned fields: $scannedFields');
@@ -1647,6 +1663,9 @@ class _CartridgeSectionState extends State<CartridgeSection> {
       setState(() {
         _isValidating = false;
       });
+      print('📊 _loadReturnData() completed');
+    } else {
+      print('📊 No return data to load');
     }
   }
 
@@ -1754,7 +1773,10 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         // Update the scanned status with setState to trigger UI update
         setState(() {
           // IMPORTANT: Directly update the scannedFields map
+          print('🎯 BEFORE UPDATE: scannedFields[$fieldKey] = ${scannedFields[fieldKey]}');
           scannedFields[fieldKey] = true;
+          print('🎯 AFTER UPDATE: scannedFields[$fieldKey] = ${scannedFields[fieldKey]}');
+          print('🎯 FULL MAP: $scannedFields');
           print('SCAN SUCCESS: Field $fieldKey marked as scanned with value: $result');
           print('SCAN STATUS MAP: $scannedFields');
           
@@ -1762,20 +1784,35 @@ class _CartridgeSectionState extends State<CartridgeSection> {
           if (label.contains('No. Catridge')) {
             isNoCatridgeValid = true;
             noCatridgeError = '';
+            print('✅ Set isNoCatridgeValid = true');
           } else if (label.contains('No. Seal')) {
             isNoSealValid = true;
             noSealError = '';
+            print('✅ Set isNoSealValid = true');
           } else if (label.contains('Bag Code')) {
             isBagCodeValid = true;
             bagCodeError = '';
+            print('✅ Set isBagCodeValid = true');
           } else if (label.contains('Seal Code')) {
             isSealCodeReturnValid = true;
             sealCodeReturnError = '';
+            print('✅ Set isSealCodeReturnValid = true');
           }
         });
         
-        // Force rebuild to ensure checkmark displays properly
+        print('🔄 About to call _forceRebuild()');
+        // Force rebuild to ensure checkmark displays properly  
         _forceRebuild();
+        
+        // ADDITIONAL: Wait a frame then rebuild again to ensure UI update
+        Future.delayed(Duration.zero, () {
+          if (mounted) {
+            print('🔄 DELAYED REBUILD TRIGGERED');
+            setState(() {
+              print('🔄 DELAYED setState() called');
+            });
+          }
+        });
         
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1835,16 +1872,21 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         // Update the scanned status with setState to trigger UI update
         setState(() {
           // IMPORTANT: Directly update the scannedFields map
+          print('📝 INPUT SCAN - BEFORE UPDATE: scannedFields[$fieldKey] = ${scannedFields[fieldKey]}');
           scannedFields[fieldKey] = true;
+          print('📝 INPUT SCAN - AFTER UPDATE: scannedFields[$fieldKey] = ${scannedFields[fieldKey]}');
+          print('📝 INPUT SCAN - FULL MAP: $scannedFields');
           print('INPUT SCAN SUCCESS: Field $fieldKey marked as scanned with value: $result');
           print('SCAN STATUS MAP: $scannedFields');
           
           if (label.contains('Catridge Fisik')) {
             isCatridgeFisikValid = true;
             catridgeFisikError = '';
+            print('✅ Set isCatridgeFisikValid = true');
           }
         });
         
+        print('🔄 INPUT SCAN - About to call _forceRebuild()');
         // Force rebuild to ensure checkmark displays properly
         _forceRebuild();
         
@@ -2180,10 +2222,15 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     // Determine if we should show checkmark
     bool showCheckmark = isScanned && controller.text.isNotEmpty;
     
-    // Only print debug info if something changed (to reduce spam)
-    if (showCheckmark) {
-      print('CHECKMARK DISPLAYED: $label is validated (scanned: $isScanned, hasText: ${controller.text.isNotEmpty})');
-    }
+    // COMPREHENSIVE DEBUG - ALWAYS PRINT FOR NOW
+    print('═══════ FIELD DEBUG: $label ═══════');
+    print('fieldKey: "$fieldKey"');
+    print('scannedFields map: $scannedFields');
+    print('isScanned: $isScanned (fieldKey.isNotEmpty: ${fieldKey.isNotEmpty}, scannedFields[$fieldKey]: ${scannedFields[fieldKey]}');
+    print('controller.text: "${controller.text}" (isEmpty: ${controller.text.isEmpty})');
+    print('showCheckmark: $showCheckmark');
+    print('isLoading: $isLoading');
+    print('══════════════════════════════════');
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2207,27 +2254,13 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   hintText: 'Masukkan $label',
                   contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                   isDense: true,
-                  // Show loading indicator when validating or a checkmark when scanned
+                  // Show loading indicator when validating (but NOT checkmark here)
                   suffixIcon: isLoading
                       ? Transform.scale(
                           scale: 0.5,
                           child: const CircularProgressIndicator(),
                         )
-                      : showCheckmark
-                        ? Container(
-                            margin: const EdgeInsets.all(4.0),
-                            padding: const EdgeInsets.all(2.0),
-                            decoration: const BoxDecoration(
-                              color: Colors.green,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.check,
-                              color: Colors.white,
-                              size: 16.0,
-                            ),
-                          )
-                        : null,
+                      : null, // Remove checkmark from suffixIcon
                   enabledBorder: UnderlineInputBorder(
                     borderSide: BorderSide(
                       color: isValid ? Colors.grey : Colors.red,
@@ -2241,10 +2274,26 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 readOnly: isScanInput ? false : readOnly, // Don't make scan input fields read-only
               ),
             ),
+            // SEPARATE CHECKMARK WIDGET - This should be more reliable
+            if (showCheckmark)
+              Container(
+                margin: const EdgeInsets.only(left: 8, bottom: 4),
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  color: Colors.green,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check,
+                  color: Colors.white,
+                  size: 16.0,
+                ),
+              ),
             if (hasScanner || isScanInput)
               IconButton(
                 icon: const Icon(Icons.qr_code_scanner, color: Colors.blue),
                 onPressed: () {
+                  print('🔍 SCANNER BUTTON PRESSED for $label (fieldKey: $fieldKey)');
                   // Implement barcode scanning
                   if (isScanInput) {
                     _openBarcodeScannerForInput(label, controller, fieldKey);

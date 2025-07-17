@@ -616,6 +616,7 @@ class _ReturnModePageState extends State<ReturnModePage> {
         MaterialPageRoute(
           builder: (context) => BarcodeScannerWidget(
             title: 'Scan ID Tool',
+            forceShowCheckmark: false, // FIX: Let scanner close itself
             onBarcodeDetected: (String barcode) {
               Navigator.of(context).pop(barcode);
             },
@@ -1066,18 +1067,10 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   
   // Add a method to force rebuild the UI
   void _forceRebuild() {
-    print('🔄 _forceRebuild() called');
-    print('🔄 mounted: $mounted');
     if (mounted) {
-      print('🔄 About to call setState() for rebuild');
       setState(() {
         // Force a complete UI rebuild to ensure checkmarks display properly
-        print("🔄 Inside setState() - UI rebuild triggered");
-        print("🔄 Current scannedFields in rebuild: $scannedFields");
       });
-      print('🔄 setState() completed');
-    } else {
-      print('❌ Widget not mounted, cannot rebuild');
     }
   }
 
@@ -1773,46 +1766,27 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         // Update the scanned status with setState to trigger UI update
         setState(() {
           // IMPORTANT: Directly update the scannedFields map
-          print('🎯 BEFORE UPDATE: scannedFields[$fieldKey] = ${scannedFields[fieldKey]}');
           scannedFields[fieldKey] = true;
-          print('🎯 AFTER UPDATE: scannedFields[$fieldKey] = ${scannedFields[fieldKey]}');
-          print('🎯 FULL MAP: $scannedFields');
-          print('SCAN SUCCESS: Field $fieldKey marked as scanned with value: $result');
-          print('SCAN STATUS MAP: $scannedFields');
+          print('✅ SCAN SUCCESS: $fieldKey = $result (validated)');
           
           // Set field-specific validation flags
           if (label.contains('No. Catridge')) {
             isNoCatridgeValid = true;
             noCatridgeError = '';
-            print('✅ Set isNoCatridgeValid = true');
           } else if (label.contains('No. Seal')) {
             isNoSealValid = true;
             noSealError = '';
-            print('✅ Set isNoSealValid = true');
           } else if (label.contains('Bag Code')) {
             isBagCodeValid = true;
             bagCodeError = '';
-            print('✅ Set isBagCodeValid = true');
           } else if (label.contains('Seal Code')) {
             isSealCodeReturnValid = true;
             sealCodeReturnError = '';
-            print('✅ Set isSealCodeReturnValid = true');
           }
         });
         
-        print('🔄 About to call _forceRebuild()');
         // Force rebuild to ensure checkmark displays properly  
         _forceRebuild();
-        
-        // ADDITIONAL: Wait a frame then rebuild again to ensure UI update
-        Future.delayed(Duration.zero, () {
-          if (mounted) {
-            print('🔄 DELAYED REBUILD TRIGGERED');
-            setState(() {
-              print('🔄 DELAYED setState() called');
-            });
-          }
-        });
         
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1854,6 +1828,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         MaterialPageRoute(
           builder: (context) => BarcodeScannerWidget(
             title: 'Scan $cleanLabel',
+            forceShowCheckmark: false, // FIX: Let scanner close itself
             onBarcodeDetected: (String barcode) {
               // Just return the barcode to handle in parent method
               Navigator.of(context).pop(barcode);
@@ -1923,11 +1898,11 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         MaterialPageRoute(
           builder: (context) => BarcodeScannerWidget(
             title: 'Scan $fieldName',
+            forceShowCheckmark: false, // FIX: Let scanner close itself
             onBarcodeDetected: (String barcode) {
               // Just return the barcode and handle it in the parent method
               Navigator.of(context).pop(barcode);
             },
-            forceShowCheckmark: false, // Don't handle navigation in the scanner
           ),
         ),
       );
@@ -2222,15 +2197,10 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     // Determine if we should show checkmark
     bool showCheckmark = isScanned && controller.text.isNotEmpty;
     
-    // COMPREHENSIVE DEBUG - ALWAYS PRINT FOR NOW
-    print('═══════ FIELD DEBUG: $label ═══════');
-    print('fieldKey: "$fieldKey"');
-    print('scannedFields map: $scannedFields');
-    print('isScanned: $isScanned (fieldKey.isNotEmpty: ${fieldKey.isNotEmpty}, scannedFields[$fieldKey]: ${scannedFields[fieldKey]}');
-    print('controller.text: "${controller.text}" (isEmpty: ${controller.text.isEmpty})');
-    print('showCheckmark: $showCheckmark');
-    print('isLoading: $isLoading');
-    print('══════════════════════════════════');
+    // Debug only when checkmark should show
+    if (showCheckmark) {
+      print('✅ CHECKMARK VISIBLE: $label (scanned: $isScanned, hasText: ${controller.text.isNotEmpty})');
+    }
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2300,6 +2270,47 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                   } else {
                     _openBarcodeScanner(label, controller, fieldKey);
                   }
+                },
+              ),
+            // DEBUG: Add test button for web testing (when camera doesn't work)
+            if ((hasScanner || isScanInput) && controller.text.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.check_circle, color: Colors.orange),
+                tooltip: 'Test Validate (Debug)',
+                onPressed: () {
+                  print('🧪 DEBUG TEST BUTTON PRESSED for $label (fieldKey: $fieldKey)');
+                  // Simulate successful scan validation
+                  setState(() {
+                    print('🧪 DEBUG: Simulating scan validation for $fieldKey');
+                    scannedFields[fieldKey] = true;
+                    print('🧪 DEBUG: scannedFields[$fieldKey] = ${scannedFields[fieldKey]}');
+                    
+                    // Set field-specific validation flags
+                    if (label.contains('No. Catridge')) {
+                      isNoCatridgeValid = true;
+                      noCatridgeError = '';
+                    } else if (label.contains('No. Seal')) {
+                      isNoSealValid = true;
+                      noSealError = '';
+                    } else if (label.contains('Bag Code')) {
+                      isBagCodeValid = true;
+                      bagCodeError = '';
+                    } else if (label.contains('Seal Code')) {
+                      isSealCodeReturnValid = true;
+                      sealCodeReturnError = '';
+                    } else if (label.contains('Catridge Fisik')) {
+                      isCatridgeFisikValid = true;
+                      catridgeFisikError = '';
+                    }
+                  });
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('🧪 DEBUG: $label validated!'),
+                      backgroundColor: Colors.orange,
+                      duration: const Duration(seconds: 1),
+                    ),
+                  );
                 },
               ),
           ],

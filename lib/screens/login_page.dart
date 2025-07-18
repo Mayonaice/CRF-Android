@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'home_page.dart';
+import 'tl_home_page.dart';
 import '../services/auth_service.dart';
 import '../services/device_service.dart';
 import '../widgets/error_dialogs.dart';
@@ -37,6 +38,12 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    // Force portrait orientation for login page only
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+    
     // Set status bar color to match Android theme
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -63,10 +70,41 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _checkLoginStatus() async {
     final isLoggedIn = await _authService.isLoggedIn();
     if (isLoggedIn && mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomePage()),
-      );
+      // Check user role and navigate accordingly
+      final userData = await _authService.getUserData();
+      // Prioritize roleID field as it's the field name from API
+      String userRole = '';
+      if (userData != null) {
+        // Print all possible role fields for debugging
+        print('DEBUG: Available role fields - roleID: ${userData['roleID']}, role: ${userData['role']}, userRole: ${userData['userRole']}');
+        
+        userRole = (userData['roleID'] ?? 
+                   userData['RoleID'] ?? 
+                   userData['role'] ?? 
+                   userData['Role'] ?? 
+                   userData['userRole'] ?? 
+                   userData['UserRole'] ?? 
+                   userData['position'] ?? 
+                   userData['Position'] ?? 
+                   '').toString().toUpperCase();
+        print('DEBUG: User role from userData: $userRole');
+      }
+      
+      if (userRole == 'CRF_TL') {
+        print('DEBUG LOGIN STATUS: Navigating to TLHomePage for CRF_TL role');
+        // Navigate to TL Home Page with portrait orientation using named route
+        Navigator.of(context).pushReplacementNamed('/tl_home');
+      } else {
+        // Navigate to regular Home Page with landscape orientation for CRF_OPR
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+      }
     }
   }
 
@@ -381,13 +419,44 @@ class _LoginPageState extends State<LoginPage> {
           title: 'Login Berhasil!',
           message: _isTestMode ? 'Login berhasil (Test Mode)' : 'Selamat datang di aplikasi CRF',
           buttonText: 'Lanjutkan',
-          onPressed: () {
+          onPressed: () async {
             Navigator.pop(context);
             if (mounted) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const HomePage()),
-              );
+              // Check user role and navigate accordingly
+              final userData = await _authService.getUserData();
+              // Prioritize roleID field as it's the field name from API
+              String userRole = '';
+              if (userData != null) {
+                // Print all possible role fields for debugging
+                print('DEBUG: Available role fields on login success - roleID: ${userData['roleID']}, role: ${userData['role']}, userRole: ${userData['userRole']}');
+                
+                userRole = (userData['roleID'] ?? 
+                           userData['RoleID'] ?? 
+                           userData['role'] ?? 
+                           userData['Role'] ?? 
+                           userData['userRole'] ?? 
+                           userData['UserRole'] ?? 
+                           userData['position'] ?? 
+                           userData['Position'] ?? 
+                           '').toString().toUpperCase();
+                print('DEBUG: User role from userData on login success: $userRole');
+              }
+              
+              if (userRole == 'CRF_TL') {
+                print('DEBUG LOGIN: Navigating to TLHomePage for CRF_TL role');
+                // Navigate to TL Home Page with portrait orientation using named route
+                Navigator.of(context).pushReplacementNamed('/tl_home');
+              } else {
+                // Navigate to regular Home Page with landscape orientation for CRF_OPR
+                SystemChrome.setPreferredOrientations([
+                  DeviceOrientation.landscapeLeft,
+                  DeviceOrientation.landscapeRight,
+                ]);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const HomePage()),
+                );
+              }
             }
           },
         );

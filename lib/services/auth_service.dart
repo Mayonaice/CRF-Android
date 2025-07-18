@@ -140,7 +140,7 @@ class AuthService {
     }
   }
 
-  // Login method with enhanced error handling and Android ID check (Step 2 of 2-step login)
+  // Enhanced login method with role-based authentication
   Future<Map<String, dynamic>> login(String username, String password, String noMeja, {String? selectedBranch}) async {
     try {
       // Get client type and Android ID for device validation
@@ -195,41 +195,67 @@ class AuthService {
       
       if (response.statusCode == 200 && responseData['success'] == true) {
         print('🚀 DEBUG LOGIN: SUCCESS!');
-        // Save token and user data
+        // Save token and user data with role information
         if (responseData['data'] != null) {
-          // Make sure groupId is saved as branchCode
-          if (responseData['data'].containsKey('groupId')) {
-            responseData['data']['branchCode'] = responseData['data']['groupId'];
-            print('🚀 DEBUG LOGIN: Setting branchCode from groupId: ${responseData['data']['groupId']}');
-          } else if (selectedBranch != null) {
-            responseData['data']['branchCode'] = selectedBranch;
-            print('🚀 DEBUG LOGIN: Setting branchCode from selectedBranch: $selectedBranch');
+          final userData = responseData['data'];
+          
+          // Extract role information - prioritizing roleID as it's the field name from API
+          String? userRole;
+          if (userData['roleID'] != null) {
+            userRole = userData['roleID'].toString().toUpperCase();
+          } else if (userData['RoleID'] != null) {
+            userRole = userData['RoleID'].toString().toUpperCase();
+          } else if (userData['role'] != null) {
+            userRole = userData['role'].toString().toUpperCase();
+          } else if (userData['Role'] != null) {
+            userRole = userData['Role'].toString().toUpperCase();
+          } else if (userData['userRole'] != null) {
+            userRole = userData['userRole'].toString().toUpperCase();
+          } else if (userData['UserRole'] != null) {
+            userRole = userData['UserRole'].toString().toUpperCase();
+          } else if (userData['position'] != null) {
+            userRole = userData['position'].toString().toUpperCase();
+          } else if (userData['Position'] != null) {
+            userRole = userData['Position'].toString().toUpperCase();
           }
           
-          await saveToken(responseData['data']['token'] ?? '');
-          await saveUserData(responseData['data']);
-          return {
-            'success': true,
-            'message': responseData['message'] ?? 'Login successful',
-            'data': responseData['data']
+          print('🚀 DEBUG LOGIN: Original role fields: role=${userData['role']}, Role=${userData['Role']}, userRole=${userData['userRole']}, roleID=${userData['roleID']}');
+          print('🚀 DEBUG LOGIN: Normalized role: $userRole');
+          
+          // Enhanced user data with role information - ensuring roleID is set correctly
+          final enhancedUserData = <String, dynamic>{
+            ...Map<String, dynamic>.from(userData),
+            'roleID': userRole, // Prioritize roleID as the main role field
+            'role': userRole, // Keep role field for backward compatibility
+            'branchCode': userData['groupId'] ?? userData['GroupId'] ?? userData['branchCode'] ?? userData['BranchCode'],
+            'branchName': userData['branchName'] ?? userData['BranchName'] ?? userData['groupName'] ?? userData['GroupName'],
+            'tableCode': userData['tableCode'] ?? userData['TableCode'] ?? noMeja,
+            'warehouseCode': userData['warehouseCode'] ?? userData['WarehouseCode'] ?? 'Cideng',
+            'loginTimestamp': DateTime.now().toIso8601String(),
           };
-        } else {
-          return {
-            'success': false,
-            'message': 'Login successful but no user data returned',
-          };
+          
+          print('🚀 DEBUG LOGIN: User role detected: $userRole');
+          print('🚀 DEBUG LOGIN: Enhanced user data: ${json.encode(enhancedUserData)}');
+          
+          await saveUserData(enhancedUserData);
+          await saveToken(responseData['token'] ?? '');
         }
+        
+        return {
+          'success': true,
+          'message': responseData['message'] ?? 'Login successful',
+          'data': responseData['data'],
+          'role': responseData['data']?['role'],
+        };
       } else {
         print('🚀 DEBUG LOGIN: FAILED - ${responseData['message']}');
-        // Check for AndroidID validation error specifically
-        if (responseData['message'] != null && 
-            (responseData['message'].toString().contains('AndroidID belum terdaftar') ||
-             responseData['errorType'] == 'ANDROID_ID_ERROR')) {
+        
+        // Handle specific error cases
+        if (responseData['errorType'] == 'ANDROID_ID_ERROR') {
           return {
             'success': false,
-            'message': 'AndroidID belum terdaftar, silahkan hubungi tim COMSEC',
+            'message': responseData['message'] ?? 'Device registration error',
             'errorType': 'ANDROID_ID_ERROR',
-            'androidId': androidId,
           };
         }
         
@@ -239,7 +265,6 @@ class AuthService {
         };
       }
     } catch (e) {
-      print('🚀 DEBUG LOGIN: EXCEPTION = $e');
       debugPrint('Login error: $e');
       return {
         'success': false,
@@ -460,6 +485,103 @@ class AuthService {
     } catch (e) {
       debugPrint('Error checking test mode: $e');
       return false;
+    }
+  }
+
+  // Get user role from stored data with priority to roleID
+  Future<String?> getUserRole() async {
+    try {
+      final userData = await getUserData();
+      if (userData == null) return null;
+      
+      // Print all possible role fields for debugging
+      print('DEBUG getUserRole: roleID=${userData['roleID']}, role=${userData['role']}');
+      
+      // Prioritize roleID field as it's the field name from API
+      String? userRole = (userData['roleID'] ?? 
+                        userData['RoleID'] ?? 
+                        userData['role'] ?? 
+                        userData['Role'] ?? 
+                        userData['userRole'] ?? 
+                        userData['UserRole'] ?? 
+                        userData['position'] ?? 
+                        userData['Position'])?.toString();
+                        
+      print('DEBUG getUserRole: normalized userRole=$userRole');
+      return userRole?.toUpperCase();
+    } catch (e) {
+      debugPrint('Error getting user role: $e');
+      return null;
+    }
+  }
+
+  // Check if user has specific role (using uppercase for consistency)
+  Future<bool> hasRole(String requiredRole) async {
+    try {
+      final userRole = await getUserRole();
+      if (userRole == null) return false;
+      
+      // Normalize role comparison using uppercase
+      print('DEBUG hasRole: comparing userRole=$userRole with requiredRole=$requiredRole');
+      return userRole.toUpperCase() == requiredRole.toUpperCase();
+    } catch (e) {
+      debugPrint('Error checking user role: $e');
+      return false;
+    }
+  }
+
+  // Check if user has any of the specified roles (using uppercase for consistency)
+  Future<bool> hasAnyRole(List<String> requiredRoles) async {
+    try {
+      final userRole = await getUserRole();
+      if (userRole == null) return false;
+      
+      // Normalize and check against all required roles using uppercase
+      final normalizedUserRole = userRole.toUpperCase();
+      print('DEBUG hasAnyRole: checking userRole=$normalizedUserRole against requiredRoles=$requiredRoles');
+      return requiredRoles.any((role) => role.toUpperCase() == normalizedUserRole);
+    } catch (e) {
+      debugPrint('Error checking user roles: $e');
+      return false;
+    }
+  }
+
+  // Get available menu items based on user role (using uppercase for consistency)
+  Future<List<String>> getAvailableMenus() async {
+    try {
+      final userRole = await getUserRole();
+      print('DEBUG getAvailableMenus: userRole=$userRole');
+      if (userRole == null) return [];
+      
+      switch (userRole.toUpperCase()) {
+        case 'CRF_KONSOL':
+          return [
+            'dashboard_konsol',
+            'monitoring',
+            'reports_konsol',
+            'settings_konsol',
+          ];
+        case 'CRF_TL':
+          print('DEBUG: Returning menus for CRF_TL role');
+          return [
+            'dashboard_tl',
+            'team_management',
+            'approvals',
+            'reports_tl',
+            'settings_tl',
+          ];
+        case 'CRF_OPR':
+        default:
+          return [
+            'prepare_mode',
+            'return_mode',
+            'device_info',
+            'settings_opr',
+          ];
+      }
+    } catch (e) {
+      debugPrint('Error getting available menus: $e');
+      return [];
     }
   }
 } 

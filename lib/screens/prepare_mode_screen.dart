@@ -4,6 +4,7 @@ import '../models/prepare_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/barcode_scanner_widget.dart';
+import '../widgets/qr_code_generator_widget.dart';
 import 'dart:async';
 
 class PrepareModePage extends StatefulWidget {
@@ -2167,6 +2168,35 @@ class _PrepareModePageState extends State<PrepareModePage> {
             isSmallScreen: isSmallScreen,
             icon: Icons.lock,
             isPassword: true,
+          ),
+          
+          SizedBox(height: isSmallScreen ? 16 : 20),
+          
+          // OR Divider
+          Row(
+            children: [
+              Expanded(child: Divider(color: Colors.green.shade300)),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  'ATAU',
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 10 : 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade600,
+                  ),
+                ),
+              ),
+              Expanded(child: Divider(color: Colors.green.shade300)),
+            ],
+          ),
+          
+          SizedBox(height: isSmallScreen ? 12 : 16),
+          
+          // QR Code Generator Section
+          QRCodeGeneratorWidget(
+            action: 'PREPARE',
+            idTool: _prepareData?.id?.toString() ?? _idCRFController.text,
           ),
           
           SizedBox(height: isSmallScreen ? 16 : 20),

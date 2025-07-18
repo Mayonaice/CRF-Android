@@ -7,6 +7,10 @@ import 'screens/return_mode_screen.dart';
 import 'screens/profile_menu_screen.dart';
 import 'screens/device_info_screen.dart';
 import 'screens/return_validation_screen.dart';
+import 'screens/tl_home_page.dart'; // Import TLHomePage
+import 'screens/tl_device_info_screen.dart'; // Import TL Device Info
+import 'screens/tl_profile_screen.dart'; // Import TL Profile
+import 'screens/tl_qr_scanner_screen.dart'; // Import TL QR Scanner
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
@@ -309,10 +313,14 @@ class _MyAppState extends State<MyApp> {
         '/': (context) => const LoginPage(), // Default route
         '/login': (context) => const LoginPage(),
         '/home': (context) => const HomePage(),
+        '/tl_home': (context) => const TLHomePage(), // Add TLHomePage route
         '/prepare_mode': (context) => const PrepareModePage(),
         '/return_page': (context) => const ReturnModePage(),
         '/profile': (context) => const ProfileMenuScreen(),
         '/device_info': (context) => const DeviceInfoScreen(),
+        '/tl_device_info': (context) => const TLDeviceInfoScreen(), // Add TL Device Info route
+        '/tl_profile': (context) => const TLProfileScreen(), // Add TL Profile route
+        '/tl_qr_scanner': (context) => const TLQRScannerScreen(), // Add TL QR Scanner route
         '/return-validation': (context) => const ReturnValidationScreen(),
       },
       // Global error handling for navigator

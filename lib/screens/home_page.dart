@@ -15,6 +15,8 @@ class _HomePageState extends State<HomePage> {
   final AuthService _authService = AuthService();
   String _userName = 'Lorenzo Putra'; // Default value
   String _branchName = 'JAKARTA - CIDENG'; // Default value
+  String? _userRole; // NEW: Store user role
+  List<String> _availableMenus = []; // NEW: Store available menus based on role
 
   @override
   void initState() {
@@ -29,18 +31,72 @@ class _HomePageState extends State<HomePage> {
     _loadUserData();
   }
 
-  // Load user data from SharedPreferences
+  // Enhanced user data loading with role information
   Future<void> _loadUserData() async {
     try {
       final userData = await _authService.getUserData();
+      print('DEBUG HomePage _loadUserData - userData: $userData');
+      
+      // Print all possible role fields for debugging
+      if (userData != null) {
+        print('DEBUG HomePage _loadUserData - all role fields:');
+        print('DEBUG: roleID: ${userData['roleID']}');
+        print('DEBUG: RoleID: ${userData['RoleID']}');
+        print('DEBUG: role: ${userData['role']}');
+        print('DEBUG: Role: ${userData['Role']}');
+      }
+      
+      final userRole = await _authService.getUserRole();
+      final availableMenus = await _authService.getAvailableMenus();
+      
       if (userData != null) {
         setState(() {
-          _userName = userData['userName'] ?? userData['userID'] ?? 'Lorenzo Putra';
+          _userName = userData['userName'] ?? userData['userID'] ?? userData['name'] ?? 'Lorenzo Putra';
           _branchName = userData['branchName'] ?? userData['branch'] ?? 'JAKARTA - CIDENG';
+          _userRole = userRole;
+          _availableMenus = availableMenus;
         });
+        
+        print('🎯 HOME: User role from getUserRole: $_userRole');
+        print('🎯 HOME: Available menus: $_availableMenus');
       }
     } catch (e) {
       debugPrint('Error loading user data: $e');
+    }
+  }
+
+  // NEW: Check if menu is available for current user role
+  bool _isMenuAvailable(String menuKey) {
+    return _availableMenus.contains(menuKey);
+  }
+
+  // NEW: Get role-specific greeting
+  String _getRoleGreeting() {
+    if (_userRole == null) return 'Dashboard CRF';
+    
+    switch (_userRole!.toLowerCase()) {
+      case 'crf_konsol':
+        return 'Dashboard Konsol CRF';
+      case 'crf_tl':
+        return 'Dashboard Team Leader';
+      case 'crf_opr':
+      default:
+        return 'Dashboard Operator CRF';
+    }
+  }
+
+  // NEW: Get role-specific color theme
+  Color _getRoleColor() {
+    if (_userRole == null) return Colors.green;
+    
+    switch (_userRole!.toLowerCase()) {
+      case 'crf_konsol':
+        return Colors.blue;
+      case 'crf_tl':
+        return Colors.orange;
+      case 'crf_opr':
+      default:
+        return Colors.green;
     }
   }
 
@@ -102,6 +158,90 @@ class _HomePageState extends State<HomePage> {
   // Navigate to Return Validation Screen
   void _navigateToReturnValidation() {
     Navigator.pushNamed(context, '/return_validation');
+  }
+
+  // NEW: Get role-specific menu label
+  String _getRoleSpecificMenuLabel() {
+    if (_userRole == null) return 'Menu Lain :';
+    
+    switch (_userRole!.toLowerCase()) {
+      case 'crf_konsol':
+        return 'Menu Konsol :';
+      case 'crf_tl':
+        return 'Menu TL :';
+      case 'crf_opr':
+      default:
+        return 'Menu Lain :';
+    }
+  }
+
+  // NEW: Build role-specific menu items
+  List<Widget> _buildRoleSpecificMenus(bool isSmallScreen) {
+    List<Widget> roleSpecificMenus = [];
+
+    if (_userRole == null) return roleSpecificMenus;
+
+    switch (_userRole!.toLowerCase()) {
+      case 'crf_konsol':
+        if (_isMenuAvailable('dashboard_konsol'))
+          roleSpecificMenus.add(_buildMainMenuButton(
+            context: context,
+            title: 'Dashboard\nKonsol',
+            iconAsset: 'assets/images/PrepareModeIcon.png', // Temporary icon
+            route: '/dashboard_konsol',
+            isSmallScreen: isSmallScreen,
+          ));
+        if (_isMenuAvailable('monitoring')) {
+          roleSpecificMenus.add(SizedBox(width: isSmallScreen ? 30 : 50));
+          roleSpecificMenus.add(_buildMainMenuButton(
+            context: context,
+            title: 'Monitoring\nATM',
+            iconAsset: 'assets/images/ReturnModeIcon.png', // Temporary icon
+            route: '/monitoring',
+            isSmallScreen: isSmallScreen,
+          ));
+        }
+        break;
+      case 'crf_tl':
+        if (_isMenuAvailable('dashboard_tl'))
+          roleSpecificMenus.add(_buildMainMenuButton(
+            context: context,
+            title: 'Dashboard\nTL',
+            iconAsset: 'assets/images/PrepareModeIcon.png', // Temporary icon
+            route: '/dashboard_tl',
+            isSmallScreen: isSmallScreen,
+          ));
+        if (_isMenuAvailable('team_management')) {
+          roleSpecificMenus.add(SizedBox(width: isSmallScreen ? 30 : 50));
+          roleSpecificMenus.add(_buildMainMenuButton(
+            context: context,
+            title: 'Team\nManagement',
+            iconAsset: 'assets/images/ReturnModeIcon.png', // Temporary icon
+            route: '/team_management',
+            isSmallScreen: isSmallScreen,
+          ));
+        }
+        break;
+      case 'crf_opr':
+      default:
+        // For CRF_OPR, the 'Menu Lain' section already exists, so we add role-specific items here
+        if (_isMenuAvailable('device_info'))
+          roleSpecificMenus.add(_buildSmallMenuButton(
+            iconAsset: 'assets/images/PhoneIcon.png',
+            onTap: () => Navigator.of(context).pushNamed('/device_info'),
+            isSmallScreen: isSmallScreen,
+          ));
+        if (_isMenuAvailable('settings_opr'))
+          roleSpecificMenus.add(SizedBox(width: isSmallScreen ? 15 : 20));
+        if (_isMenuAvailable('settings_opr'))
+          roleSpecificMenus.add(_buildSmallMenuButton(
+            iconAsset: 'assets/images/PersonIcon.png',
+            onTap: () => Navigator.of(context).pushNamed('/profile'),
+            isSmallScreen: isSmallScreen,
+          ));
+        break;
+    }
+    return roleSpecificMenus;
   }
 
   @override
@@ -357,71 +497,149 @@ class _HomePageState extends State<HomePage> {
                               ),
                             ),
                             
-                            // Menu items aligned to LEFT (as requested)
+                            // Menu items aligned to LEFT (as requested) - NOW ROLE-BASED
                             Row(
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
                                 // Add some left padding to match design
                                 SizedBox(width: isSmallScreen ? 20 : 40),
                                 
-                                // Prepare Mode button with custom icon (enlarged with more border radius)
-                                _buildMainMenuButton(
-                                  context: context,
-                                  title: 'Prepare\nMode',
-                                  iconAsset: 'assets/images/PrepareModeIcon.png',
-                                  route: '/prepare_mode',
-                                  isSmallScreen: isSmallScreen,
-                                ),
+                                // Prepare Mode button - only for CRF_OPR
+                                if (_isMenuAvailable('prepare_mode'))
+                                  _buildMainMenuButton(
+                                    context: context,
+                                    title: 'Prepare\nMode',
+                                    iconAsset: 'assets/images/PrepareModeIcon.png',
+                                    route: '/prepare_mode',
+                                    isSmallScreen: isSmallScreen,
+                                  ),
                                 
-                                SizedBox(width: isSmallScreen ? 30 : 50),
+                                // Add spacing only if prepare mode is shown and return mode will be shown
+                                if (_isMenuAvailable('prepare_mode') && _isMenuAvailable('return_mode'))
+                                  SizedBox(width: isSmallScreen ? 30 : 50),
                                 
-                                // Return Mode button with custom icon (enlarged with more border radius)
-                                _buildMainMenuButton(
-                                  context: context,
-                                  title: 'Return\nMode',
-                                  iconAsset: 'assets/images/ReturnModeIcon.png',
-                                  route: '/return_page',
-                                  isSmallScreen: isSmallScreen,
-                                ),
+                                // Return Mode button - only for CRF_OPR
+                                if (_isMenuAvailable('return_mode'))
+                                  _buildMainMenuButton(
+                                    context: context,
+                                    title: 'Return\nMode',
+                                    iconAsset: 'assets/images/ReturnModeIcon.png',
+                                    route: '/return_page',
+                                    isSmallScreen: isSmallScreen,
+                                  ),
+
+                                // KONSOL-specific menus
+                                if (_isMenuAvailable('dashboard_konsol'))
+                                  _buildMainMenuButton(
+                                    context: context,
+                                    title: 'Dashboard\nKonsol',
+                                    iconAsset: 'assets/images/PrepareModeIcon.png', // Temporary icon
+                                    route: '/dashboard_konsol',
+                                    isSmallScreen: isSmallScreen,
+                                  ),
+
+                                if (_isMenuAvailable('monitoring'))
+                                  SizedBox(width: isSmallScreen ? 30 : 50),
+
+                                if (_isMenuAvailable('monitoring'))
+                                  _buildMainMenuButton(
+                                    context: context,
+                                    title: 'Monitoring\nATM',
+                                    iconAsset: 'assets/images/ReturnModeIcon.png', // Temporary icon
+                                    route: '/monitoring',
+                                    isSmallScreen: isSmallScreen,
+                                  ),
+
+                                // TL-specific menus
+                                if (_isMenuAvailable('dashboard_tl'))
+                                  _buildMainMenuButton(
+                                    context: context,
+                                    title: 'Dashboard\nTL',
+                                    iconAsset: 'assets/images/PrepareModeIcon.png', // Temporary icon
+                                    route: '/dashboard_tl',
+                                    isSmallScreen: isSmallScreen,
+                                  ),
+
+                                if (_isMenuAvailable('team_management'))
+                                  SizedBox(width: isSmallScreen ? 30 : 50),
+
+                                if (_isMenuAvailable('team_management'))
+                                  _buildMainMenuButton(
+                                    context: context,
+                                    title: 'Team\nManagement',
+                                    iconAsset: 'assets/images/ReturnModeIcon.png', // Temporary icon
+                                    route: '/team_management',
+                                    isSmallScreen: isSmallScreen,
+                                  ),
                               ],
                             ),
                             
                             SizedBox(height: isSmallScreen ? 6 : 10), // Reduced even more
                             
-                            // Additional menu section
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Text(
-                                  'Menu Lain :',
-                                  style: TextStyle(
-                                    fontSize: isSmallScreen ? 18 : 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black, // Changed to black for better contrast
+                            // Role-based additional menu section
+                            if (_userRole != null) ...[
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    _getRoleSpecificMenuLabel(),
+                                    style: TextStyle(
+                                      fontSize: isSmallScreen ? 18 : 22,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            
-                            SizedBox(height: isSmallScreen ? 4 : 8), // Reduced even more
-                            
-                            // Additional menu items with custom icons (enlarged even more with more border radius)
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                _buildSmallMenuButton(
-                                  iconAsset: 'assets/images/PhoneIcon.png',
-                                  onTap: () => Navigator.of(context).pushNamed('/device_info'),
-                                  isSmallScreen: isSmallScreen,
-                                ),
-                                SizedBox(width: isSmallScreen ? 15 : 20),
-                                _buildSmallMenuButton(
-                                  iconAsset: 'assets/images/PersonIcon.png',
-                                  onTap: () => Navigator.of(context).pushNamed('/profile'),
-                                  isSmallScreen: isSmallScreen,
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
+                              
+                              SizedBox(height: isSmallScreen ? 4 : 8),
+                              
+                              // Role-specific additional menu items
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: _buildRoleSpecificMenus(isSmallScreen),
+                              ),
+                            ],
+
+                            // Original Menu Lain section - only for CRF_OPR
+                            if (_userRole == null || _userRole!.toLowerCase() == 'crf_opr') ...[
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    'Menu Lain :',
+                                    style: TextStyle(
+                                      fontSize: isSmallScreen ? 18 : 22,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              
+                              SizedBox(height: isSmallScreen ? 4 : 8),
+                              
+                              // Additional menu items for CRF_OPR
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  if (_isMenuAvailable('device_info'))
+                                    _buildSmallMenuButton(
+                                      iconAsset: 'assets/images/PhoneIcon.png',
+                                      onTap: () => Navigator.of(context).pushNamed('/device_info'),
+                                      isSmallScreen: isSmallScreen,
+                                    ),
+                                  if (_isMenuAvailable('device_info'))
+                                    SizedBox(width: isSmallScreen ? 15 : 20),
+                                  if (_isMenuAvailable('settings_opr'))
+                                    _buildSmallMenuButton(
+                                      iconAsset: 'assets/images/PersonIcon.png',
+                                      onTap: () => Navigator.of(context).pushNamed('/profile'),
+                                      isSmallScreen: isSmallScreen,
+                                    ),
+                                ],
+                              ),
+                            ],
 
                             // Add Return Validation button
                             SizedBox(height: isSmallScreen ? 4 : 8),

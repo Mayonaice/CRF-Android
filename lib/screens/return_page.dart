@@ -709,14 +709,16 @@ class _ReturnModePageState extends State<ReturnModePage> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isTabletOrLandscapeMobile = size.width >= 600;
+    final isLandscape = size.width > size.height;
+    
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        toolbarHeight: 60,
+        toolbarHeight: isLandscape ? 50 : 60, // Reduce height in landscape
         titleSpacing: 0,
         title: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: EdgeInsets.symmetric(horizontal: isLandscape ? 8 : 12),
           child: Row(
             children: [
               GestureDetector(
@@ -724,88 +726,102 @@ class _ReturnModePageState extends State<ReturnModePage> {
                 child: const Icon(Icons.arrow_back_ios_new, color: Colors.red, size: 24),
               ),
               const SizedBox(width: 8),
-              const Text(
+              Text(
                 'Return Mode',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: 20,
+                  fontSize: isLandscape ? 16 : 20, // Smaller text in landscape
                   color: Colors.black,
                 ),
               ),
               const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    _userData?['branchName'] ?? 'JAKARTA-CIDENG',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      color: Colors.black,
+              // Branch info - make more compact in landscape
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _userData?['branchName'] ?? 'JAKARTA-CIDENG',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: isLandscape ? 10 : 12,
+                        color: Colors.black,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  Text(
-                    'Meja : ${_userData?['tableCode'] ?? '010101'}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.normal,
-                      fontSize: 12,
-                      color: Colors.black,
+                    Text(
+                      'Meja : ${_userData?['tableCode'] ?? '010101'}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.normal,
+                        fontSize: isLandscape ? 9 : 12,
+                        color: Colors.black,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: isLandscape ? 8 : 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isLandscape ? 8 : 12, 
+                  vertical: isLandscape ? 4 : 6
+                ),
                 decoration: BoxDecoration(
                   color: Colors.green[100],
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text(
+                child: Text(
                   'CRF_OPR',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.green,
-                    fontSize: 14,
+                    fontSize: isLandscape ? 12 : 14,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: isLandscape ? 8 : 12),
               IconButton(
                 onPressed: () {},
-                icon: const Icon(Icons.refresh, color: Colors.green),
+                icon: Icon(Icons.refresh, color: Colors.green, size: isLandscape ? 20 : 24),
+                padding: EdgeInsets.all(isLandscape ? 4 : 8),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: isLandscape ? 8 : 12),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const CircleAvatar(
-                    radius: 16,
-                    backgroundImage: NetworkImage(
+                  CircleAvatar(
+                    radius: isLandscape ? 12 : 16,
+                    backgroundImage: const NetworkImage(
                         'https://randomuser.me/api/portraits/men/75.jpg'),
                   ),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _userData?['name'] ?? 'Lorenzo Putra',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: Colors.black,
+                  SizedBox(width: isLandscape ? 4 : 8),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _userData?['name'] ?? 'Lorenzo Putra',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isLandscape ? 11 : 14,
+                            color: Colors.black,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      Text(
-                        _userData?['nik'] ?? '9190812021',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.normal,
-                          fontSize: 12,
-                          color: Colors.black,
+                        Text(
+                          _userData?['nik'] ?? '9190812021',
+                          style: TextStyle(
+                            fontWeight: FontWeight.normal,
+                            fontSize: isLandscape ? 9 : 12,
+                            color: Colors.black,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -819,10 +835,10 @@ class _ReturnModePageState extends State<ReturnModePage> {
           if (_isLoading)
             const LinearProgressIndicator(),
             
-          // Main content
-          Expanded(
+          // Main content - use Flexible instead of Expanded for better overflow handling
+          Flexible(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(isLandscape ? 8 : 12), // Reduce padding in landscape
               // Use LayoutBuilder to handle responsive layout
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -892,7 +908,7 @@ class _ReturnModePageState extends State<ReturnModePage> {
                                 parentIdToolController: _idToolController,
                                 sectionId: 'section_$i', // NEW: Add unique section ID
                               ),
-                              const SizedBox(height: 24),
+                              SizedBox(height: isLandscape ? 16 : 24), // Reduce spacing in landscape
                             ],
                           ),
                         );
@@ -913,7 +929,7 @@ class _ReturnModePageState extends State<ReturnModePage> {
                             parentIdToolController: _idToolController,
                             sectionId: 'section_0', // NEW: Add unique section ID
                           ),
-                          const SizedBox(height: 24),
+                          SizedBox(height: isLandscape ? 16 : 24),
                         ],
                       ),
                     );
@@ -924,7 +940,7 @@ class _ReturnModePageState extends State<ReturnModePage> {
                   
                   // ID Tool and Jam Mulai fields
                   Widget idToolAndJamMulaiFields = Container(
-                    margin: const EdgeInsets.only(bottom: 16),
+                    margin: EdgeInsets.only(bottom: isLandscape ? 12 : 16),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -933,21 +949,29 @@ class _ReturnModePageState extends State<ReturnModePage> {
                           flex: 1,
                           child: Row(
                             children: [
-                              const SizedBox(
-                                width: 80,
+                              SizedBox(
+                                width: isLandscape ? 60 : 80, // Narrower label in landscape
                                 child: Text(
                                   'ID Tool:',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: isLandscape ? 12 : 14,
+                                  ),
                                 ),
                               ),
                               Expanded(
                                 child: TextFormField(
                                   controller: _idToolController,
-                                  decoration: const InputDecoration(
+                                  style: TextStyle(fontSize: isLandscape ? 12 : 14),
+                                  decoration: InputDecoration(
                                     hintText: 'Masukkan ID Tool',
-                                    contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                    hintStyle: TextStyle(fontSize: isLandscape ? 12 : 14),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      vertical: isLandscape ? 6 : 8, 
+                                      horizontal: isLandscape ? 8 : 12
+                                    ),
                                     isDense: true,
-                                    border: OutlineInputBorder(),
+                                    border: const OutlineInputBorder(),
                                   ),
                                   onChanged: (value) {
                                     // Debounce typing
@@ -964,7 +988,11 @@ class _ReturnModePageState extends State<ReturnModePage> {
                                 ),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.qr_code_scanner, color: Colors.blue),
+                                icon: Icon(Icons.qr_code_scanner, 
+                                  color: Colors.blue, 
+                                  size: isLandscape ? 20 : 24
+                                ),
+                                padding: EdgeInsets.all(isLandscape ? 4 : 8),
                                 onPressed: () {
                                   // Open barcode scanner for ID Tool
                                   _scanIdTool();
@@ -974,34 +1002,46 @@ class _ReturnModePageState extends State<ReturnModePage> {
                           ),
                         ),
                         
-                        const SizedBox(width: 16),
+                        SizedBox(width: isLandscape ? 12 : 16),
                         
                         // Jam Mulai field
                         Expanded(
                           flex: 1,
                           child: Row(
                             children: [
-                              const SizedBox(
-                                width: 80,
+                              SizedBox(
+                                width: isLandscape ? 60 : 80,
                                 child: Text(
                                   'Jam Mulai:',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: isLandscape ? 12 : 14,
+                                  ),
                                 ),
                               ),
                               Expanded(
                                 child: TextFormField(
                                   controller: _jamMulaiController,
                                   readOnly: true,
-                                  decoration: const InputDecoration(
+                                  style: TextStyle(fontSize: isLandscape ? 12 : 14),
+                                  decoration: InputDecoration(
                                     hintText: '--:--',
-                                    contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                    hintStyle: TextStyle(fontSize: isLandscape ? 12 : 14),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      vertical: isLandscape ? 6 : 8, 
+                                      horizontal: isLandscape ? 8 : 12
+                                    ),
                                     isDense: true,
-                                    border: OutlineInputBorder(),
+                                    border: const OutlineInputBorder(),
                                   ),
                                 ),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.access_time, color: Colors.grey),
+                                icon: Icon(Icons.access_time, 
+                                  color: Colors.grey,
+                                  size: isLandscape ? 20 : 24
+                                ),
+                                padding: EdgeInsets.all(isLandscape ? 4 : 8),
                                 onPressed: null,
                               ),
                             ],
@@ -1025,12 +1065,13 @@ class _ReturnModePageState extends State<ReturnModePage> {
                                 children: cartridgeSections,
                               ),
                             ),
-                            const SizedBox(width: 24),
+                            SizedBox(width: isLandscape ? 16 : 24),
                             Expanded(
                               flex: 4,
                               child: DetailSection(
                                 returnData: _returnHeaderResponse,
                                 onSubmitPressed: _showTLApprovalDialog,
+                                isLandscape: isLandscape, // Pass landscape flag
                               ),
                             ),
                           ],
@@ -1046,6 +1087,7 @@ class _ReturnModePageState extends State<ReturnModePage> {
                         DetailSection(
                           returnData: _returnHeaderResponse,
                           onSubmitPressed: _showTLApprovalDialog,
+                          isLandscape: isLandscape, // Pass landscape flag
                         ),
                       ],
                     );
@@ -1111,7 +1153,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     }
     return branchCodeController.text;
   }
-  
+
   // NEW APPROACH: Use a map to track which fields have been scanned
   Map<String, bool> scannedFields = {
     'noCatridge': false,
@@ -2171,8 +2213,8 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                       ? Transform.scale(
                           scale: 0.5,
                           child: const CircularProgressIndicator(),
-                        )
-                      : null,
+                          )
+                        : null,
                   enabledBorder: UnderlineInputBorder(
                     borderSide: BorderSide(
                       color: isValid ? Colors.grey : Colors.red,
@@ -2197,7 +2239,7 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 icon: const Icon(Icons.qr_code_scanner, color: Colors.blue),
                 onPressed: () {
                   print('🔍 [$sectionId] SCANNER BUTTON PRESSED for $label (fieldKey: $fieldKey)');
-                  _openBarcodeScanner(label, controller, fieldKey);
+                    _openBarcodeScanner(label, controller, fieldKey);
                 },
               ),
             // DEBUG BUTTON - REMOVE IN PRODUCTION
@@ -2334,11 +2376,13 @@ class _CartridgeSectionState extends State<CartridgeSection> {
 class DetailSection extends StatelessWidget {
   final ReturnHeaderResponse? returnData;
   final VoidCallback? onSubmitPressed;
+  final bool isLandscape;
   
   const DetailSection({
     Key? key, 
     this.returnData,
     this.onSubmitPressed,
+    this.isLandscape = false,
   }) : super(key: key);
 
   @override
@@ -2346,21 +2390,25 @@ class DetailSection extends StatelessWidget {
     final greenTextStyle = TextStyle(
       fontWeight: FontWeight.bold,
       color: Colors.green[700],
+      fontSize: isLandscape ? 12 : 14,
     );
 
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300),
       ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Detail WSID',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
+      padding: EdgeInsets.all(isLandscape ? 8 : 12),
+              child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Detail WSID',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: isLandscape ? 14 : 16,
+              ),
+            ),
+            SizedBox(height: isLandscape ? 6 : 8),
           _buildLabelValue('WSID', returnData?.header?.atmCode ?? ''),
           _buildLabelValue('Bank', returnData?.header?.namaBank ?? ''),
           _buildLabelValue('Lokasi', returnData?.header?.lokasi ?? ''),

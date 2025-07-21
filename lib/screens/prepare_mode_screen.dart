@@ -3438,7 +3438,6 @@ class _PrepareModePageState extends State<PrepareModePage> {
     }
   }
 
-  // Validate Pocket seal
   Future<void> _validatePocketSeal(String sealCode) async {
     if (sealCode.isEmpty || !mounted) return;
     

@@ -711,6 +711,69 @@ class ApiService {
     }
   }
 
+  // Approve prepare data using QR code (for TL approval via QR scanning)
+  Future<ApiResponse> approvePrepareWithQR(String idTool, String tlNik) async {
+    try {
+      final requestHeaders = await headers;
+      
+      final requestBody = {
+        "idTool": idTool,
+        "tlNik": tlNik,
+      };
+      
+      print('Approve Prepare with QR request: ${json.encode(requestBody)}');
+      
+      final response = await _tryRequestWithFallback(
+        requestFn: (baseUrl) => http.post(
+          Uri.parse('$baseUrl/CRF/approve-prepare-qr'),
+          headers: requestHeaders,
+          body: json.encode(requestBody),
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        try {
+          final jsonData = json.decode(response.body);
+          print('Approve Prepare with QR response: ${response.body}');
+          return ApiResponse.fromJson(jsonData);
+        } catch (e) {
+          debugPrint('Error parsing Approve Prepare with QR JSON: $e');
+          return ApiResponse(
+            success: false,
+            message: 'Invalid data format from server',
+            status: 'error'
+          );
+        }
+      } else if (response.statusCode == 401) {
+        await _authService.logout();
+        return ApiResponse(
+          success: false,
+          message: 'Session expired: Please login again',
+          status: 'error'
+        );
+      } else {
+        return ApiResponse(
+          success: false,
+          message: 'Server error (${response.statusCode}): ${response.body}',
+          status: 'error'
+        );
+      }
+    } catch (e) {
+      debugPrint('Approve Prepare with QR API error: $e');
+      
+      String errorMessage = 'Network error: ${e.toString()}';
+      if (e is TimeoutException) {
+        errorMessage = 'Connection timeout: Please check your internet connection';
+      }
+      
+      return ApiResponse(
+        success: false,
+        message: errorMessage,
+        status: 'error'
+      );
+    }
+  }
+
   // Get Return Header and Catridge data by ID
   Future<ReturnHeaderResponse> getReturnHeaderAndCatridge(String idTool, {String branchCode = "0"}) async {
     try {

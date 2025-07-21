@@ -183,24 +183,21 @@ class _HomePageState extends State<HomePage> {
 
     switch (_userRole!.toLowerCase()) {
       case 'crf_konsol':
-        if (_isMenuAvailable('dashboard_konsol'))
-          roleSpecificMenus.add(_buildMainMenuButton(
-            context: context,
-            title: 'Dashboard\nKonsol',
-            iconAsset: 'assets/images/PrepareModeIcon.png', // Temporary icon
-            route: '/dashboard_konsol',
+        // For CRF_KONSOL, add the device_info and settings_opr buttons
+        if (_isMenuAvailable('device_info'))
+          roleSpecificMenus.add(_buildSmallMenuButton(
+            iconAsset: 'assets/images/PhoneIcon.png',
+            onTap: () => Navigator.of(context).pushNamed('/device_info'),
             isSmallScreen: isSmallScreen,
           ));
-        if (_isMenuAvailable('monitoring')) {
-          roleSpecificMenus.add(SizedBox(width: isSmallScreen ? 30 : 50));
-          roleSpecificMenus.add(_buildMainMenuButton(
-            context: context,
-            title: 'Monitoring\nATM',
-            iconAsset: 'assets/images/ReturnModeIcon.png', // Temporary icon
-            route: '/monitoring',
+        if (_isMenuAvailable('device_info') && _isMenuAvailable('settings_opr'))
+          roleSpecificMenus.add(SizedBox(width: isSmallScreen ? 15 : 20));
+        if (_isMenuAvailable('settings_opr'))
+          roleSpecificMenus.add(_buildSmallMenuButton(
+            iconAsset: 'assets/images/PersonIcon.png',
+            onTap: () => Navigator.of(context).pushNamed('/profile'),
             isSmallScreen: isSmallScreen,
           ));
-        }
         break;
       case 'crf_tl':
         if (_isMenuAvailable('dashboard_tl'))
@@ -224,14 +221,14 @@ class _HomePageState extends State<HomePage> {
         break;
       case 'crf_opr':
       default:
-        // For CRF_OPR, the 'Menu Lain' section already exists, so we add role-specific items here
+        // For CRF_OPR, add the device_info and settings_opr buttons
         if (_isMenuAvailable('device_info'))
           roleSpecificMenus.add(_buildSmallMenuButton(
             iconAsset: 'assets/images/PhoneIcon.png',
             onTap: () => Navigator.of(context).pushNamed('/device_info'),
             isSmallScreen: isSmallScreen,
           ));
-        if (_isMenuAvailable('settings_opr'))
+        if (_isMenuAvailable('device_info') && _isMenuAvailable('settings_opr'))
           roleSpecificMenus.add(SizedBox(width: isSmallScreen ? 15 : 20));
         if (_isMenuAvailable('settings_opr'))
           roleSpecificMenus.add(_buildSmallMenuButton(
@@ -484,17 +481,71 @@ class _HomePageState extends State<HomePage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Menu title
-                            Padding(
-                              padding: EdgeInsets.only(bottom: isSmallScreen ? 6 : 10), // Reduced even more
-                              child: Text(
-                                'Menu Utama :',
-                              style: TextStyle(
-                                  fontSize: isSmallScreen ? 20 : 24,
-                                fontWeight: FontWeight.bold,
-                                  color: Colors.black, // Changed to black for better contrast on light blue background
+                            // Menu title with Konsol Mode button for CRF_KONSOL role
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Padding(
+                                  padding: EdgeInsets.only(bottom: isSmallScreen ? 6 : 10), // Reduced even more
+                                  child: Text(
+                                    'Menu Utama :',
+                                    style: TextStyle(
+                                      fontSize: isSmallScreen ? 20 : 24,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black, // Changed to black for better contrast on light blue background
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                
+                                // Konsol Mode button for CRF_KONSOL role
+                                if (_userRole?.toUpperCase() == 'CRF_KONSOL' && _isMenuAvailable('konsol_mode'))
+                                  GestureDetector(
+                                    onTap: () => Navigator.of(context).pushNamed('/konsol_mode'),
+                                    child: Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: isSmallScreen ? 12 : 16,
+                                        vertical: isSmallScreen ? 8 : 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue,
+                                        borderRadius: BorderRadius.circular(20),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.1),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Image.asset(
+                                            'assets/images/KonsolModeIcon.png',
+                                            width: isSmallScreen ? 24 : 28,
+                                            height: isSmallScreen ? 24 : 28,
+                                            errorBuilder: (context, error, stackTrace) {
+                                              return Icon(
+                                                Icons.dashboard,
+                                                size: isSmallScreen ? 20 : 24,
+                                                color: Colors.white,
+                                              );
+                                            },
+                                          ),
+                                          SizedBox(width: isSmallScreen ? 6 : 8),
+                                          Text(
+                                            'Konsol Mode',
+                                            style: TextStyle(
+                                              fontSize: isSmallScreen ? 14 : 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                             
                             // Menu items aligned to LEFT (as requested) - NOW ROLE-BASED
@@ -601,8 +652,8 @@ class _HomePageState extends State<HomePage> {
                               ),
                             ],
 
-                            // Original Menu Lain section - only for CRF_OPR
-                            if (_userRole == null || _userRole!.toLowerCase() == 'crf_opr') ...[
+                            // Original Menu Lain section - only if no role is set
+                            if (_userRole == null) ...[
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
@@ -619,36 +670,26 @@ class _HomePageState extends State<HomePage> {
                               
                               SizedBox(height: isSmallScreen ? 4 : 8),
                               
-                              // Additional menu items for CRF_OPR
+                              // Default menu items if no role is set
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
-                                  if (_isMenuAvailable('device_info'))
-                                    _buildSmallMenuButton(
-                                      iconAsset: 'assets/images/PhoneIcon.png',
-                                      onTap: () => Navigator.of(context).pushNamed('/device_info'),
-                                      isSmallScreen: isSmallScreen,
-                                    ),
-                                  if (_isMenuAvailable('device_info'))
-                                    SizedBox(width: isSmallScreen ? 15 : 20),
-                                  if (_isMenuAvailable('settings_opr'))
-                                    _buildSmallMenuButton(
-                                      iconAsset: 'assets/images/PersonIcon.png',
-                                      onTap: () => Navigator.of(context).pushNamed('/profile'),
-                                      isSmallScreen: isSmallScreen,
-                                    ),
+                                  _buildSmallMenuButton(
+                                    iconAsset: 'assets/images/PhoneIcon.png',
+                                    onTap: () => Navigator.of(context).pushNamed('/device_info'),
+                                    isSmallScreen: isSmallScreen,
+                                  ),
+                                  SizedBox(width: isSmallScreen ? 15 : 20),
+                                  _buildSmallMenuButton(
+                                    iconAsset: 'assets/images/PersonIcon.png',
+                                    onTap: () => Navigator.of(context).pushNamed('/profile'),
+                                    isSmallScreen: isSmallScreen,
+                                  ),
                                 ],
                               ),
                             ],
-
-                            // Add Return Validation button
-                            SizedBox(height: isSmallScreen ? 4 : 8),
-                            _buildFunctionCard(
-                              title: 'Return Validation',
-                              icon: Icons.check_circle_outline,
-                              onTap: _navigateToReturnValidation,
-                              isSmallScreen: isSmallScreen,
-                            ),
+                            
+                            // Remove Return Validation button
                           ],
                         ),
                       ),

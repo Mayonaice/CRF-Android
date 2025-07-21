@@ -556,10 +556,11 @@ class AuthService {
       switch (userRole.toUpperCase()) {
         case 'CRF_KONSOL':
           return [
-            'dashboard_konsol',
-            'monitoring',
-            'reports_konsol',
-            'settings_konsol',
+            'prepare_mode',
+            'return_mode',
+            'device_info',
+            'settings_opr',
+            'konsol_mode', // Added Konsol Mode menu
           ];
         case 'CRF_TL':
           print('DEBUG: Returning menus for CRF_TL role');

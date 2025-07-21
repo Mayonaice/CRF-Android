@@ -98,14 +98,21 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
   }
 
   Future<void> _approvePrepare(String idTool, String tlNik, String tlName) async {
-    // This would implement the prepare approval logic
-    // For now, we'll simulate the API call
-    await Future.delayed(const Duration(seconds: 2)); // Simulate API call
-    
-    // In real implementation, this would call the API service
-    // Example: await _apiService.approvePrepareWithQR(idTool, tlNik);
-    
-    print('Prepare approved for ID: $idTool by TL: $tlNik ($tlName)');
+    try {
+      print('Approving prepare for ID: $idTool by TL: $tlNik ($tlName)');
+      
+      // Call the API service to approve prepare data
+      final response = await _apiService.approvePrepareWithQR(idTool, tlNik);
+      
+      if (!response.success) {
+        throw Exception('Approval gagal: ${response.message}');
+      }
+      
+      print('Prepare approved successfully for ID: $idTool by TL: $tlNik ($tlName)');
+    } catch (e) {
+      print('Error approving prepare: $e');
+      throw Exception('Approval gagal: ${e.toString()}');
+    }
   }
 
   Future<void> _approveReturn(String idTool, String tlNik, String tlName) async {

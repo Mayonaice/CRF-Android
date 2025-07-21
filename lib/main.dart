@@ -11,6 +11,10 @@ import 'screens/tl_home_page.dart'; // Import TLHomePage
 import 'screens/tl_device_info_screen.dart'; // Import TL Device Info
 import 'screens/tl_profile_screen.dart'; // Import TL Profile
 import 'screens/tl_qr_scanner_screen.dart'; // Import TL QR Scanner
+import 'screens/konsol_mode_screen.dart'; // Import Konsol Mode Screen
+import 'screens/konsol_data_return_screen.dart'; // Import Konsol Data Return Screen
+import 'screens/konsol_data_pengurangan_screen.dart'; // Import Konsol Data Pengurangan Screen
+import 'screens/konsol_data_closing_screen.dart'; // Import Konsol Data Closing Screen
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
@@ -322,6 +326,10 @@ class _MyAppState extends State<MyApp> {
         '/tl_profile': (context) => const TLProfileScreen(), // Add TL Profile route
         '/tl_qr_scanner': (context) => const TLQRScannerScreen(), // Add TL QR Scanner route
         '/return-validation': (context) => const ReturnValidationScreen(),
+        '/konsol_mode': (context) => const KonsolModePage(), // Add Konsol Mode route
+        '/konsol_data_return': (context) => const KonsolDataReturnPage(), // Add Konsol Data Return route
+        '/konsol_data_pengurangan': (context) => const KonsolDataPenguranganPage(), // Add Konsol Data Pengurangan route
+        '/konsol_data_closing': (context) => const KonsolDataClosingPage(), // Add Konsol Data Closing route
       },
       // Global error handling for navigator
       navigatorKey: GlobalKey<NavigatorState>(),

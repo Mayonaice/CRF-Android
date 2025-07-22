@@ -886,8 +886,21 @@ class ApiService {
     try {
       final requestHeaders = await headers;
       
+      // Make sure idTool is properly formatted as integer
+      int idToolAsInt;
+      try {
+        if (idTool is String) {
+          idToolAsInt = int.parse(idTool.toString());
+        } else {
+          idToolAsInt = idTool;
+        }
+      } catch (e) {
+        debugPrint('❌ Error converting idTool to int: $e');
+        idToolAsInt = 0;
+      }
+      
       final requestBody = {
-        "IdTool": idTool,
+        "IdTool": idToolAsInt,
         "CashierCode": cashierCode,
         "CashierCode2": "", // Kosongkan sesuai requirement
         "TableCode": tableCode,
@@ -897,37 +910,181 @@ class ApiService {
         "IsManual": "N"
       };
       
-      print('Planning update request: ${json.encode(requestBody)}');
+      debugPrint('🔍 Planning update request: ${json.encode(requestBody)}');
+      debugPrint('🔍 Headers: $requestHeaders');
       
-      final response = await _tryRequestWithFallback(
-        requestFn: (baseUrl) => http.post(
-          Uri.parse('$baseUrl/CRF/planning/update'),
-          headers: requestHeaders,
-          body: json.encode(requestBody),
+      final response = await _debugHttp(
+        () => _tryRequestWithFallback(
+          requestFn: (baseUrl) => http.post(
+            Uri.parse('$baseUrl/CRF/planning/update'),
+            headers: requestHeaders,
+            body: json.encode(requestBody),
+          ),
         ),
+        'Update Planning: $idTool'
       );
 
       if (response.statusCode == 200) {
         try {
+          debugPrint('🔍 Raw planning update response: ${response.body.substring(0, math.min(300, response.body.length))}...');
+          
           final jsonData = json.decode(response.body);
-          print('Planning update response: ${response.body}');
-          return ApiResponse.fromJson(jsonData);
+          
+          // Normalize response for consistent access
+          Map<String, dynamic> normalizedJson = {};
+          if (jsonData is Map<String, dynamic>) {
+            jsonData.forEach((key, value) {
+              normalizedJson[key.toLowerCase()] = value;
+            });
+          } else {
+            debugPrint('❌ Unexpected response format: ${jsonData.runtimeType}');
+            return ApiResponse(
+              success: false,
+              message: 'Format respons server tidak valid',
+              status: 'error'
+            );
+          }
+          
+          // Process response
+          bool isSuccess = false;
+          String message = '';
+          
+          if (normalizedJson.containsKey('success')) {
+            isSuccess = normalizedJson['success'] == true;
+          } else if (normalizedJson.containsKey('status')) {
+            isSuccess = normalizedJson['status'].toString().toLowerCase() == 'success';
+          }
+          
+          if (normalizedJson.containsKey('message')) {
+            message = normalizedJson['message'].toString();
+          }
+          
+          // Check for data field containing nested responses
+          if (normalizedJson.containsKey('data')) {
+            var dataValue = normalizedJson['data'];
+            debugPrint('🔍 Data value type: ${dataValue.runtimeType}');
+            
+            // Handle string representation of data
+            if (dataValue is String) {
+              try {
+                final dataJson = json.decode(dataValue);
+                debugPrint('🔍 Parsed data JSON: $dataJson');
+                
+                if (dataJson is List && dataJson.isNotEmpty) {
+                  final firstItem = dataJson[0];
+                  if (firstItem is Map<String, dynamic>) {
+                    // Normalize keys
+                    Map<String, dynamic> normalizedData = {};
+                    firstItem.forEach((key, value) {
+                      normalizedData[key.toLowerCase()] = value;
+                    });
+                    
+                    // Check for status and message in the nested data
+                    if (normalizedData.containsKey('status')) {
+                      isSuccess = normalizedData['status'].toString().toLowerCase() == 'success';
+                      
+                      if (normalizedData.containsKey('message')) {
+                        message = normalizedData['message'].toString();
+                      }
+                    }
+                  }
+                }
+              } catch (e) {
+                debugPrint('❌ Error parsing data JSON: $e');
+              }
+            } else if (dataValue is List && dataValue.isNotEmpty) {
+              final firstItem = dataValue[0];
+              if (firstItem is Map<String, dynamic>) {
+                // Normalize keys
+                Map<String, dynamic> normalizedData = {};
+                firstItem.forEach((key, value) {
+                  normalizedData[key.toLowerCase()] = value;
+                });
+                
+                // Check for status and message in the nested data
+                if (normalizedData.containsKey('status')) {
+                  isSuccess = normalizedData['status'].toString().toLowerCase() == 'success';
+                  
+                  if (normalizedData.containsKey('message')) {
+                    message = normalizedData['message'].toString();
+                  }
+                }
+              }
+            }
+          }
+          
+          debugPrint('🔍 Final result: success=$isSuccess, message=$message');
+          
+          // Construct final response
+          ApiResponse finalResponse = ApiResponse(
+            success: isSuccess,
+            message: message.isNotEmpty ? message : (isSuccess ? 'Planning berhasil diupdate' : 'Planning gagal diupdate'),
+            status: isSuccess ? 'success' : 'error',
+            data: normalizedJson['data']
+          );
+          
+          debugPrint('🔍 API Response: success=${finalResponse.success}, message=${finalResponse.message}');
+          
+          return finalResponse;
         } catch (e) {
-          debugPrint('Error parsing planning update JSON: $e');
-          throw Exception('Invalid planning update data format from server');
+          debugPrint('❌ Error parsing planning update JSON: $e');
+          return ApiResponse(
+            success: false,
+            message: 'Format data dari server tidak valid: ${e.toString()}',
+            status: 'error'
+          );
         }
+      } else if (response.statusCode == 500) {
+        debugPrint('❌ Server error (500): ${response.body}');
+        
+        // Try to extract the error message from the response
+        String errorMessage = 'Server error (500)';
+        try {
+          final errorJson = json.decode(response.body);
+          if (errorJson is Map<String, dynamic> && errorJson.containsKey('message')) {
+            errorMessage = errorJson['message'].toString();
+          } else if (errorJson is Map<String, dynamic> && errorJson.containsKey('error')) {
+            errorMessage = errorJson['error'].toString();
+          }
+        } catch (e) {
+          // If parsing fails, use a generic message with the response body
+          errorMessage = 'Server error (500): ${response.body.length > 100 ? response.body.substring(0, 100) : response.body}';
+        }
+        
+        return ApiResponse(
+          success: false,
+          message: errorMessage,
+          status: 'error'
+        );
       } else if (response.statusCode == 401) {
+        debugPrint('❌ 401 Unauthorized! Forcing logout...');
         await _authService.logout();
-        throw Exception('Session expired: Please login again');
+        return ApiResponse(
+          success: false,
+          message: 'Session expired: Please login again',
+          status: 'error'
+        );
       } else {
-        throw Exception('Server error (${response.statusCode}): ${response.body}');
+        debugPrint('❌ HTTP error: ${response.statusCode}, body: ${response.body}');
+        return ApiResponse(
+          success: false,
+          message: 'Server error (${response.statusCode}): ${response.body}',
+          status: 'error'
+        );
       }
     } catch (e) {
-      debugPrint('Planning update API error: $e');
+      debugPrint('❌ Planning update API error: $e');
+      
+      String errorMessage = 'Network error: ${e.toString()}';
       if (e is TimeoutException) {
-        throw Exception('Connection timeout: Please check your internet connection');
+        errorMessage = 'Connection timeout: Please check your internet connection';
       }
-      throw Exception('Network error: ${e.toString()}');
+      
+      return ApiResponse(
+        success: false,
+        message: errorMessage,
+        status: 'error'
+      );
     }
   }
 
@@ -953,8 +1110,23 @@ class ApiService {
     try {
       final requestHeaders = await headers;
       
+      // Make sure idTool is properly formatted as integer
+      int idToolAsInt;
+      try {
+        if (idTool is String) {
+          idToolAsInt = int.parse(idTool.toString());
+        } else {
+          idToolAsInt = idTool;
+        }
+      } catch (e) {
+        debugPrint('❌ Error converting idTool to int: $e');
+        idToolAsInt = 0;
+      }
+      
+      // IMPORTANT: Create request body WITHOUT the InsertedId field
+      // This is to prevent the "Column 'InsertedId' does not belong to table" error
       final requestBody = {
-        "IdTool": idTool,
+        "IdTool": idToolAsInt,
         "BagCode": bagCode,
         "CatridgeCode": catridgeCode,
         "SealCode": sealCode,
@@ -972,36 +1144,217 @@ class ApiService {
         "TypeCatridgeTrx": typeCatridgeTrx,
       };
       
-      print('ATM Catridge insert request: ${json.encode(requestBody)}');
+      debugPrint('🔍 ATM Catridge insert request: ${json.encode(requestBody)}');
+      debugPrint('🔍 Headers: $requestHeaders');
       
-      final response = await _tryRequestWithFallback(
-        requestFn: (baseUrl) => http.post(
-          Uri.parse('$baseUrl/CRF/atm/catridge'),
-          headers: requestHeaders,
-          body: json.encode(requestBody),
+      // Langsung gunakan endpoint utama (tidak perlu alternate endpoint)
+      debugPrint('🔍 Menggunakan endpoint utama untuk insert catridge');
+      final response = await _debugHttp(
+        () => _tryRequestWithFallback(
+          requestFn: (baseUrl) => http.post(
+            Uri.parse('$baseUrl/CRF/atm/catridge'),
+            headers: requestHeaders,
+            body: json.encode(requestBody),
+          ),
         ),
+        'Insert ATM Catridge: $catridgeCode'
       );
 
       if (response.statusCode == 200) {
         try {
+          debugPrint('🔍 Raw response: ${response.body.substring(0, math.min(300, response.body.length))}...');
+          
           final jsonData = json.decode(response.body);
-          print('ATM Catridge insert response: ${response.body}');
           
-          // Handle both API controller response and direct SP response
-          final apiResponse = ApiResponse.fromJson(jsonData);
-          
-          // Log response details
-          print('Insert response: success=${apiResponse.success}, message=${apiResponse.message}, insertedId=${apiResponse.insertedId}');
-          
-          return apiResponse;
+          // Check for server-side errors returned with status 200
+          if (jsonData is Map<String, dynamic>) {
+            Map<String, dynamic> normalizedJson = {};
+            jsonData.forEach((key, value) {
+              normalizedJson[key.toLowerCase()] = value;
+            });
+            
+            // Tidak perlu lagi menangani error InsertedId karena sudah ditangani di SP dan API
+            
+            // Process normal response
+            bool isSuccess = false;
+            String message = '';
+            
+            if (normalizedJson.containsKey('success')) {
+              isSuccess = normalizedJson['success'] == true;
+            } else if (normalizedJson.containsKey('status')) {
+              isSuccess = normalizedJson['status'].toString().toLowerCase() == 'success';
+            }
+            
+            if (normalizedJson.containsKey('message')) {
+              message = normalizedJson['message'].toString();
+            }
+            
+            // Check for data field containing nested responses
+            if (normalizedJson.containsKey('data')) {
+              var dataValue = normalizedJson['data'];
+              debugPrint('🔍 Data value type: ${dataValue.runtimeType}');
+              
+              // Handle string representation of data
+              if (dataValue is String) {
+                try {
+                  final dataJson = json.decode(dataValue);
+                  debugPrint('🔍 Parsed data JSON: $dataJson');
+                  
+                  if (dataJson is List && dataJson.isNotEmpty) {
+                    final firstItem = dataJson[0];
+                    if (firstItem is Map<String, dynamic>) {
+                      // Normalize keys
+                      Map<String, dynamic> normalizedData = {};
+                      firstItem.forEach((key, value) {
+                        normalizedData[key.toLowerCase()] = value;
+                      });
+                      
+                      // Check for status and message in the nested data
+                      if (normalizedData.containsKey('status')) {
+                        isSuccess = normalizedData['status'].toString().toLowerCase() == 'success';
+                        
+                        if (normalizedData.containsKey('message')) {
+                          message = normalizedData['message'].toString();
+                        }
+                      }
+                    }
+                  }
+                } catch (e) {
+                  debugPrint('❌ Error parsing data JSON: $e');
+                }
+              } else if (dataValue is List && dataValue.isNotEmpty) {
+                final firstItem = dataValue[0];
+                if (firstItem is Map<String, dynamic>) {
+                  // Normalize keys
+                  Map<String, dynamic> normalizedData = {};
+                  firstItem.forEach((key, value) {
+                    normalizedData[key.toLowerCase()] = value;
+                  });
+                  
+                  // Check for status and message in the nested data
+                  if (normalizedData.containsKey('status')) {
+                    isSuccess = normalizedData['status'].toString().toLowerCase() == 'success';
+                    
+                    if (normalizedData.containsKey('message')) {
+                      message = normalizedData['message'].toString();
+                    }
+                  }
+                }
+              }
+            }
+            
+            debugPrint('🔍 Final result: success=$isSuccess, message=$message');
+            
+            // Construct final response (WITHOUT insertedId to avoid the issue)
+            ApiResponse finalResponse = ApiResponse(
+              success: isSuccess,
+              message: message.isNotEmpty ? message : (isSuccess ? 'Catridge berhasil disimpan' : 'Catridge gagal disimpan'),
+              status: isSuccess ? 'success' : 'error',
+              data: normalizedJson['data']
+              // Explicitly NOT including insertedId field here
+            );
+            
+            debugPrint('🔍 API Response: success=${finalResponse.success}, message=${finalResponse.message}');
+            
+            return finalResponse;
+          } else {
+            debugPrint('❌ Unexpected response format: ${jsonData.runtimeType}');
+            return ApiResponse(
+              success: false,
+              message: 'Format respons server tidak valid',
+              status: 'error'
+            );
+          }
         } catch (e) {
-          debugPrint('Error parsing ATM catridge insert JSON: $e');
+          debugPrint('❌ Error parsing ATM catridge insert JSON: $e');
           return ApiResponse(
             success: false,
-            message: 'Invalid ATM catridge insert data format from server',
+            message: 'Format data dari server tidak valid: ${e.toString()}',
             status: 'error'
           );
         }
+      } else if (response.statusCode == 500) {
+        debugPrint('❌ Server error (500): ${response.body}');
+        
+        // Try to extract the error message from the response
+        String errorMessage = 'Server error (500)';
+        try {
+          final errorJson = json.decode(response.body);
+          if (errorJson is Map<String, dynamic> && errorJson.containsKey('message')) {
+            errorMessage = errorJson['message'].toString();
+          } else if (errorJson is Map<String, dynamic> && errorJson.containsKey('error')) {
+            errorMessage = errorJson['error'].toString();
+          }
+        } catch (e) {
+          // If parsing fails, use a generic message with the response body
+          errorMessage = 'Server error (500): ${response.body.length > 100 ? response.body.substring(0, 100) : response.body}';
+        }
+        
+        return ApiResponse(
+          success: false,
+          message: errorMessage,
+          status: 'error'
+        );
+      } else if (response.statusCode == 401) {
+        debugPrint('❌ 401 Unauthorized! Forcing logout...');
+        await _authService.logout();
+        return ApiResponse(
+          success: false,
+          message: 'Session expired: Please login again',
+          status: 'error'
+        );
+      } else {
+        debugPrint('❌ HTTP error: ${response.statusCode}, body: ${response.body}');
+        return ApiResponse(
+          success: false,
+          message: 'Server error (${response.statusCode}): ${response.body}',
+          status: 'error'
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ ATM Catridge insert API error: $e');
+      
+      String errorMessage = 'Network error: ${e.toString()}';
+      if (e is TimeoutException) {
+        errorMessage = 'Connection timeout: Please check your internet connection';
+      }
+      
+      return ApiResponse(
+        success: false,
+        message: errorMessage,
+        status: 'error'
+      );
+    }
+  }
+
+  // Approve prepare with QR
+  Future<ApiResponse> approvePrepareWithQR(
+    String idTool,
+    String tlNik,
+    {bool bypassNikValidation = false}
+  ) async {
+    try {
+      final requestHeaders = await headers;
+      
+      final requestBody = {
+        "IdTool": idTool,
+        "TLNik": tlNik,
+        "BypassNikValidation": bypassNikValidation
+      };
+      
+      debugPrint('🔍 Approve prepare with QR request: ${json.encode(requestBody)}');
+      
+      final response = await _tryRequestWithFallback(
+        requestFn: (baseUrl) => http.post(
+          Uri.parse('$baseUrl/CRF/approve-prepare-qr'),
+          headers: requestHeaders,
+          body: json.encode(requestBody),
+        ),
+      );
+      
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        return ApiResponse.fromJson(jsonData);
       } else if (response.statusCode == 401) {
         await _authService.logout();
         return ApiResponse(
@@ -1017,10 +1370,16 @@ class ApiService {
         );
       }
     } catch (e) {
-      debugPrint('ATM Catridge insert API error: $e');
+      debugPrint('❌ Approve prepare with QR error: $e');
+      
+      String errorMessage = 'Network error: ${e.toString()}';
+      if (e is TimeoutException) {
+        errorMessage = 'Connection timeout: Please check your internet connection';
+      }
+      
       return ApiResponse(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: errorMessage,
         status: 'error'
       );
     }
@@ -1073,68 +1432,7 @@ class ApiService {
     }
   }
 
-  // Approve prepare data using QR code (for TL approval via QR scanning)
-  Future<ApiResponse> approvePrepareWithQR(String idTool, String tlNik) async {
-    try {
-      final requestHeaders = await headers;
-      
-      final requestBody = {
-        "idTool": idTool,
-        "tlNik": tlNik,
-      };
-      
-      print('Approve Prepare with QR request: ${json.encode(requestBody)}');
-      
-      final response = await _tryRequestWithFallback(
-        requestFn: (baseUrl) => http.post(
-          Uri.parse('$baseUrl/CRF/approve-prepare-qr'),
-          headers: requestHeaders,
-          body: json.encode(requestBody),
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        try {
-          final jsonData = json.decode(response.body);
-          print('Approve Prepare with QR response: ${response.body}');
-          return ApiResponse.fromJson(jsonData);
-        } catch (e) {
-          debugPrint('Error parsing Approve Prepare with QR JSON: $e');
-          return ApiResponse(
-            success: false,
-            message: 'Invalid data format from server',
-            status: 'error'
-          );
-        }
-      } else if (response.statusCode == 401) {
-        await _authService.logout();
-        return ApiResponse(
-          success: false,
-          message: 'Session expired: Please login again',
-          status: 'error'
-        );
-      } else {
-        return ApiResponse(
-          success: false,
-          message: 'Server error (${response.statusCode}): ${response.body}',
-          status: 'error'
-        );
-      }
-    } catch (e) {
-      debugPrint('Approve Prepare with QR API error: $e');
-      
-      String errorMessage = 'Network error: ${e.toString()}';
-      if (e is TimeoutException) {
-        errorMessage = 'Connection timeout: Please check your internet connection';
-      }
-      
-      return ApiResponse(
-        success: false,
-        message: errorMessage,
-        status: 'error'
-      );
-    }
-  }
+  // Fungsi ini sudah didefinisikan di atas, jadi tidak perlu didefinisikan lagi
 
   // Get Return Header and Catridge data by ID
   Future<ReturnHeaderResponse> getReturnHeaderAndCatridge(String idTool, {String branchCode = "0"}) async {

@@ -587,14 +587,14 @@ class ApiResponse {
   final String message;
   final dynamic data;
   final String? status;  // Added for SP response compatibility
-  final int? insertedId; // Added for insert operations
+  final int? insertedId; // Added for insert operations - NOW OPTIONAL
 
   ApiResponse({
     required this.success,
     required this.message,
     this.data,
     this.status,
-    this.insertedId,
+    this.insertedId, // Made optional to avoid errors with APIs that don't support it
   });
 
   factory ApiResponse.fromJson(Map<String, dynamic> json) {
@@ -629,14 +629,24 @@ class ApiResponse {
       statusValue = normalizedJson['status'].toString();
     }
     
+    // Only try to extract insertedId if we're confident it's there
+    // This avoids the error "Column 'InsertedId' does not belong to table"
     int? insertedIdValue = null;
-    if (normalizedJson.containsKey('insertedid')) {
-      var idValue = normalizedJson['insertedid'];
-      if (idValue is int) {
-        insertedIdValue = idValue;
-      } else if (idValue is String) {
-        insertedIdValue = int.tryParse(idValue);
+    try {
+      if (normalizedJson.containsKey('insertedid')) {
+        var idValue = normalizedJson['insertedid'];
+        if (idValue != null) {
+          if (idValue is int) {
+            insertedIdValue = idValue;
+          } else if (idValue is String) {
+            insertedIdValue = int.tryParse(idValue);
+          }
+        }
       }
+    } catch (e) {
+      // Ignore any errors when trying to get insertedId
+      // It's better to have a successful response without this field
+      // than to fail the entire parsing
     }
     
     return ApiResponse(

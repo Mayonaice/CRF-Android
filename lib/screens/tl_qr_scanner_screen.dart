@@ -36,16 +36,21 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
 
     try {
       // Parse QR code data
-      // Expected format: "PREPARE|{idTool}|{timestamp}" or "RETURN|{idTool}|{timestamp}"
+      // Format baru: "PREPARE|{idTool}|{timestamp}|{bypassFlag}" atau "RETURN|{idTool}|{timestamp}|{bypassFlag}"
       final parts = qrCode.split('|');
       
-      if (parts.length != 3) {
+      if (parts.length < 3) {
         throw Exception('Format QR Code tidak valid');
       }
 
       final action = parts[0]; // PREPARE or RETURN
       final idTool = parts[1];
       final timestamp = int.tryParse(parts[2]);
+      
+      // Check if bypass NIK is enabled (fourth part = "1")
+      final bypassNikValidation = parts.length > 3 && parts[3] == "1";
+      
+      print('QR Code parts: Action=$action, IdTool=$idTool, Timestamp=$timestamp, BypassNIK=$bypassNikValidation');
 
       if (timestamp == null) {
         throw Exception('Format timestamp tidak valid');
@@ -65,15 +70,16 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       final tlNik = userData?['userID'] ?? userData?['nik'] ?? '';
       final tlName = userData?['userName'] ?? '';
 
-      if (tlNik.isEmpty) {
-        throw Exception('Data TL tidak ditemukan');
+      // Jika bypass diaktifkan, kita bisa melanjutkan meski NIK kosong
+      if (tlNik.isEmpty && !bypassNikValidation) {
+        throw Exception('Data TL tidak ditemukan dan QR tidak mengizinkan scan tanpa NIK');
       }
 
       // Process based on action type
       if (action == 'PREPARE') {
-        await _approvePrepare(idTool, tlNik, tlName);
+        await _approvePrepare(idTool, tlNik, tlName, bypassNikValidation);
       } else if (action == 'RETURN') {
-        await _approveReturn(idTool, tlNik, tlName);
+        await _approveReturn(idTool, tlNik, tlName, bypassNikValidation);
       } else {
         throw Exception('Tipe aksi tidak valid: $action');
       }
@@ -97,12 +103,16 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
     }
   }
 
-  Future<void> _approvePrepare(String idTool, String tlNik, String tlName) async {
+  Future<void> _approvePrepare(String idTool, String tlNik, String tlName, bool bypassNikValidation) async {
     try {
-      print('Approving prepare for ID: $idTool by TL: $tlNik ($tlName)');
+      print('Approving prepare for ID: $idTool by TL: $tlNik ($tlName), bypassValidation: $bypassNikValidation');
       
-      // Call the API service to approve prepare data
-      final response = await _apiService.approvePrepareWithQR(idTool, tlNik);
+      // Call the API service to approve prepare data with bypass flag
+      final response = await _apiService.approvePrepareWithQR(
+        idTool, 
+        tlNik,
+        bypassNikValidation: bypassNikValidation
+      );
       
       if (!response.success) {
         throw Exception('Approval gagal: ${response.message}');
@@ -115,15 +125,22 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
     }
   }
 
-  Future<void> _approveReturn(String idTool, String tlNik, String tlName) async {
-    // This would implement the return approval logic
-    // For now, we'll simulate the API call
-    await Future.delayed(const Duration(seconds: 2)); // Simulate API call
-    
-    // In real implementation, this would call the API service
-    // Example: await _apiService.approveReturnWithQR(idTool, tlNik);
-    
-    print('Return approved for ID: $idTool by TL: $tlNik ($tlName)');
+  Future<void> _approveReturn(String idTool, String tlNik, String tlName, bool bypassNikValidation) async {
+    try {
+      print('Approving return for ID: $idTool by TL: $tlNik ($tlName), bypassValidation: $bypassNikValidation');
+      
+      // Call the API service to approve return data with bypass flag
+      // For now, we'll simulate the API call
+      await Future.delayed(const Duration(seconds: 1)); // Simulate API call
+      
+      // In real implementation, this would call the API service
+      // Example: await _apiService.approveReturnWithQR(idTool, tlNik, bypassNikValidation: bypassNikValidation);
+      
+      print('Return approved for ID: $idTool by TL: $tlNik ($tlName)');
+    } catch (e) {
+      print('Error approving return: $e');
+      throw Exception('Approval return gagal: ${e.toString()}');
+    }
   }
 
   void _addToRecentScans(String action, String idTool, bool success, {String? error}) {

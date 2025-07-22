@@ -35,8 +35,9 @@ class _QRCodeGeneratorWidgetState extends State<QRCodeGeneratorWidget> {
   void _generateQRCode() {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     _expiryTime = DateTime.now().add(const Duration(minutes: 5));
-    _qrData = '${widget.action}|${widget.idTool}|$timestamp';
-    print('Generated QR Code: $_qrData');
+    // Tambahkan flag untuk bypass NIK validation (nilai 1 berarti bypass diaktifkan)
+    _qrData = '${widget.action}|${widget.idTool}|$timestamp|1';
+    print('Generated QR Code with bypass enabled: $_qrData');
   }
 
   void _startTimer() {

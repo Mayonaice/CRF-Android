@@ -779,35 +779,109 @@ class _PrepareModePageState extends State<PrepareModePage> {
           String finalDenomCode = _prepareData!.denomCode;
           if (finalDenomCode.isEmpty) finalDenomCode = 'TEST';
           
-          final catridgeResponse = await _apiService.insertAtmCatridge(
-            idTool: _prepareData!.id,
-            bagCode: bagCode.isEmpty ? 'TEST' : bagCode,
-            catridgeCode: noCatridge,
-            sealCode: sealCode.isEmpty ? 'TEST' : sealCode,
-            catridgeSeal: sealCatridge.isEmpty ? 'TEST' : sealCatridge,
-            denomCode: finalDenomCode,
-            qty: '1',
-            userInput: userInput,
-            sealReturn: sealReturn,
-            typeCatridgeTrx: typeCatridgeTrx,
-          );
+          print('Inserting catridge with following data:');
+          print('  ID Tool: ${_prepareData!.id}');
+          print('  Bag Code: $bagCode');
+          print('  Catridge Code: $noCatridge');
+          print('  Seal Code: $sealCode');
+          print('  Catridge Seal: $sealCatridge');
+          print('  Denom Code: $finalDenomCode');
+          print('  User Input: $userInput');
+          print('  Seal Return: $sealReturn');
+          print('  Type Catridge Trx: $typeCatridgeTrx');
           
-          if (catridgeResponse.success) {
-            successMessages.add('$section: ${catridgeResponse.message}');
-            print('$section success: ${catridgeResponse.message} (ID: ${catridgeResponse.insertedId})');
-          } else {
-            errorMessages.add('$section: ${catridgeResponse.message}');
-            print('$section error: ${catridgeResponse.message} (Status: ${catridgeResponse.status})');
+          // Add retry logic for InsertedId errors
+          int maxRetries = 2;
+          for (int retry = 0; retry <= maxRetries; retry++) {
+            try {
+              final catridgeResponse = await _apiService.insertAtmCatridge(
+                idTool: _prepareData!.id,
+                bagCode: bagCode.isEmpty ? 'TEST' : bagCode,
+                catridgeCode: noCatridge,
+                sealCode: sealCode.isEmpty ? 'TEST' : sealCode,
+                catridgeSeal: sealCatridge.isEmpty ? 'TEST' : sealCatridge,
+                denomCode: finalDenomCode,
+                qty: '1',
+                userInput: userInput,
+                sealReturn: sealReturn,
+                typeCatridgeTrx: typeCatridgeTrx,
+              );
+              
+              if (catridgeResponse.success) {
+                successMessages.add('$section: ${catridgeResponse.message}');
+                print('$section success: ${catridgeResponse.message}');
+                break; // Exit retry loop on success
+              } else {
+                if (retry < maxRetries && 
+                    catridgeResponse.message.contains('InsertedId') && 
+                    catridgeResponse.message.contains('not belong to table')) {
+                  // This is the specific error we're trying to handle with retries
+                  print('$section got InsertedId error, retrying (${retry + 1}/$maxRetries)...');
+                  await Future.delayed(Duration(milliseconds: 500)); // Small delay before retry
+                  continue; // Try again
+                }
+                
+                // If we've exhausted retries or it's a different error, add to errors
+                errorMessages.add('$section: ${catridgeResponse.message}');
+                print('$section error: ${catridgeResponse.message} (Status: ${catridgeResponse.status})');
+                
+                // Add the catridge to the failed list so we can show it to the user
+                setState(() {
+                  _failedCatridges.add(noCatridge);
+                });
+                break; // Exit retry loop on non-retryable error
+              }
+            } catch (e) {
+              if (retry < maxRetries && e.toString().contains('InsertedId') && e.toString().contains('not belong to table')) {
+                // Handle exception containing the specific error
+                print('$section got InsertedId exception, retrying (${retry + 1}/$maxRetries)...');
+                await Future.delayed(Duration(milliseconds: 500)); // Small delay before retry
+                continue; // Try again
+              }
+              
+              // If we've exhausted retries or it's a different error, add to errors
+              errorMessages.add('$section: ${e.toString()}');
+              print('$section exception: $e');
+              
+              // Add the catridge to the failed list so we can show it to the user
+              setState(() {
+                _failedCatridges.add(noCatridge);
+              });
+              break; // Exit retry loop on non-retryable exception
+            }
           }
         } catch (e) {
           errorMessages.add('$section: ${e.toString()}');
-          print('$section exception: $e');
+          print('$section outer exception: $e');
+          
+          // Add the catridge to the failed list so we can show it to the user
+          setState(() {
+            _failedCatridges.add(noCatridge);
+          });
         }
       }
       
+      // Reset failed catridges list
+      setState(() {
+        _failedCatridges = [];
+      });
+      
+      // First, validate that we have at least one catridge to insert
+      if (_detailCatridgeItems.isEmpty) {
+        throw Exception('Tidak ada data catridge untuk disimpan');
+      }
+      
+      // Now process each catridge
       for (int i = 0; i < _detailCatridgeItems.length; i++) {
         var item = _detailCatridgeItems[i];
         print('Processing catridge ${i + 1}: ${item.noCatridge}');
+        
+        // Validate that the catridge code is not empty
+        if (item.noCatridge.isEmpty) {
+          errorMessages.add('Catridge ${i + 1}: Kode catridge tidak boleh kosong');
+          print('Catridge ${i + 1} error: Kode catridge is empty');
+          continue; // Skip this catridge and continue to next
+        }
         
         // Get data from form fields for this catridge
         String bagCode = '';
@@ -835,6 +909,12 @@ class _PrepareModePageState extends State<PrepareModePage> {
         if (sealReturn.isEmpty) {
           errorMessages.add('Catridge ${i + 1}: Seal Code Return harus diisi');
           print('Catridge ${i + 1} error: Seal Code Return is empty');
+          
+          // Add the catridge to the failed list so we can show it to the user
+          setState(() {
+            _failedCatridges.add(item.noCatridge);
+          });
+          
           continue; // Skip this catridge and continue to next
         }
         
@@ -863,6 +943,12 @@ class _PrepareModePageState extends State<PrepareModePage> {
             typeCatridgeTrx: 'D',
             section: 'Divert',
           );
+        } else {
+          print('Divert error: Seal Return is empty');
+          // Add the catridge to the failed list so we can show it to the user
+          setState(() {
+            _failedCatridges.add(_divertDetailItem!.noCatridge);
+          });
         }
       }
 
@@ -879,6 +965,12 @@ class _PrepareModePageState extends State<PrepareModePage> {
             typeCatridgeTrx: 'P',
             section: 'Pocket',
           );
+        } else {
+          print('Pocket error: Seal Return is empty');
+          // Add the catridge to the failed list so we can show it to the user
+          setState(() {
+            _failedCatridges.add(_pocketDetailItem!.noCatridge);
+          });
         }
       }
 
@@ -904,15 +996,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
         throw Exception('Semua catridge gagal disimpan:\n${errorMessages.join('\n')}');
       } else {
         // Mixed results
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Sebagian data berhasil disimpan:\nBerhasil: ${successMessages.length}\nGagal: ${errorMessages.length}'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-        
-        _hideApprovalForm();
+        _showMixedResultsDialog(successMessages, errorMessages);
       }
       
     } catch (e) {
@@ -929,6 +1013,94 @@ class _PrepareModePageState extends State<PrepareModePage> {
         _isSubmitting = false;
       });
     }
+  }
+  
+  // List to track failed catridges
+  List<String> _failedCatridges = [];
+  
+  // Show dialog for mixed results
+  void _showMixedResultsDialog(List<String> successMessages, List<String> errorMessages) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Hasil Penyimpanan Data'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Beberapa data berhasil disimpan, tetapi beberapa gagal.',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 10),
+                Text('Berhasil disimpan (${successMessages.length}):'),
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    border: Border.all(color: Colors.green.shade200),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: successMessages.map((message) => 
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: 2),
+                        child: Text('✓ $message'),
+                      )
+                    ).toList(),
+                  ),
+                ),
+                SizedBox(height: 15),
+                Text('Gagal disimpan (${errorMessages.length}):'),
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    border: Border.all(color: Colors.red.shade200),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: errorMessages.map((message) => 
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: 2),
+                        child: Text('✗ $message'),
+                      )
+                    ).toList(),
+                  ),
+                ),
+                SizedBox(height: 15),
+                Text(
+                  'Catatan: Data yang berhasil disimpan sudah tersimpan di server. Apakah Anda ingin kembali dan mengubah data yang gagal disimpan?',
+                  style: TextStyle(fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: Text('Kembali ke Form'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _hideApprovalForm(); // Hide approval form but stay on the page
+              },
+            ),
+            TextButton(
+              child: Text('Selesai'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _hideApprovalForm();
+                Navigator.of(context).pop(); // Return to previous screen
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
   
   // Fetch data from API based on ID CRF

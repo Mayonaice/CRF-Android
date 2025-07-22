@@ -114,34 +114,43 @@ class _PrepareModePageState extends State<PrepareModePage> {
     _jamMulaiController.text = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
   }
 
-  // Initialize controllers for catridges
+  // Initialize catridge controllers for the given count
   void _initializeCatridgeControllers(int count) {
-    // Clear existing controllers first
-    for (var controllerList in _catridgeControllers) {
-      for (var controller in controllerList) {
-        controller.dispose();
+    setState(() {
+      // Clear existing controllers - dispose first to prevent memory leaks
+      for (var controllerList in _catridgeControllers) {
+        for (var controller in controllerList) {
+          controller.dispose();
+        }
       }
-    }
-    
-    _catridgeControllers = [];
-    _denomValues = List.filled(count, 0);
-    _catridgeData = List.filled(count, null);
-    
-    // Create new controllers for each catridge
-    for (int i = 0; i < count; i++) {
-      _catridgeControllers.add([
-        TextEditingController(), // No Catridge
-        TextEditingController(), // Seal Catridge
-        TextEditingController(), // Bag Code
-        TextEditingController(), // Seal Code
-        TextEditingController(), // Seal Code Return
-      ]);
+      
+      // Create new list of controllers
+      _catridgeControllers = List.generate(
+        count,
+        (_) => List.generate(
+          5, // Each catridge has 5 controllers
+          (_) => TextEditingController(),
+        ),
+      );
       
       // Add listeners to all catridge controllers
-      for (var controller in _catridgeControllers[i]) {
-        controller.addListener(_checkAndHideApprovalForm);
+      for (int i = 0; i < _catridgeControllers.length; i++) {
+        for (var controller in _catridgeControllers[i]) {
+          controller.addListener(_checkAndHideApprovalForm);
+        }
       }
-    }
+      
+      // Initialize denom values array - one per catridge
+      _denomValues = List.generate(count, (_) => 0);
+      
+      // Initialize catridge data array - one per catridge
+      _catridgeData = List.generate(count, (_) => null);
+      
+      // Clear detail items for consistency
+      _detailCatridgeItems = [];
+      
+      print('Initialized $count catridge controllers and data arrays');
+    });
   }
   
   // Clear all data and hide approval form
@@ -240,8 +249,23 @@ class _PrepareModePageState extends State<PrepareModePage> {
         existingCatridges.add(_pocketDetailItem!.noCatridge);
       }
       
-      print('Using requiredStandValue for validation: $requiredStandValue');
+      // Remove the current catridge from existing list if we're updating
+      if (_catridgeControllers.length > catridgeIndex && 
+          _catridgeControllers[catridgeIndex][0].text.isNotEmpty &&
+          existingCatridges.contains(_catridgeControllers[catridgeIndex][0].text)) {
+        existingCatridges.remove(_catridgeControllers[catridgeIndex][0].text);
+      }
       
+      print('Using requiredStandValue for validation: $requiredStandValue');
+      print('Using branchCode: $branchCode');
+      print('Existing catridges: $existingCatridges');
+      
+      // Show loading indicator
+      setState(() {
+        _isLoading = true;
+      });
+      
+      // API call to get catridge details with comprehensive validation
       final response = await _apiService.getCatridgeDetails(
         branchCode, 
         catridgeCode, 
@@ -250,11 +274,22 @@ class _PrepareModePageState extends State<PrepareModePage> {
         existingCatridges: existingCatridges,
       );
       
-      print('Catridge lookup response: ${response.success}, data count: ${response.data.length}, message: ${response.message}');
+      setState(() {
+        _isLoading = false;
+      });
       
-      if (response.success && response.data.isNotEmpty && mounted) {
-        final catridgeData = response.data.first;
-        print('Found catridge: ${catridgeData.code}');
+      print('Catridge lookup response: ${response.success}, message: ${response.message}');
+      
+      if (response.success && response.data != null && response.data is List && response.data.length > 0 && mounted) {
+        print('Found ${response.data.length} catridges');
+        
+        // Get the first item from the list
+        final catridgeDataJson = response.data[0] as Map<String, dynamic>;
+        print('First catridge data: $catridgeDataJson');
+        
+        // Create a CatridgeData object from the JSON
+        final catridgeData = CatridgeData.fromJson(catridgeDataJson);
+        print('Parsed catridge: Code=${catridgeData.code}, StandValue=${catridgeData.standValue}');
         
         // Calculate denom amount
         String tipeDenom = _prepareData?.tipeDenom ?? 'A50';
@@ -272,8 +307,8 @@ class _PrepareModePageState extends State<PrepareModePage> {
           denomText = 'Rp 50.000';
         }
         
-        // Use standValue from prepare data
-        int actualStandValue = _prepareData?.standValue ?? 0;
+        // Use standValue from prepare data or catridge data
+        int actualStandValue = _prepareData?.standValue ?? catridgeData.standValue.round();
         
         // Calculate total
         int totalNominal = denomAmount * actualStandValue;
@@ -295,7 +330,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
         // Create initial detail item
         final detailItem = DetailCatridgeItem(
           index: catridgeIndex + 1,
-          noCatridge: catridgeCode,
+          noCatridge: catridgeData.code, // Use the code from the response
           sealCatridge: autoSeal, // Auto-populated or empty
           value: actualStandValue,
           total: formattedTotal,
@@ -304,7 +339,20 @@ class _PrepareModePageState extends State<PrepareModePage> {
         
         setState(() {
           // Store catridge data for reference
-          _catridgeData[catridgeIndex] = catridgeData;
+          if (catridgeIndex >= 0 && catridgeIndex < _catridgeData.length) {
+            _catridgeData[catridgeIndex] = catridgeData;
+          } else {
+            // Ensure catridgeData list is large enough
+            while (_catridgeData.length <= catridgeIndex) {
+              _catridgeData.add(null);
+            }
+            _catridgeData[catridgeIndex] = catridgeData;
+          }
+          
+          // Update the controller with the correct code from the response
+          if (_catridgeControllers.length > catridgeIndex) {
+            _catridgeControllers[catridgeIndex][0].text = catridgeData.code;
+          }
           
           // Check if item already exists for this index
           int existingIndex = _detailCatridgeItems.indexWhere((item) => item.index == catridgeIndex + 1);
@@ -314,7 +362,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
             _detailCatridgeItems[existingIndex] = DetailCatridgeItem(
               index: detailItem.index,
               noCatridge: detailItem.noCatridge,
-              sealCatridge: existingItem.sealCatridge, // Keep existing seal
+              sealCatridge: existingItem.sealCatridge.isNotEmpty ? existingItem.sealCatridge : autoSeal,
               value: detailItem.value,
               total: detailItem.total,
               denom: detailItem.denom,
@@ -329,6 +377,17 @@ class _PrepareModePageState extends State<PrepareModePage> {
           // Sort by index
           _detailCatridgeItems.sort((a, b) => a.index.compareTo(b.index));
           print('Total detail items now: ${_detailCatridgeItems.length}');
+          
+          // Update denom values array for consistency
+          if (catridgeIndex >= 0 && catridgeIndex < _denomValues.length) {
+            _denomValues[catridgeIndex] = actualStandValue;
+          } else {
+            // Ensure denomValues list is large enough
+            while (_denomValues.length <= catridgeIndex) {
+              _denomValues.add(0);
+            }
+            _denomValues[catridgeIndex] = actualStandValue;
+          }
         });
         
         // Check if approval form should be hidden
@@ -343,7 +402,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
         if (!response.success && response.message.isNotEmpty) {
           // Use API error message if available
           errorMessage = response.message;
-        } else if (response.success && response.data.isEmpty) {
+        } else if (response.success && (response.data == null || (response.data is List && response.data.length == 0))) {
           // Empty data with success response (should not happen with new logic)
           errorMessage = 'Catridge tidak ditemukan atau tidak sesuai kriteria';
         }
@@ -363,11 +422,23 @@ class _PrepareModePageState extends State<PrepareModePage> {
         );
       }
     } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      
       print('Error looking up catridge: $e');
       _createErrorDetailItem(catridgeIndex, catridgeCode, 'Error: ${e.toString()}');
       
       // Check if approval form should be hidden
       _checkAndHideApprovalForm();
+      
+      // Show error to user
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error looking up catridge: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
   
@@ -380,16 +451,90 @@ class _PrepareModePageState extends State<PrepareModePage> {
       print('Catridge Index: $catridgeIndex');
       print('Seal Code: $sealCode');
       
+      // Show loading indicator
+      setState(() {
+        _isLoading = true;
+      });
+      
       final response = await _apiService.validateSeal(sealCode);
+      
+      setState(() {
+        _isLoading = false;
+      });
       
       print('Seal validation response: ${response.success}');
       print('Seal validation message: ${response.message}');
-      print('Validation data: ${response.data?.validationStatus}');
-      print('Error code: ${response.data?.errorCode}');
-      print('Error message: ${response.data?.errorMessage}');
-      print('Validated seal code: ${response.data?.validatedSealCode}');
       
-      if (response.success && response.data != null && response.data!.validationStatus == 'SUCCESS' && mounted) {
+      // Extract validation status from response data
+      String validationStatus = '';
+      String errorMessage = '';
+      String validatedSealCode = '';
+      
+      if (response.data != null) {
+        try {
+          if (response.data is Map<String, dynamic>) {
+            // Try to extract values directly from the data map
+            Map<String, dynamic> dataMap = response.data as Map<String, dynamic>;
+            
+            // Normalize keys for consistent access
+            Map<String, dynamic> normalizedData = {};
+            dataMap.forEach((key, value) {
+              normalizedData[key.toLowerCase()] = value;
+            });
+            
+            // Extract status with fallbacks
+            if (normalizedData.containsKey('validationstatus')) {
+              validationStatus = normalizedData['validationstatus'].toString();
+            } else if (normalizedData.containsKey('status')) {
+              validationStatus = normalizedData['status'].toString();
+            }
+            
+            // Extract error message with fallbacks
+            if (normalizedData.containsKey('errormessage')) {
+              errorMessage = normalizedData['errormessage'].toString();
+            } else if (normalizedData.containsKey('message')) {
+              errorMessage = normalizedData['message'].toString();
+            }
+            
+            // Extract validated seal code with fallbacks
+            if (normalizedData.containsKey('validatedsealcode')) {
+              validatedSealCode = normalizedData['validatedsealcode'].toString();
+            } else if (normalizedData.containsKey('sealcode')) {
+              validatedSealCode = normalizedData['sealcode'].toString();
+            } else if (normalizedData.containsKey('seal')) {
+              validatedSealCode = normalizedData['seal'].toString();
+            }
+            
+            // If validation is successful but no validated code, use input code
+            if (validationStatus.toUpperCase() == 'SUCCESS' && validatedSealCode.isEmpty) {
+              validatedSealCode = sealCode;
+            }
+          }
+        } catch (e) {
+          print('Error parsing validation data: $e');
+        }
+      }
+      
+      print('Extracted validation status: $validationStatus');
+      print('Extracted error message: $errorMessage');
+      print('Extracted validated seal code: $validatedSealCode');
+      
+      // If no status extracted, determine from overall response
+      if (validationStatus.isEmpty) {
+        validationStatus = response.success ? 'SUCCESS' : 'FAILED';
+      }
+      
+      // If no error message extracted, use response message
+      if (errorMessage.isEmpty && !response.success) {
+        errorMessage = response.message;
+      }
+      
+      // If still no validated code and validation successful, use input code
+      if (validatedSealCode.isEmpty && validationStatus.toUpperCase() == 'SUCCESS') {
+        validatedSealCode = sealCode;
+      }
+      
+      if ((response.success && validationStatus.toUpperCase() == 'SUCCESS') && mounted) {
         // Validation successful - update with validated seal code
         setState(() {
           int existingIndex = _detailCatridgeItems.indexWhere((item) => item.index == catridgeIndex + 1);
@@ -398,12 +543,12 @@ class _PrepareModePageState extends State<PrepareModePage> {
             _detailCatridgeItems[existingIndex] = DetailCatridgeItem(
               index: existingItem.index,
               noCatridge: existingItem.noCatridge,
-              sealCatridge: response.data!.validatedSealCode, // Use validated seal code
+              sealCatridge: validatedSealCode, // Use validated seal code
               value: existingItem.value,
               total: existingItem.total,
               denom: existingItem.denom,
             );
-            print('Updated seal for detail item at index $existingIndex with validated code: ${response.data!.validatedSealCode}');
+            print('Updated seal for detail item at index $existingIndex with validated code: $validatedSealCode');
           }
         });
         
@@ -418,11 +563,8 @@ class _PrepareModePageState extends State<PrepareModePage> {
         );
       } else {
         // Validation failed - update detail item with error from SP
-        String errorMessage = 'Seal tidak valid';
-        if (response.data != null && response.data!.errorMessage.isNotEmpty) {
-          errorMessage = response.data!.errorMessage;
-        } else if (response.message.isNotEmpty) {
-          errorMessage = response.message;
+        if (errorMessage.isEmpty) {
+          errorMessage = 'Seal tidak valid';
         }
         
         setState(() {
@@ -451,6 +593,10 @@ class _PrepareModePageState extends State<PrepareModePage> {
         );
       }
     } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      
       print('Error validating seal: $e');
       // Update detail item with network/system error
       setState(() {

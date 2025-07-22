@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import '../models/prepare_model.dart';
 import '../models/return_model.dart';
@@ -410,48 +411,151 @@ class ApiService {
         "ScanSealStatusRemark": scanSealStatusRemark
       };
       
-      print('Return ATM Catridge insert request: ${json.encode(requestBody)}');
+      debugPrint('🔍 Return ATM Catridge insert request: ${json.encode(requestBody)}');
+      debugPrint('🔍 Headers: $requestHeaders');
       
-      final response = await _tryRequestWithFallback(
-        requestFn: (baseUrl) => http.post(
-          Uri.parse('$baseUrl/CRF/rtn/atm/catridge'),
-          headers: requestHeaders,
-          body: json.encode(requestBody),
+      final response = await _debugHttp(
+        () => _tryRequestWithFallback(
+          requestFn: (baseUrl) => http.post(
+            Uri.parse('$baseUrl/CRF/rtn/atm/catridge'),
+            headers: requestHeaders,
+            body: json.encode(requestBody),
+          ),
         ),
+        'Return ATM Catridge Insert'
       );
 
       if (response.statusCode == 200) {
         try {
+          debugPrint('🔍 Raw return ATM catridge insert response: ${response.body.substring(0, math.min(300, response.body.length))}...');
+          
           final jsonData = json.decode(response.body);
-          print('Return ATM Catridge insert response: ${response.body}');
+          
+          // Normalize keys to handle case insensitivity
+          Map<String, dynamic> normalizedJson = {};
+          if (jsonData is Map<String, dynamic>) {
+            jsonData.forEach((key, value) {
+              normalizedJson[key.toLowerCase()] = value;
+            });
+          } else {
+            debugPrint('❌ Unexpected response format: $jsonData');
+            return ApiResponse(
+              success: false,
+              message: 'Invalid response format',
+              status: 'error'
+            );
+          }
           
           // Check if the response contains direct success/status fields from SP
-          if (jsonData.containsKey('data')) {
+          bool isSuccess = false;
+          String message = 'Operation completed';
+          
+          if (normalizedJson.containsKey('success')) {
+            isSuccess = normalizedJson['success'] == true;
+          }
+          
+          if (normalizedJson.containsKey('message')) {
+            message = normalizedJson['message'].toString();
+          }
+          
+          if (normalizedJson.containsKey('data')) {
             try {
-              final dataObject = jsonData['data'];
-              if (dataObject is String) {
-                final dataJson = json.decode(dataObject);
-                if (dataJson is List && dataJson.isNotEmpty) {
-                  final status = dataJson[0]['Status']?.toString().toLowerCase();
-                  final message = dataJson[0]['Message']?.toString();
+              var dataValue = normalizedJson['data'];
+              debugPrint('🔍 Data value type: ${dataValue.runtimeType}');
+              
+              if (dataValue is String) {
+                // Try to parse data if it's a JSON string
+                try {
+                  final dataJson = json.decode(dataValue);
+                  debugPrint('🔍 Parsed data JSON: $dataJson');
                   
-                  if (status != null && status != 'success') {
-                    return ApiResponse(
-                      success: false,
-                      message: message ?? 'Gagal menyimpan data catridge return',
-                      status: 'error'
-                    );
+                  if (dataJson is List && dataJson.isNotEmpty) {
+                    // Normalize first item's keys
+                    Map<String, dynamic> normalizedDataItem = {};
+                    if (dataJson[0] is Map<String, dynamic>) {
+                      (dataJson[0] as Map<String, dynamic>).forEach((key, value) {
+                        normalizedDataItem[key.toLowerCase()] = value;
+                      });
+                      
+                      debugPrint('🔍 Normalized data item: $normalizedDataItem');
+                      
+                      // Extract status and message
+                      final status = normalizedDataItem['status']?.toString().toLowerCase();
+                      final dataMessage = normalizedDataItem['message']?.toString();
+                      
+                      if (status != null) {
+                        isSuccess = status == 'success';
+                        if (dataMessage != null && dataMessage.isNotEmpty) {
+                          message = dataMessage;
+                        }
+                      }
+                    }
+                  }
+                } catch (parseError) {
+                  debugPrint('❌ Error parsing data JSON string: $parseError');
+                }
+              } else if (dataValue is List && dataValue.isNotEmpty) {
+                // Handle direct list response
+                debugPrint('🔍 Data is a direct list with ${dataValue.length} items');
+                
+                if (dataValue[0] is Map<String, dynamic>) {
+                  // Normalize first item's keys
+                  Map<String, dynamic> normalizedDataItem = {};
+                  (dataValue[0] as Map<String, dynamic>).forEach((key, value) {
+                    normalizedDataItem[key.toLowerCase()] = value;
+                  });
+                  
+                  debugPrint('🔍 Normalized data item: $normalizedDataItem');
+                  
+                  // Extract status and message
+                  final status = normalizedDataItem['status']?.toString().toLowerCase();
+                  final dataMessage = normalizedDataItem['message']?.toString();
+                  
+                  if (status != null) {
+                    isSuccess = status == 'success';
+                    if (dataMessage != null && dataMessage.isNotEmpty) {
+                      message = dataMessage;
+                    }
+                  }
+                }
+              } else if (dataValue is Map<String, dynamic>) {
+                // Handle direct map response
+                debugPrint('🔍 Data is a direct map');
+                
+                // Normalize data map keys
+                Map<String, dynamic> normalizedDataMap = {};
+                dataValue.forEach((key, value) {
+                  normalizedDataMap[key.toLowerCase()] = value;
+                });
+                
+                debugPrint('🔍 Normalized data map: $normalizedDataMap');
+                
+                // Extract status and message
+                final status = normalizedDataMap['status']?.toString().toLowerCase();
+                final dataMessage = normalizedDataMap['message']?.toString();
+                
+                if (status != null) {
+                  isSuccess = status == 'success';
+                  if (dataMessage != null && dataMessage.isNotEmpty) {
+                    message = dataMessage;
                   }
                 }
               }
             } catch (e) {
-              debugPrint('Error parsing inner data JSON: $e');
+              debugPrint('❌ Error processing data field: $e');
             }
           }
           
-          return ApiResponse.fromJson(jsonData);
+          debugPrint('🔍 Final result: success=$isSuccess, message=$message');
+          
+          return ApiResponse(
+            success: isSuccess,
+            message: message,
+            status: isSuccess ? 'success' : 'error',
+            data: normalizedJson['data']
+          );
         } catch (e) {
-          debugPrint('Error parsing Return ATM catridge insert JSON: $e');
+          debugPrint('❌ Error parsing Return ATM catridge insert JSON: $e');
           return ApiResponse(
             success: false,
             message: 'Invalid Return ATM catridge insert data format from server',
@@ -459,6 +563,7 @@ class ApiService {
           );
         }
       } else if (response.statusCode == 401) {
+        debugPrint('❌ 401 Unauthorized on return ATM catridge insert!');
         await _authService.logout();
         return ApiResponse(
           success: false,
@@ -466,6 +571,7 @@ class ApiService {
           status: 'error'
         );
       } else {
+        debugPrint('❌ HTTP error on return ATM catridge insert: ${response.statusCode}, body: ${response.body}');
         return ApiResponse(
           success: false,
           message: 'Server error (${response.statusCode}): ${response.body}',
@@ -473,10 +579,16 @@ class ApiService {
         );
       }
     } catch (e) {
-      debugPrint('Return ATM Catridge insert API error: $e');
+      debugPrint('❌ Return ATM catridge insert API error: $e');
+      
+      String errorMessage = 'Network error: ${e.toString()}';
+      if (e is TimeoutException) {
+        errorMessage = 'Connection timeout: Please check your internet connection';
+      }
+      
       return ApiResponse(
         success: false,
-        message: 'Network error: ${e.toString()}',
+        message: errorMessage,
         status: 'error'
       );
     }
@@ -580,21 +692,49 @@ class ApiService {
         url += '&requiredType=$requiredType';
       }
       
-      final response = await http.get(
-        Uri.parse(url),
-        headers: headers,
-      ).timeout(_timeout);
+      // Debug log the request
+      debugPrint('🔍 Catridge lookup URL: $url');
+      debugPrint('🔍 Headers: $headers');
+      
+      final response = await _debugHttp(
+        () => http.get(
+          Uri.parse(url),
+          headers: headers,
+        ).timeout(_timeout),
+        'Catridge Lookup: $catridgeCode'
+      );
       
       if (response.statusCode == 200) {
+        // Debug log the raw response
+        debugPrint('🔍 Raw response: ${response.body.substring(0, math.min(200, response.body.length))}...');
+        
         final jsonData = json.decode(response.body);
         final apiResponse = ApiResponse.fromJson(jsonData);
+        
+        // Debug log the parsed response
+        debugPrint('🔍 Parsed response: success=${apiResponse.success}, message=${apiResponse.message}');
+        
+        if (apiResponse.data is List) {
+          debugPrint('🔍 Data is List with ${(apiResponse.data as List).length} items');
+        } else {
+          debugPrint('🔍 Data type: ${apiResponse.data.runtimeType}');
+        }
         
         // Filter out catridges that are already in use if needed
         if (existingCatridges != null && existingCatridges.isNotEmpty && apiResponse.success && apiResponse.data != null) {
           final dataList = apiResponse.data as List<dynamic>;
+          
+          // Debug log the data items
+          for (var item in dataList) {
+            var code = _extractCodeFromItem(item);
+            debugPrint('🔍 Catridge item: $code, ${item.toString().substring(0, math.min(100, item.toString().length))}...');
+          }
+          
           final filteredData = dataList.where((item) {
-            final code = item['Code'] ?? item['code'] ?? '';
-            return !existingCatridges.contains(code);
+            var code = _extractCodeFromItem(item);
+            var isExisting = existingCatridges.contains(code);
+            debugPrint('🔍 Checking catridge: $code, isExisting: $isExisting');
+            return !isExisting;
           }).toList();
           
           // Update the response with filtered data
@@ -618,6 +758,7 @@ class ApiService {
         
         return apiResponse;
       } else {
+        debugPrint('🔍 HTTP error: ${response.statusCode}, body: ${response.body}');
         return ApiResponse(
           success: false,
           message: 'Server error (${response.statusCode})',
@@ -625,6 +766,7 @@ class ApiService {
         );
       }
     } catch (e) {
+      debugPrint('🔍 Exception: $e');
       return ApiResponse(
         success: false,
         message: 'Error: ${e.toString()}',
@@ -632,25 +774,69 @@ class ApiService {
       );
     }
   }
+  
+  // Helper to extract code from catridge data item
+  String _extractCodeFromItem(dynamic item) {
+    if (item is Map<String, dynamic>) {
+      // Try both upper and lowercase keys
+      if (item.containsKey('Code')) {
+        return item['Code'].toString();
+      } else if (item.containsKey('code')) {
+        return item['code'].toString();
+      } else {
+        // If no direct code key, try to normalize keys
+        Map<String, dynamic> normalized = {};
+        item.forEach((key, value) {
+          normalized[key.toLowerCase()] = value;
+        });
+        
+        if (normalized.containsKey('code')) {
+          return normalized['code'].toString();
+        }
+      }
+    }
+    return '';
+  }
 
   // Validate Seal Code
   Future<ApiResponse> validateSeal(String sealCode) async {
     try {
       final requestHeaders = await headers;
       
-      final response = await _tryRequestWithFallback(
-        requestFn: (baseUrl) => http.get(
-          Uri.parse('$baseUrl/CRF/validate/seal/$sealCode'),
-          headers: requestHeaders,
+      debugPrint('🔍 Validating seal: $sealCode');
+      debugPrint('🔍 Headers: $requestHeaders');
+      
+      final response = await _debugHttp(
+        () => _tryRequestWithFallback(
+          requestFn: (baseUrl) => http.get(
+            Uri.parse('$baseUrl/CRF/validate/seal/$sealCode'),
+            headers: requestHeaders,
+          ),
         ),
+        'Validate Seal: $sealCode'
       );
 
       if (response.statusCode == 200) {
         try {
+          debugPrint('🔍 Raw seal validation response: ${response.body.substring(0, math.min(200, response.body.length))}...');
+          
           final jsonData = json.decode(response.body);
-          return ApiResponse.fromJson(jsonData);
+          final apiResponse = ApiResponse.fromJson(jsonData);
+          
+          // Debug log the parsed response
+          debugPrint('🔍 Parsed seal response: success=${apiResponse.success}, message=${apiResponse.message}');
+          if (apiResponse.data != null) {
+            debugPrint('🔍 Data type: ${apiResponse.data.runtimeType}');
+            if (apiResponse.data is Map) {
+              debugPrint('🔍 Data as Map: ${apiResponse.data.toString().substring(0, math.min(100, apiResponse.data.toString().length))}...');
+            } else if (apiResponse.data is List) {
+              debugPrint('🔍 Data is List with ${(apiResponse.data as List).length} items');
+            }
+          }
+          
+          return apiResponse;
         } catch (e) {
-          debugPrint('Error parsing seal validation JSON: $e');
+          debugPrint('❌ Error parsing seal validation JSON: $e');
           return ApiResponse(
             success: false,
             message: 'Invalid data format from server',
@@ -658,6 +844,7 @@ class ApiService {
           );
         }
       } else if (response.statusCode == 401) {
+        debugPrint('❌ 401 Unauthorized on seal validation!');
         await _authService.logout();
         return ApiResponse(
           success: false,
@@ -665,6 +852,7 @@ class ApiService {
           status: 'error'
         );
       } else {
+        debugPrint('❌ HTTP error on seal validation: ${response.statusCode}, body: ${response.body}');
         return ApiResponse(
           success: false,
           message: 'Server error (${response.statusCode}): ${response.body}',
@@ -672,7 +860,7 @@ class ApiService {
         );
       }
     } catch (e) {
-      debugPrint('Seal validation API error: $e');
+      debugPrint('❌ Seal validation API error: $e');
       
       String errorMessage = 'Network error: ${e.toString()}';
       if (e is TimeoutException) {
@@ -1316,70 +1504,16 @@ class ApiService {
       String numericBranchCode = branchCode;
       if (branchCode.isEmpty || !RegExp(r'^\d+$').hasMatch(branchCode)) {
         numericBranchCode = '1'; // Default to '1' if not numeric
-        print('WARNING: Branch code is not numeric: "$branchCode", using default: $numericBranchCode');
+        debugPrint('🔍 WARNING: Branch code is not numeric: "$branchCode", using default: $numericBranchCode');
       } else {
-        print('Using numeric branch code: $numericBranchCode');
+        debugPrint('🔍 Using numeric branch code: $numericBranchCode');
       }
       
       // Check authentication status first
       await checkAndRefreshAuth();
       
-      // APPROACH 1: Direct HTTP request without auth headers
-      final directUri = Uri.parse('http://10.10.0.223/LocalCRF/api/CRF/rtn/validate-and-get-replenish')
-          .replace(queryParameters: {
-            'idtool': idTool,
-            'branchCode': numericBranchCode,
-            if (catridgeCode != null && catridgeCode.trim().isNotEmpty) 'catridgeCode': catridgeCode,
-          });
-      
-      debugPrint('APPROACH 1 - DIRECT TEST URL: ${directUri.toString()}');
-      
-      try {
-        // First try direct request without auth
-        final directResponse = await http.get(directUri).timeout(const Duration(seconds: 10));
-        debugPrint('Direct response status: ${directResponse.statusCode}');
-        
-        if (directResponse.statusCode == 200) {
-          // If direct request works, use that response
-          debugPrint('Direct request successful, using response');
-          final jsonData = json.decode(directResponse.body);
-          return jsonData;
-        } else {
-          debugPrint('Direct request failed with status ${directResponse.statusCode}');
-        }
-      } catch (directError) {
-        debugPrint('Direct request error: $directError');
-      }
-      
-      // APPROACH 2: Try with Dio
-      debugPrint('APPROACH 2 - Trying with Dio...');
-      final dioResult = await tryWithDio(idTool, numericBranchCode, catridgeCode: catridgeCode);
-      if (dioResult['success'] == true) {
-        debugPrint('Dio request successful');
-        return dioResult;
-      }
-      debugPrint('Dio request failed');
-      
-      // APPROACH 3: Try with path parameters
-      debugPrint('APPROACH 3 - Trying with path parameters...');
-      final pathResult = await tryWithPathParams(idTool, numericBranchCode, catridgeCode: catridgeCode);
-      if (pathResult['success'] == true) {
-        debugPrint('Path parameters request successful');
-        return pathResult;
-      }
-      debugPrint('Path parameters request failed');
-      
-      // APPROACH 4: Try with POST instead of GET
-      debugPrint('APPROACH 4 - Trying with POST...');
-      final postResult = await tryWithPost(idTool, numericBranchCode, catridgeCode: catridgeCode);
-      if (postResult['success'] == true) {
-        debugPrint('POST request successful');
-        return postResult;
-      }
-      debugPrint('POST request failed');
-      
       // APPROACH 5: Original implementation with auth
-      debugPrint('APPROACH 5 - Trying original implementation with auth...');
+      debugPrint('🔍 Trying implementation with auth...');
       final requestHeaders = await headers;
       
       // Use Uri class properly for query parameters instead of manual URL construction
@@ -1394,98 +1528,105 @@ class ApiService {
       // Add catridgeCode parameter only if it's not null and not empty
       if (catridgeCode != null && catridgeCode.trim().isNotEmpty) {
         queryParams['catridgeCode'] = catridgeCode;
-        debugPrint('Including catridgeCode in request: $catridgeCode');
+        debugPrint('🔍 Including catridgeCode in request: $catridgeCode');
       } else {
-        debugPrint('catridgeCode is empty or null, excluding from request');
+        debugPrint('🔍 catridgeCode is empty or null, excluding from request');
       }
       
       // Log the request details for debugging
-      debugPrint('Request: GET ${uri.path}');
-      debugPrint('Parameters: $queryParams');
-      debugPrint('Headers: ${requestHeaders.toString()}');
+      debugPrint('🔍 Request: GET ${uri.path}');
+      debugPrint('🔍 Parameters: $queryParams');
+      debugPrint('🔍 Headers: ${requestHeaders.toString()}');
       
       // Create URI with query parameters
       final requestUri = uri.replace(queryParameters: queryParams);
-      debugPrint('Full URL: ${requestUri.toString()}');
+      debugPrint('🔍 Full URL: ${requestUri.toString()}');
       
-      final response = await _tryRequestWithFallback(
-        requestFn: (baseUrl) {
-          // Create a new URI with the current baseUrl
-          final baseUri = Uri.parse('$baseUrl/CRF/rtn/validate-and-get-replenish')
-              .replace(queryParameters: queryParams);
-          return http.get(baseUri, headers: requestHeaders);
-        },
+      final response = await _debugHttp(
+        () => _tryRequestWithFallback(
+          requestFn: (baseUrl) {
+            final uri = Uri.parse('$baseUrl/CRF/rtn/validate-and-get-replenish')
+                .replace(queryParameters: queryParams);
+            return http.get(uri, headers: requestHeaders);
+          },
+        ),
+        'Validate and Get Replenish: $idTool'
       );
-      
-      debugPrint('Response status code: ${response.statusCode}');
-      debugPrint('Response body preview: ${response.body.length > 100 ? response.body.substring(0, 100) + '...' : response.body}');
       
       if (response.statusCode == 200) {
         try {
+          debugPrint('🔍 Raw response: ${response.body.substring(0, math.min(300, response.body.length))}...');
+          
           final jsonData = json.decode(response.body);
-          return jsonData;
+          
+          // Normalize response for consistent access
+          if (jsonData is Map<String, dynamic>) {
+            Map<String, dynamic> normalizedJson = {};
+            jsonData.forEach((key, value) {
+              normalizedJson[key.toLowerCase()] = value;
+            });
+            
+            // Extract success and message for easier debugging
+            bool isSuccess = false;
+            String message = '';
+            
+            if (normalizedJson.containsKey('success')) {
+              isSuccess = normalizedJson['success'] == true;
+            }
+            
+            if (normalizedJson.containsKey('message')) {
+              message = normalizedJson['message'].toString();
+            }
+            
+            debugPrint('🔍 Parsed response: success=$isSuccess, message=$message');
+            
+            // Always return the original JSON for backward compatibility
+            return jsonData;
+          } else {
+            debugPrint('❌ Unexpected response format: ${jsonData.runtimeType}');
+            return {
+              'success': false,
+              'message': 'Unexpected response format',
+              'data': null
+            };
+          }
         } catch (e) {
-          debugPrint('Error parsing ValidateAndGetReplenish JSON: $e');
+          debugPrint('❌ Error parsing response: $e');
           return {
             'success': false,
-            'message': 'Gagal memproses data dari server: ${e.toString()}'
+            'message': 'Error parsing response: ${e.toString()}',
+            'data': null
           };
         }
       } else if (response.statusCode == 401) {
+        debugPrint('❌ 401 Unauthorized!');
         await _authService.logout();
         return {
           'success': false,
-          'message': 'Sesi anda telah berakhir, silakan login kembali'
-        };
-      } else if (response.statusCode == 404) {
-        // More detailed 404 error with parameters and complete URL
-        final String fullUrl = '$_currentBaseUrl/CRF/rtn/validate-and-get-replenish?idtool=$idTool&branchCode=$numericBranchCode${catridgeCode != null && catridgeCode.isNotEmpty ? '&catridgeCode=$catridgeCode' : ''}';
-        return {
-          'success': false,
-          'message': 'Endpoint API tidak ditemukan (404). Mohon periksa konfigurasi server.\n\n' +
-                    'Detail: GET /CRF/rtn/validate-and-get-replenish\n' +
-                    'Parameter: idtool=$idTool, branchCode=$numericBranchCode${catridgeCode != null && catridgeCode.isNotEmpty ? ', catridgeCode=$catridgeCode' : ''}\n\n' +
-                    'URL Lengkap: $fullUrl\n\n' +
-                    'Coba akses URL ini di browser untuk memverifikasi: http://10.10.0.223/LocalCRF/api/CRF/rtn/validate-and-get-replenish?idtool=$idTool&branchCode=$numericBranchCode'
+          'message': 'Session expired: Please login again',
+          'data': null
         };
       } else {
-        // Better error message with response details
-        String errorDetail = '';
-        try {
-          // Try to extract any error information from the response body
-          final errorJson = json.decode(response.body);
-          if (errorJson.containsKey('message')) {
-            errorDetail = errorJson['message'];
-          } else if (errorJson.containsKey('error')) {
-            errorDetail = errorJson['error'];
-          }
-        } catch (e) {
-          // If not valid JSON, use raw response
-          errorDetail = response.body.length > 200 ? response.body.substring(0, 200) + '...' : response.body;
-        }
-        
+        debugPrint('❌ Error response: ${response.statusCode}, ${response.body}');
         return {
           'success': false,
-          'message': 'Kesalahan server (${response.statusCode})\n\nDetail: $errorDetail\n\nParameter: idtool=$idTool, branchCode=$numericBranchCode${catridgeCode != null && catridgeCode.isNotEmpty ? ', catridgeCode=$catridgeCode' : ''}'
+          'message': 'Server error (${response.statusCode}): ${response.body}',
+          'data': null
         };
       }
     } catch (e) {
-      debugPrint('ValidateAndGetReplenish API error: $e');
-      
-      String errorMessage = 'Kesalahan jaringan: ${e.toString()}';
+      debugPrint('❌ API error: $e');
       if (e is TimeoutException) {
-        errorMessage = 'Koneksi timeout: Mohon periksa koneksi internet anda';
+        return {
+          'success': false,
+          'message': 'Connection timeout: Please check your internet connection',
+          'data': null
+        };
       }
-      
-      // Include request parameters in error message
-      errorMessage += '\n\nParameter yang digunakan:\nidTool: $idTool\nbranchCode: $branchCode';
-      if (catridgeCode != null && catridgeCode.isNotEmpty) {
-        errorMessage += '\ncatridgeCode: $catridgeCode';
-      }
-      
       return {
         'success': false,
-        'message': errorMessage
+        'message': 'Network error: ${e.toString()}',
+        'data': null
       };
     }
   }

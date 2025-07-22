@@ -312,40 +312,47 @@ class CatridgeData {
   });
 
   factory CatridgeData.fromJson(Map<String, dynamic> json) {
+    // First normalize the keys to handle mixed case in API response
+    Map<String, dynamic> normalizedJson = {};
+    json.forEach((key, value) {
+      normalizedJson[key.toLowerCase()] = value;
+    });
+    
     // Handle potentially null or invalid format values
     num standValue = 0;
     try {
-      // Try to safely parse standValue
-      if (json['StandValue'] != null) {
-        if (json['StandValue'] is num) {
-          standValue = json['StandValue'];
-        } else if (json['StandValue'] is String) {
-          standValue = num.tryParse(json['StandValue']) ?? 0;
+      // Try to safely parse standValue with various key formats
+      if (normalizedJson.containsKey('standvalue')) {
+        var sv = normalizedJson['standvalue'];
+        if (sv is num) {
+          standValue = sv;
+        } else if (sv is String) {
+          standValue = num.tryParse(sv) ?? 0;
         }
       }
     } catch (e) {
       print('Error parsing StandValue: $e');
     }
     
-    // Make sure all string values are handled correctly
+    // Make sure all string values are handled correctly with normalized keys
     String code = '';
-    if (json['Code'] != null) {
-      code = json['Code'].toString();
+    if (normalizedJson.containsKey('code')) {
+      code = normalizedJson['code'].toString();
     }
     
     String barCode = '';
-    if (json['BarCode'] != null) {
-      barCode = json['BarCode'].toString();
+    if (normalizedJson.containsKey('barcode')) {
+      barCode = normalizedJson['barcode'].toString();
     }
     
     String typeCatridge = '';
-    if (json['TypeCatridge'] != null) {
-      typeCatridge = json['TypeCatridge'].toString();
+    if (normalizedJson.containsKey('typecatridge')) {
+      typeCatridge = normalizedJson['typecatridge'].toString();
     }
     
     String codeBank = '';
-    if (json['CodeBank'] != null) {
-      codeBank = json['CodeBank'].toString();
+    if (normalizedJson.containsKey('codebank')) {
+      codeBank = normalizedJson['codebank'].toString();
     }
     
     return CatridgeData(
@@ -405,15 +412,92 @@ class SealValidationData {
   });
 
   factory SealValidationData.fromJson(Map<String, dynamic> json) {
+    // Normalize keys to handle case insensitivity
+    Map<String, dynamic> normalizedJson = {};
+    json.forEach((key, value) {
+      normalizedJson[key.toLowerCase()] = value;
+    });
+    
+    // Parse validation status with fallbacks
+    String status = '';
+    if (normalizedJson.containsKey('validationstatus')) {
+      status = normalizedJson['validationstatus'].toString();
+    } else if (normalizedJson.containsKey('status')) {
+      status = normalizedJson['status'].toString();
+    } else if (normalizedJson.containsKey('validation_status')) {
+      status = normalizedJson['validation_status'].toString();
+    }
+    
+    // Parse error code with fallbacks
+    String errorCode = '';
+    if (normalizedJson.containsKey('errorcode')) {
+      errorCode = normalizedJson['errorcode'].toString();
+    } else if (normalizedJson.containsKey('error_code')) {
+      errorCode = normalizedJson['error_code'].toString();
+    }
+    
+    // Parse error message with fallbacks
+    String errorMsg = '';
+    if (normalizedJson.containsKey('errormessage')) {
+      errorMsg = normalizedJson['errormessage'].toString();
+    } else if (normalizedJson.containsKey('error_message')) {
+      errorMsg = normalizedJson['error_message'].toString();
+    } else if (normalizedJson.containsKey('message')) {
+      errorMsg = normalizedJson['message'].toString();
+    }
+    
+    // Parse validated seal code with fallbacks
+    String validatedCode = '';
+    if (normalizedJson.containsKey('validatedsealcode')) {
+      validatedCode = normalizedJson['validatedsealcode'].toString();
+    } else if (normalizedJson.containsKey('validated_seal_code')) {
+      validatedCode = normalizedJson['validated_seal_code'].toString();
+    } else if (normalizedJson.containsKey('sealcode')) {
+      validatedCode = normalizedJson['sealcode'].toString();
+    } else if (normalizedJson.containsKey('seal_code')) {
+      validatedCode = normalizedJson['seal_code'].toString();
+    }
+    
+    // If we don't have a validated code but do have a requested code, use the requested code if validation is successful
+    if (validatedCode.isEmpty && normalizedJson.containsKey('requestedsealcode') && status.toUpperCase() == 'SUCCESS') {
+      validatedCode = normalizedJson['requestedsealcode'].toString();
+    }
+    
+    // Parse validation date with fallbacks
+    DateTime validationDate = DateTime.now();
+    try {
+      if (normalizedJson.containsKey('validationdate')) {
+        var dateValue = normalizedJson['validationdate'];
+        if (dateValue is String) {
+          validationDate = DateTime.parse(dateValue);
+        }
+      } else if (normalizedJson.containsKey('validation_date')) {
+        var dateValue = normalizedJson['validation_date'];
+        if (dateValue is String) {
+          validationDate = DateTime.parse(dateValue);
+        }
+      }
+    } catch (e) {
+      print('Error parsing validation date: $e');
+    }
+    
+    // Parse requested seal code with fallbacks
+    String requestedCode = '';
+    if (normalizedJson.containsKey('requestedsealcode')) {
+      requestedCode = normalizedJson['requestedsealcode'].toString();
+    } else if (normalizedJson.containsKey('requested_seal_code')) {
+      requestedCode = normalizedJson['requested_seal_code'].toString();
+    } else if (normalizedJson.containsKey('input_seal')) {
+      requestedCode = normalizedJson['input_seal'].toString();
+    }
+    
     return SealValidationData(
-      validationStatus: json['validationStatus'] ?? '',
-      errorCode: json['errorCode'] ?? '',
-      errorMessage: json['errorMessage'] ?? '',
-      validatedSealCode: json['validatedSealCode'] ?? '',
-      validationDate: json['validationDate'] != null 
-        ? DateTime.parse(json['validationDate']) 
-        : DateTime.now(),
-      requestedSealCode: json['requestedSealCode'] ?? '',
+      validationStatus: status,
+      errorCode: errorCode,
+      errorMessage: errorMsg,
+      validatedSealCode: validatedCode,
+      validationDate: validationDate,
+      requestedSealCode: requestedCode,
     );
   }
 }
@@ -430,10 +514,50 @@ class SealValidationResponse {
   });
 
   factory SealValidationResponse.fromJson(Map<String, dynamic> json) {
+    // Normalize keys to handle case insensitivity
+    Map<String, dynamic> normalizedJson = {};
+    json.forEach((key, value) {
+      normalizedJson[key.toLowerCase()] = value;
+    });
+    
+    // Handle API response with different formats
+    bool isSuccess = false;
+    if (normalizedJson.containsKey('success')) {
+      isSuccess = normalizedJson['success'] == true;
+    } else if (normalizedJson.containsKey('status')) {
+      isSuccess = normalizedJson['status'].toString().toLowerCase() == 'success';
+    }
+    
+    String msg = '';
+    if (normalizedJson.containsKey('message')) {
+      msg = normalizedJson['message'].toString();
+    }
+    
+    // Handle data in different formats
+    SealValidationData? validationData;
+    if (normalizedJson.containsKey('data')) {
+      var dataValue = normalizedJson['data'];
+      if (dataValue != null) {
+        // Convert the Map<dynamic, dynamic> to Map<String, dynamic>
+        if (dataValue is Map) {
+          Map<String, dynamic> stringKeyMap = {};
+          dataValue.forEach((key, value) {
+            stringKeyMap[key.toString()] = value;
+          });
+          validationData = SealValidationData.fromJson(stringKeyMap);
+        } else {
+          validationData = SealValidationData.fromJson(normalizedJson);
+        }
+      }
+    } else {
+      // If no data field, try to parse directly from root
+      validationData = SealValidationData.fromJson(normalizedJson);
+    }
+    
     return SealValidationResponse(
-      success: json['success'] ?? false,
-      message: json['message'] ?? '',
-      data: json['data'] != null ? SealValidationData.fromJson(json['data']) : null,
+      success: isSuccess,
+      message: msg,
+      data: validationData,
     );
   }
 }
@@ -474,16 +598,53 @@ class ApiResponse {
   });
 
   factory ApiResponse.fromJson(Map<String, dynamic> json) {
+    // Normalize keys to handle case insensitivity
+    Map<String, dynamic> normalizedJson = {};
+    json.forEach((key, value) {
+      normalizedJson[key.toLowerCase()] = value;
+    });
+    
     // Handle both API controller response and direct SP response
-    bool isSuccess = json['success'] ?? (json['Status']?.toString().toLowerCase() == 'success');
-    String msg = json['message'] ?? json['Message'] ?? '';
+    bool isSuccess = false;
+    if (normalizedJson.containsKey('success')) {
+      isSuccess = normalizedJson['success'] == true;
+    } else if (normalizedJson.containsKey('status')) {
+      isSuccess = normalizedJson['status'].toString().toLowerCase() == 'success';
+    }
+    
+    String msg = '';
+    if (normalizedJson.containsKey('message')) {
+      msg = normalizedJson['message'].toString();
+    } else if (normalizedJson.containsKey('msg')) {
+      msg = normalizedJson['msg'].toString();
+    }
+    
+    dynamic responseData = null;
+    if (normalizedJson.containsKey('data')) {
+      responseData = normalizedJson['data'];
+    }
+    
+    String? statusValue = null;
+    if (normalizedJson.containsKey('status')) {
+      statusValue = normalizedJson['status'].toString();
+    }
+    
+    int? insertedIdValue = null;
+    if (normalizedJson.containsKey('insertedid')) {
+      var idValue = normalizedJson['insertedid'];
+      if (idValue is int) {
+        insertedIdValue = idValue;
+      } else if (idValue is String) {
+        insertedIdValue = int.tryParse(idValue);
+      }
+    }
     
     return ApiResponse(
       success: isSuccess,
       message: msg,
-      data: json['data'],
-      status: json['Status']?.toString(),
-      insertedId: json['InsertedId'] != null ? int.tryParse(json['InsertedId'].toString()) : null,
+      data: responseData,
+      status: statusValue,
+      insertedId: insertedIdValue,
     );
   }
 }

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:io';
+import '../services/device_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 
 class DeviceInfoScreen extends StatefulWidget {
   const DeviceInfoScreen({Key? key}) : super(key: key);
@@ -15,7 +18,9 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
   String _androidVersion = 'Android Versi 14';
   String _osVersion = 'HYPER OS 14';
   String _androidId = '1234Uas612343456';
+  String _idCreationDate = 'Unknown';
   bool _isLoading = true;
+  bool _isPersistent = false;
 
   @override
   void initState() {
@@ -33,13 +38,33 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
     try {
       DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
       
+      // Get persistent device ID
+      final androidId = await DeviceService.getDeviceId();
+      
+      // Check if the ID is persistent
+      final prefs = await SharedPreferences.getInstance();
+      final creationDate = prefs.getString(DeviceService.DEVICE_ID_CREATED_AT);
+      final isPersistent = await DeviceService.hasStoredDeviceId();
+      
+      String formattedDate = 'Unknown';
+      if (creationDate != null) {
+        try {
+          final date = DateTime.parse(creationDate);
+          formattedDate = DateFormat('dd-MM-yyyy HH:mm:ss').format(date);
+        } catch (e) {
+          formattedDate = 'Invalid date';
+        }
+      }
+      
       if (Platform.isAndroid) {
         AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
         setState(() {
           _deviceName = '${androidInfo.brand} ${androidInfo.model}';
           _androidVersion = 'Android Versi ${androidInfo.version.release}';
           _osVersion = androidInfo.version.codename ?? 'Android ${androidInfo.version.release}';
-          _androidId = androidInfo.id ?? 'Unknown';
+          _androidId = androidId;
+          _idCreationDate = formattedDate;
+          _isPersistent = isPersistent;
           _isLoading = false;
         });
       } else if (Platform.isIOS) {
@@ -48,7 +73,9 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
           _deviceName = '${iosInfo.name} ${iosInfo.model}';
           _androidVersion = 'iOS ${iosInfo.systemVersion}';
           _osVersion = 'iOS ${iosInfo.systemVersion}';
-          _androidId = iosInfo.identifierForVendor ?? 'Unknown';
+          _androidId = androidId;
+          _idCreationDate = formattedDate;
+          _isPersistent = isPersistent;
           _isLoading = false;
         });
       }
@@ -67,6 +94,52 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
         content: Text('Android ID berhasil di Copy kedalam Clipboard !'),
         backgroundColor: Colors.green,
         duration: Duration(seconds: 2),
+      ),
+    );
+  }
+  
+  Future<void> _resetDeviceId() async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Reset Device ID?'),
+        content: Text(
+          'This will delete the stored device ID and generate a new one. '
+          'This is for testing purposes only and may cause authentication issues.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.of(context).pop();
+              
+              setState(() {
+                _isLoading = true;
+              });
+              
+              await DeviceService.resetDeviceId();
+              
+              // Reload device info
+              await _loadDeviceInfo();
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Device ID has been reset'),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 3),
+                ),
+              );
+            },
+            child: Text('Reset'),
+          ),
+        ],
       ),
     );
   }
@@ -324,6 +397,100 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
                                                           Icons.copy,
                                                           size: isSmallScreen ? 12 : 14,
                                                           color: Colors.grey.shade700,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                
+                                                SizedBox(height: isSmallScreen ? 10 : 15),
+                                                
+                                                // Device ID Status
+                                                Text(
+                                                  'Device ID Status',
+                                                  style: TextStyle(
+                                                    fontSize: isSmallScreen ? 14 : 18,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.black,
+                                                  ),
+                                                ),
+                                                Container(
+                                                  height: 1,
+                                                  width: double.infinity,
+                                                  color: Colors.black,
+                                                  margin: EdgeInsets.symmetric(vertical: isSmallScreen ? 4 : 6),
+                                                ),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Row(
+                                                            children: [
+                                                              Container(
+                                                                width: 10,
+                                                                height: 10,
+                                                                decoration: BoxDecoration(
+                                                                  shape: BoxShape.circle,
+                                                                  color: _isPersistent ? Colors.green : Colors.orange,
+                                                                ),
+                                                              ),
+                                                              SizedBox(width: 6),
+                                                              Text(
+                                                                _isPersistent ? 'Persistent ID' : 'Temporary ID',
+                                                                style: TextStyle(
+                                                                  fontSize: isSmallScreen ? 12 : 14,
+                                                                  fontWeight: FontWeight.w500,
+                                                                  color: _isPersistent ? Colors.green : Colors.orange,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          SizedBox(height: 4),
+                                                          Text(
+                                                            'Created: $_idCreationDate',
+                                                            style: TextStyle(
+                                                              fontSize: isSmallScreen ? 12 : 14,
+                                                              color: Colors.grey.shade700,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    SizedBox(width: 6),
+                                                    GestureDetector(
+                                                      onTap: _resetDeviceId,
+                                                      child: Container(
+                                                        padding: EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 4,
+                                                        ),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.red.shade100,
+                                                          borderRadius: BorderRadius.circular(4),
+                                                          border: Border.all(
+                                                            color: Colors.red.shade300,
+                                                            width: 1,
+                                                          ),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            Icon(
+                                                              Icons.refresh,
+                                                              size: isSmallScreen ? 12 : 14,
+                                                              color: Colors.red.shade700,
+                                                            ),
+                                                            SizedBox(width: 4),
+                                                            Text(
+                                                              'Reset',
+                                                              style: TextStyle(
+                                                                fontSize: isSmallScreen ? 10 : 12,
+                                                                color: Colors.red.shade700,
+                                                              ),
+                                                            ),
+                                                          ],
                                                         ),
                                                       ),
                                                     ),

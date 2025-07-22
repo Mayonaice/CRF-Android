@@ -4,6 +4,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:crypto/crypto.dart';
 import 'package:android_id/android_id.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class DeviceService {
   static final DeviceInfoPlugin _deviceInfoPlugin = DeviceInfoPlugin();
@@ -12,9 +13,13 @@ class DeviceService {
   // Keys for storing device ID
   static const String DEVICE_ID_KEY = 'persistent_device_id';
   static const String DEVICE_ID_CREATED_AT = 'device_id_created_at';
+  static const String SECURE_DEVICE_ID_KEY = 'secure_device_id';
   
   // Test device ID constant
   static const String TEST_DEVICE_ID = '1234567fortest89';
+  
+  // Secure storage for more permanent storage
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   
   /// Get Android ID - Real device AndroidID for production
   /// Returns 16-character AndroidID for registration validation
@@ -22,10 +27,19 @@ class DeviceService {
     try {
       print('🔍 Getting device ID with persistence');
       
-      // First check if we have a stored persistent ID
+      // First check secure storage (most reliable across reinstalls)
+      final String? secureId = await _getSecureDeviceId();
+      if (secureId != null && secureId.isNotEmpty) {
+        print('✅ Using secure stored device ID: $secureId');
+        return secureId;
+      }
+      
+      // Then check shared preferences as fallback
       final String? storedId = await _getStoredDeviceId();
       if (storedId != null && storedId.isNotEmpty) {
         print('✅ Using stored persistent device ID: $storedId');
+        // Also save to secure storage for future use
+        await _storeSecureDeviceId(storedId);
         return storedId;
       }
       
@@ -33,6 +47,7 @@ class DeviceService {
       print('⚠️ No stored device ID found, generating new one');
       final String newId = await _generateDeviceId();
       await _storeDeviceId(newId);
+      await _storeSecureDeviceId(newId);
       return newId;
     } catch (e) {
       print('❌ Error in getDeviceId: $e');
@@ -62,6 +77,26 @@ class DeviceService {
     } catch (e) {
       print('❌ Error storing device ID: $e');
       return false;
+    }
+  }
+  
+  /// Get device ID from secure storage (survives app reinstalls)
+  static Future<String?> _getSecureDeviceId() async {
+    try {
+      return await _secureStorage.read(key: SECURE_DEVICE_ID_KEY);
+    } catch (e) {
+      print('❌ Error getting secure device ID: $e');
+      return null;
+    }
+  }
+  
+  /// Store device ID in secure storage
+  static Future<void> _storeSecureDeviceId(String deviceId) async {
+    try {
+      await _secureStorage.write(key: SECURE_DEVICE_ID_KEY, value: deviceId);
+      print('✅ Device ID stored securely: $deviceId');
+    } catch (e) {
+      print('❌ Error storing secure device ID: $e');
     }
   }
   
@@ -96,7 +131,12 @@ class DeviceService {
           androidInfo.display ?? '',
           androidInfo.product ?? '',
           androidInfo.device ?? '',
-          androidInfo.fingerprint ?? '',
+          // Add more hardware-specific identifiers
+          androidInfo.serialNumber ?? '', // This is often empty on newer Android versions due to permissions
+          androidInfo.host ?? '',
+          androidInfo.bootloader ?? '',
+          androidInfo.tags ?? '',
+          androidInfo.type ?? '',
         ];
         
         // Create a stable identifier by hashing device properties
@@ -175,6 +215,11 @@ class DeviceService {
   
   /// Check if device has a stored ID
   static Future<bool> hasStoredDeviceId() async {
+    final secureId = await _getSecureDeviceId();
+    if (secureId != null && secureId.isNotEmpty) {
+      return true;
+    }
+    
     final storedId = await _getStoredDeviceId();
     return storedId != null && storedId.isNotEmpty;
   }
@@ -185,6 +230,7 @@ class DeviceService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(DEVICE_ID_KEY);
       await prefs.remove(DEVICE_ID_CREATED_AT);
+      await _secureStorage.delete(key: SECURE_DEVICE_ID_KEY);
       print('✅ Device ID reset successfully');
       return true;
     } catch (e) {

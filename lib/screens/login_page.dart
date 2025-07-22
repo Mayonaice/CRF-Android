@@ -504,7 +504,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenHeight < 600;
+    final isTablet = screenWidth > 600;
     
     return Scaffold(
       backgroundColor: const Color(0xFF0056A4),
@@ -517,22 +517,23 @@ class _LoginPageState extends State<LoginPage> {
               image: DecorationImage(
                 image: AssetImage('assets/images/bg-login.png'),
                 fit: BoxFit.cover,
+                alignment: Alignment.center,
               ),
             ),
             child: Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: screenWidth * 0.05,
-                vertical: 20,
+                vertical: 0, // Remove vertical padding to allow more space
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Spacer untuk memberikan ruang di atas
-                  SizedBox(height: screenHeight * 0.1),
+                  // Add more space at the top to match original layout
+                  SizedBox(height: screenHeight * 0.15),
                   
                   // Logo and form section with responsive width
                   Container(
-                    width: screenWidth * 0.6,
+                    width: isTablet ? screenWidth * 0.6 : screenWidth * 0.9,
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.9),
@@ -552,7 +553,7 @@ class _LoginPageState extends State<LoginPage> {
                         Text(
                           'Login Your Account',
                           style: TextStyle(
-                            fontSize: 28,
+                            fontSize: isTablet ? 28 : 22,
                             fontWeight: FontWeight.bold,
                             color: const Color(0xFF0056A4),
                           ),
@@ -562,7 +563,7 @@ class _LoginPageState extends State<LoginPage> {
                         
                         // Form - responsive dengan padding tambahan
                         Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 10.0),
+                          padding: EdgeInsets.symmetric(horizontal: isTablet ? 20.0 : 10.0),
                           child: Form(
                             key: _formKey,
                             child: Column(
@@ -809,8 +810,41 @@ class _LoginPageState extends State<LoginPage> {
                     'CRF Android App v1.0',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 14,
+                      fontSize: isTablet ? 14 : 12,
                       fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                  
+                  // Add test mode switch in bottom corner
+                  Align(
+                    alignment: Alignment.bottomRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 20, right: 10),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Test Mode',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Switch(
+                            value: _isTestMode,
+                            onChanged: (value) {
+                              if (value) {
+                                _showTokenInputDialog();
+                              } else {
+                                setState(() {
+                                  _isTestMode = false;
+                                });
+                              }
+                            },
+                            activeColor: Colors.greenAccent,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

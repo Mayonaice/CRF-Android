@@ -45,10 +45,9 @@ class MainActivity: FlutterActivity() {
             Log.d(TAG, "Enabling fullscreen mode")
             
             // Hide only the status bar (notification bar) but keep the content visible
-            window.setFlags(
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            )
+            // Use FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS to ensure proper layout
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
             
             // For Android API 30+ (Android 11+), use a less aggressive approach
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

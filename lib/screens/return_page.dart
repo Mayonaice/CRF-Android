@@ -374,65 +374,90 @@ class _ReturnModePageState extends State<ReturnModePage> {
 
   // Show TL approval dialog
   Future<void> _showTLApprovalDialog() async {
-    if (!_isFormsValid) {
-      _showErrorDialog('Harap lengkapi semua field dengan benar sebelum submit');
-      return;
+    // Periksa apakah semua cartridge sections telah divalidasi
+    bool allSectionsValidated = true;
+    bool anyManualMode = false;
+    
+    for (var key in _cartridgeSectionKeys) {
+      if (key.currentState != null) {
+        // Jika section dalam mode manual, tandai
+        if (key.currentState!._isManualMode) {
+          anyManualMode = true;
+        }
+        // Jika section tidak dalam mode manual dan tidak semua field di-scan, tandai belum valid
+        else if (!key.currentState!.allFieldsScanned) {
+          allSectionsValidated = false;
+          break;
+        }
+      }
     }
     
-    _tlNikController.clear();
-    _tlPasswordController.clear();
-    
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Approval Team Leader'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Masukkan NIK dan Password Team Leader untuk approval:'),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _tlNikController,
-                  decoration: const InputDecoration(
-                    labelText: 'NIK TL',
-                    border: OutlineInputBorder(),
-                  ),
+    // Jika semua section divalidasi dengan scan atau dalam mode manual, bisa langsung submit
+    if (allSectionsValidated) {
+      // Jika ada yang menggunakan mode manual, tetap minta approval TL
+      if (anyManualMode) {
+        _tlNikController.clear();
+        _tlPasswordController.clear();
+        
+        return showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Approval Team Leader'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Masukkan NIK dan Password Team Leader untuk approval:'),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _tlNikController,
+                      decoration: const InputDecoration(
+                        labelText: 'NIK TL',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _tlPasswordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Password',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _tlPasswordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(),
-                  ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  child: const Text('Batal'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
                 ),
+                _isSubmitting
+                    ? const CircularProgressIndicator()
+                    : TextButton(
+                        child: const Text('Approve'),
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _validateTLAndSubmit();
+                        },
+                      ),
               ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Batal'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            _isSubmitting
-                ? const CircularProgressIndicator()
-                : TextButton(
-                    child: const Text('Approve'),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      _validateTLAndSubmit();
-                    },
-                  ),
-          ],
+            );
+          },
         );
-      },
-    );
+      } else {
+        // Jika semua divalidasi dengan scan dan tidak ada mode manual, langsung submit
+        _submitReturnData();
+      }
+    } else {
+      // Jika belum semua divalidasi, tampilkan pesan error
+      _showErrorDialog('Harap lengkapi validasi scan untuk semua field atau gunakan mode manual');
+    }
   }
 
   // Validate TL credentials and submit data
@@ -496,17 +521,29 @@ class _ReturnModePageState extends State<ReturnModePage> {
         
         print('Processing catridge ${i+1} of ${_returnHeaderResponse!.data.length}: ${catridge.catridgeCode}');
         
-        // Send to RTN endpoint
+        // Send to RTN endpoint dengan parameter sesuai ketentuan
         final rtneResponse = await _apiService.insertReturnAtmCatridge(
+          // field Id Tool diisi ke IdTool
           idTool: _idToolController.text,
+          // field No Bag diisi ke BagCode
           bagCode: catridge.bagCode ?? '0',
+          // field No Catridge diisi ke CatridgeCode
           catridgeCode: catridge.catridgeCode,
+          // field Seal Code diisi ke SealCode
           sealCode: '0', // Use default or get from catridge data if available
+          // field No Seal diisi ke CatridgeSeal
           catridgeSeal: catridge.catridgeSeal,
-          denomCode: catridge.denomCode,
-          qty: catridge.qty ?? '0',
+          // DenomCode diisi TEST
+          denomCode: 'TEST',
+          // qty default diisi 0
+          qty: '0',
+          // nik saat login yang tersimpan akan mengisi ke UserInput
           userInput: _userData?['nik'] ?? '',
+          // N untuk isBalikKaset
           isBalikKaset: "N",
+          // CatridgeCodeOld diisi TEST
+          catridgeCodeOld: "TEST",
+          // Parameter scan status
           scanCatStatus: "TEST", 
           scanCatStatusRemark: "Processed from mobile app",
           scanSealStatus: "TEST",
@@ -578,20 +615,33 @@ class _ReturnModePageState extends State<ReturnModePage> {
         
         final catridgeState = _cartridgeSectionKeys[i].currentState!;
         
+        // Implementasi parameter sesuai ketentuan
         final response = await _apiService.insertReturnAtmCatridge(
+          // field Id Tool diisi ke IdTool
           idTool: _idToolController.text,
+          // field No Bag diisi ke BagCode
           bagCode: catridgeState.bagCode ?? '',
+          // field No Catridge diisi ke CatridgeCode
           catridgeCode: catridgeState.noCatridgeController.text,
+          // field Seal Code diisi ke SealCode
           sealCode: catridgeState.sealCode ?? '',
+          // field No Seal diisi ke CatridgeSeal
           catridgeSeal: catridgeState.noSealController.text,
-          denomCode: _returnHeaderResponse!.data[i].denomCode,
+          // DenomCode diisi TEST
+          denomCode: 'TEST',
+          // qty default diisi 0
           qty: '0',
+          // nik saat login yang tersimpan akan mengisi ke UserInput
           userInput: _userData?['nik'] ?? '',
+          // N untuk isBalikKaset
           isBalikKaset: 'N',
-          scanCatStatus: catridgeState.kondisiCatridge ?? 'New',
-          scanCatStatusRemark: '',
-          scanSealStatus: catridgeState.kondisiSeal ?? 'Good',
-          scanSealStatusRemark: '',
+          // CatridgeCodeOld diisi TEST
+          catridgeCodeOld: 'TEST',
+          // Parameter scan status
+          scanCatStatus: "TEST",
+          scanCatStatusRemark: "Processed from mobile app",
+          scanSealStatus: "TEST",
+          scanSealStatusRemark: "Processed from mobile app"
         );
         
         if (!response.success) {
@@ -795,14 +845,16 @@ class _ReturnModePageState extends State<ReturnModePage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        toolbarHeight: isLandscape ? 50 : 60, // Reduce height in landscape
+        toolbarHeight: isLandscape ? 60 : 70, // Tinggi header yang lebih besar
         titleSpacing: 0,
         title: Padding(
           padding: EdgeInsets.symmetric(horizontal: isLandscape ? 8 : 12),
           child: Row(
             children: [
               GestureDetector(
-                onTap: () {},
+                onTap: () {
+                  Navigator.of(context).pop();
+                },
                 child: const Icon(Icons.arrow_back_ios_new, color: Colors.red, size: 24),
               ),
               const SizedBox(width: 8),
@@ -810,43 +862,41 @@ class _ReturnModePageState extends State<ReturnModePage> {
                 'Return Mode',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: isLandscape ? 16 : 20, // Smaller text in landscape
+                  fontSize: isLandscape ? 18 : 22, // Ukuran text yang lebih besar
                   color: Colors.black,
                 ),
               ),
               const Spacer(),
-              // Branch info - make more compact in landscape
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      _userData?['branchName'] ?? 'JAKARTA-CIDENG',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: isLandscape ? 10 : 12,
-                        color: Colors.black,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+              // Branch info dengan layout yang lebih baik
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _userData?['branchName'] ?? 'JAKARTA-CIDENG',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: isLandscape ? 12 : 14,
+                      color: Colors.black,
                     ),
-                    Text(
-                      'Meja : ${_userData?['tableCode'] ?? '010101'}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.normal,
-                        fontSize: isLandscape ? 9 : 12,
-                        color: Colors.black,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Meja : ${_userData?['tableCode'] ?? '010101'}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.normal,
+                      fontSize: isLandscape ? 10 : 12,
+                      color: Colors.black,
                     ),
-                  ],
-                ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-              SizedBox(width: isLandscape ? 8 : 12),
+              SizedBox(width: isLandscape ? 12 : 16),
               Container(
                 padding: EdgeInsets.symmetric(
-                  horizontal: isLandscape ? 8 : 12, 
-                  vertical: isLandscape ? 4 : 6
+                  horizontal: isLandscape ? 10 : 14, 
+                  vertical: isLandscape ? 6 : 8
                 ),
                 decoration: BoxDecoration(
                   color: Colors.green[100],
@@ -861,47 +911,54 @@ class _ReturnModePageState extends State<ReturnModePage> {
                   ),
                 ),
               ),
-              SizedBox(width: isLandscape ? 8 : 12),
+              SizedBox(width: isLandscape ? 12 : 16),
               IconButton(
-                onPressed: () {},
-                icon: Icon(Icons.refresh, color: Colors.green, size: isLandscape ? 20 : 24),
-                padding: EdgeInsets.all(isLandscape ? 4 : 8),
+                onPressed: () {
+                  // Refresh page
+                  setState(() {
+                    _idCRFController.clear();
+                    _idToolController.clear();
+                    _returnHeaderResponse = null;
+                    _errorMessage = '';
+                  });
+                },
+                icon: Icon(Icons.refresh, color: Colors.green, size: isLandscape ? 22 : 26),
+                padding: EdgeInsets.all(isLandscape ? 6 : 10),
               ),
               SizedBox(width: isLandscape ? 8 : 12),
+              // User profile info
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   CircleAvatar(
-                    radius: isLandscape ? 12 : 16,
+                    radius: isLandscape ? 14 : 18,
                     backgroundImage: const NetworkImage(
                         'https://randomuser.me/api/portraits/men/75.jpg'),
                   ),
-                  SizedBox(width: isLandscape ? 4 : 8),
-                  Flexible(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          _userData?['name'] ?? 'Lorenzo Putra',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: isLandscape ? 11 : 14,
-                            color: Colors.black,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                  SizedBox(width: isLandscape ? 6 : 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _userData?['name'] ?? 'Lorenzo Putra',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: isLandscape ? 12 : 14,
+                          color: Colors.black,
                         ),
-                        Text(
-                          _userData?['nik'] ?? '9190812021',
-                          style: TextStyle(
-                            fontWeight: FontWeight.normal,
-                            fontSize: isLandscape ? 9 : 12,
-                            color: Colors.black,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        _userData?['nik'] ?? '9190812021',
+                        style: TextStyle(
+                          fontWeight: FontWeight.normal,
+                          fontSize: isLandscape ? 10 : 12,
+                          color: Colors.black,
                         ),
-                      ],
-                    ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1214,6 +1271,9 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   // NEW: Getter for section ID
   String get sectionId => widget.sectionId;
 
+  // NEW: Flag untuk mode manual (tanpa validasi scan)
+  bool _isManualMode = false;
+
   final TextEditingController noCatridgeController = TextEditingController();
   final TextEditingController noSealController = TextEditingController();
   final TextEditingController catridgeFisikController = TextEditingController();
@@ -1225,14 +1285,15 @@ class _CartridgeSectionState extends State<CartridgeSection> {
   String? get bagCode => bagCodeController.text;
   String? get sealCode => sealCodeReturnController.text;
   
-  // Add numericBranchCode getter to fix the error
-  String get numericBranchCode {
-    // Ensure branchCode is numeric
-    if (branchCodeController.text.isEmpty || !RegExp(r'^\d+$').hasMatch(branchCodeController.text)) {
-      return '1'; // Default to '1' if not numeric
-    }
-    return branchCodeController.text;
-  }
+  // NEW: Getter untuk mengetahui apakah semua field telah di-scan
+  bool get allFieldsScanned => 
+    scannedFields['noCatridge'] == true &&
+    scannedFields['noSeal'] == true &&
+    scannedFields['bagCode'] == true &&
+    scannedFields['sealCode'] == true;
+  
+  // NEW: Getter untuk mode validasi
+  bool get isValidationComplete => _isManualMode || allFieldsScanned;
 
   // NEW APPROACH: Use a map to track which fields have been scanned
   Map<String, bool> scannedFields = {
@@ -1284,6 +1345,24 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         // Update validation flags
         _updateValidationForField(fieldKey, barcode);
         
+        // Pastikan field terkait ditandai sebagai valid
+        if (fieldKey == 'noCatridge') {
+          isNoCatridgeValid = true;
+          noCatridgeError = '';
+        } else if (fieldKey == 'noSeal') {
+          isNoSealValid = true;
+          noSealError = '';
+        } else if (fieldKey == 'catridgeFisik') {
+          isCatridgeFisikValid = true;
+          catridgeFisikError = '';
+        } else if (fieldKey == 'bagCode') {
+          isBagCodeValid = true;
+          bagCodeError = '';
+        } else if (fieldKey == 'sealCode') {
+          isSealCodeReturnValid = true;
+          sealCodeReturnError = '';
+        }
+        
         print('✅ CARTRIDGE [${widget.sectionId}]: $fieldKey validated with checkmark - scannedFields[$fieldKey] = ${scannedFields[fieldKey]}');
       });
       
@@ -1295,6 +1374,11 @@ class _CartridgeSectionState extends State<CartridgeSection> {
           duration: const Duration(seconds: 2),
         ),
       );
+      
+      // Force rebuild untuk memastikan checkmark muncul
+      Future.microtask(() {
+        if (mounted) setState(() {});
+      });
     }
   }
   
@@ -1948,12 +2032,19 @@ class _CartridgeSectionState extends State<CartridgeSection> {
            kondisiSeal != null &&
            kondisiCatridge != null &&
            bagCodeController.text.isNotEmpty &&
-           sealCodeReturnController.text.isNotEmpty &&
-           // Check if required fields have been scanned
-           scannedFields['noCatridge'] == true &&
-           scannedFields['noSeal'] == true &&
-           scannedFields['bagCode'] == true &&
-           scannedFields['sealCode'] == true;
+           sealCodeReturnController.text.isNotEmpty;
+    
+    // Jika mode manual diaktifkan, tidak perlu memeriksa status scan
+    if (_isManualMode) {
+      return formIsValid;
+    }
+    
+    // Jika tidak dalam mode manual, periksa juga status scan
+    formIsValid = formIsValid && 
+                  scannedFields['noCatridge'] == true &&
+                  scannedFields['noSeal'] == true &&
+                  scannedFields['bagCode'] == true &&
+                  scannedFields['sealCode'] == true;
            
     // Log validation status for debugging
     if (!formIsValid) {
@@ -2045,25 +2136,43 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
-              ),
                 ),
-              // Remove the type: replenish_data text
+              ),
+              // NEW: Toggle button untuk mode manual
+              TextButton.icon(
+                onPressed: _toggleManualMode,
+                icon: Icon(
+                  _isManualMode ? Icons.check_box : Icons.check_box_outline_blank,
+                  color: _isManualMode ? Colors.green : Colors.grey,
+                  size: 18,
+                ),
+                label: Text(
+                  'Mode Manual',
+                  style: TextStyle(
+                    color: _isManualMode ? Colors.green : Colors.grey,
+                    fontSize: 14,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
           
-              // Hidden branch code field
-              Opacity(
-                opacity: 0,
-                child: SizedBox(
-                  height: 0,
-                  width: 0,
-                  child: TextField(
-                    controller: branchCodeController,
-                    enabled: false,
-                  ),
-                ),
+          // Hidden branch code field
+          Opacity(
+            opacity: 0,
+            child: SizedBox(
+              height: 0,
+              width: 0,
+              child: TextField(
+                controller: branchCodeController,
+                enabled: false,
               ),
+            ),
+          ),
           
           // Two-column layout for fields
           Row(
@@ -2074,47 +2183,48 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-          // No Catridge input field
-          _buildInputField(
-            'No. Catridge',
-            noCatridgeController,
-            onEditingComplete: _validateNoCatridge,
-            isValid: isNoCatridgeValid,
-            errorText: noCatridgeError,
-            hasScanner: true,
-            isLoading: _isValidating,
-            readOnly: true, // Make it read-only
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // No Seal input field
-          _buildInputField(
-            'No. Seal',
-            noSealController,
-            onEditingComplete: _validateNoSeal,
-            isValid: isNoSealValid,
-            errorText: noSealError,
-            hasScanner: true,
-            isLoading: _isValidating,
-            readOnly: true, // Make it read-only
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Catridge Fisik input field
-          _buildInputField(
-            'Catridge Fisik',
-            catridgeFisikController,
-            onEditingComplete: _validateCatridgeFisik,
-            isValid: isCatridgeFisikValid,
-            errorText: catridgeFisikError,
-            isScanInput: true, // Use scan input mode for this field
-            hasScanner: true, // Add scanner
-          ),
-          
-          const SizedBox(height: 12),
-          
+                    // No Catridge input field
+                    _buildInputField(
+                      'No. Catridge',
+                      noCatridgeController,
+                      onEditingComplete: _validateNoCatridge,
+                      isValid: isNoCatridgeValid,
+                      errorText: noCatridgeError,
+                      hasScanner: true,
+                      isLoading: _isValidating,
+                      readOnly: !_isManualMode, // Bisa diedit jika mode manual
+                    ),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // No Seal input field
+                    _buildInputField(
+                      'No. Seal',
+                      noSealController,
+                      onEditingComplete: _validateNoSeal,
+                      isValid: isNoSealValid,
+                      errorText: noSealError,
+                      hasScanner: true,
+                      isLoading: _isValidating,
+                      readOnly: !_isManualMode, // Bisa diedit jika mode manual
+                    ),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Catridge Fisik input field
+                    _buildInputField(
+                      'Catridge Fisik',
+                      catridgeFisikController,
+                      onEditingComplete: _validateCatridgeFisik,
+                      isValid: isCatridgeFisikValid,
+                      errorText: catridgeFisikError,
+                      isScanInput: true, // Use scan input mode for this field
+                      hasScanner: true, // Add scanner
+                      readOnly: !_isManualMode, // Bisa diedit jika mode manual
+                    ),
+                    
+                    const SizedBox(height: 12),
+                    
                     // Bag Code input field (replaced dropdown with text field)
                     _buildInputField(
                       'Bag Code',
@@ -2123,20 +2233,20 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                       isValid: isBagCodeValid,
                       errorText: bagCodeError,
                       hasScanner: true, // Add scanner for bag code
-                      readOnly: true, // Make it read-only
+                      readOnly: !_isManualMode, // Bisa diedit jika mode manual
                     ),
                     
                     const SizedBox(height: 12),
                     
                     // Seal Code Return input field (replaced dropdown with text field)
                     _buildInputField(
-            'Seal Code',
+                      'Seal Code',
                       sealCodeReturnController,
                       onEditingComplete: _validateSealCodeReturn,
                       isValid: isSealCodeReturnValid,
                       errorText: sealCodeReturnError,
                       hasScanner: true, // Add scanner for seal code
-                      readOnly: true, // Make it read-only
+                      readOnly: !_isManualMode, // Bisa diedit jika mode manual
                     ),
                   ],
                 ),
@@ -2149,19 +2259,17 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Remove WSID field
-          
                     // Kondisi Seal dropdown
-          _buildDropdownField(
+                    _buildDropdownField(
                       'Kondisi Seal',
                       kondisiSeal,
                       kondisiSealOptions,
                       (val) => _validateKondisiSeal(val),
                       isValid: isKondisiSealValid,
                       errorText: kondisiSealError,
-          ),
-          
-          const SizedBox(height: 12),
+                    ),
+                    
+                    const SizedBox(height: 12),
                     
                     // Kondisi Catridge dropdown (reduced to two options)
                     _buildDropdownField(
@@ -2259,34 +2367,41 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     bool isScanned = fieldKey.isNotEmpty && scannedFields[fieldKey] == true;
     
     // SIMPLIFIED CHECKMARK LOGIC
-    bool showCheckmark = isScanned && controller.text.isNotEmpty;
+    bool showCheckmark = (isScanned || _isManualMode) && controller.text.isNotEmpty;
     
-    // DEBUG ONLY WHEN NEEDED
-    if (isScanned || showCheckmark) {
-      print('🔍 [$sectionId] CHECKMARK for $label: scanned=$isScanned, hasText=${controller.text.isNotEmpty}, show=$showCheckmark');
-    }
+    // Mendapatkan ukuran layar untuk responsivitas
+    final size = MediaQuery.of(context).size;
+    final isSmallScreen = size.width < 600;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
+            // Label dengan lebar yang lebih besar untuk mobile
             SizedBox(
-              width: 110,
+              width: isSmallScreen ? 90 : 110,
               child: Text(
                 '$label:',
                 style: TextStyle(
                   fontWeight: isValid ? FontWeight.normal : FontWeight.bold,
                   color: isValid ? Colors.black : Colors.red,
+                  fontSize: isSmallScreen ? 12 : 14,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             Expanded(
               child: TextFormField(
                 controller: controller,
+                style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
                 decoration: InputDecoration(
                   hintText: 'Masukkan $label',
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  hintStyle: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                  contentPadding: EdgeInsets.symmetric(
+                    vertical: isSmallScreen ? 6 : 8, 
+                    horizontal: isSmallScreen ? 8 : 12
+                  ),
                   isDense: true,
                   // Show loading indicator when validating
                   suffixIcon: isLoading
@@ -2316,17 +2431,31 @@ class _CartridgeSectionState extends State<CartridgeSection> {
             ),
             if (hasScanner || isScanInput)
               IconButton(
-                icon: const Icon(Icons.qr_code_scanner, color: Colors.blue),
+                icon: Icon(
+                  Icons.qr_code_scanner, 
+                  color: Colors.blue,
+                  size: isSmallScreen ? 18 : 22
+                ),
+                padding: EdgeInsets.all(isSmallScreen ? 2 : 4),
+                constraints: BoxConstraints(
+                  minWidth: isSmallScreen ? 30 : 40,
+                  minHeight: isSmallScreen ? 30 : 40,
+                ),
                 onPressed: () {
                   print('🔍 [$sectionId] SCANNER BUTTON PRESSED for $label (fieldKey: $fieldKey)');
-                    _openBarcodeScanner(label, controller, fieldKey);
+                  _openBarcodeScanner(label, controller, fieldKey);
                 },
               ),
             // DEBUG BUTTON - REMOVE IN PRODUCTION
-            if ((hasScanner || isScanInput) && controller.text.isNotEmpty)
+            if ((hasScanner || isScanInput) && controller.text.isNotEmpty && false) // Set to false to hide in production
               IconButton(
                 icon: const Icon(Icons.check_circle, color: Colors.orange),
                 tooltip: 'Test Validate (Debug)',
+                padding: EdgeInsets.all(isSmallScreen ? 2 : 4),
+                constraints: BoxConstraints(
+                  minWidth: isSmallScreen ? 30 : 40,
+                  minHeight: isSmallScreen ? 30 : 40,
+                ),
                 onPressed: () {
                   print('🧪 [$sectionId] DEBUG TEST BUTTON for $label');
                   _simulateSuccessfulScan(fieldKey, label);
@@ -2336,12 +2465,12 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         ),
         if (errorText.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(left: 110, top: 4),
+            padding: EdgeInsets.only(left: isSmallScreen ? 90 : 110, top: 4),
             child: Text(
               errorText,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.red,
-                fontSize: 12,
+                fontSize: isSmallScreen ? 10 : 12,
               ),
             ),
           ),
@@ -2394,28 +2523,41 @@ class _CartridgeSectionState extends State<CartridgeSection> {
     {bool isValid = true,
     String errorText = ''}
   ) {
+    // Mendapatkan ukuran layar untuk responsivitas
+    final size = MediaQuery.of(context).size;
+    final isSmallScreen = size.width < 600;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             SizedBox(
-              width: 110,
+              width: isSmallScreen ? 90 : 110,
               child: Text(
                 '$label:',
                 style: TextStyle(
                   fontWeight: isValid ? FontWeight.normal : FontWeight.bold,
                   color: isValid ? Colors.black : Colors.red,
+                  fontSize: isSmallScreen ? 12 : 14,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             Expanded(
               child: DropdownButtonFormField<String>(
                 value: value,
-                hint: Text('Pilih $label'),
+                hint: Text(
+                  'Pilih $label',
+                  style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                ),
                 isExpanded: true,
+                style: TextStyle(fontSize: isSmallScreen ? 12 : 14, color: Colors.black),
                 decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  contentPadding: EdgeInsets.symmetric(
+                    vertical: isSmallScreen ? 6 : 8, 
+                    horizontal: isSmallScreen ? 8 : 12
+                  ),
                   isDense: true,
                   enabledBorder: UnderlineInputBorder(
                     borderSide: BorderSide(
@@ -2429,7 +2571,10 @@ class _CartridgeSectionState extends State<CartridgeSection> {
                 items: options.map<DropdownMenuItem<String>>((String val) {
                   return DropdownMenuItem<String>(
                     value: val,
-                    child: Text(val),
+                    child: Text(
+                      val,
+                      style: TextStyle(fontSize: isSmallScreen ? 12 : 14),
+                    ),
                   );
                 }).toList(),
                 onChanged: onChanged,
@@ -2439,17 +2584,48 @@ class _CartridgeSectionState extends State<CartridgeSection> {
         ),
         if (errorText.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(left: 110, top: 4),
+            padding: EdgeInsets.only(left: isSmallScreen ? 90 : 110, top: 4),
             child: Text(
               errorText,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.red,
-                fontSize: 12,
+                fontSize: isSmallScreen ? 10 : 12,
               ),
             ),
           ),
       ],
     );
+  }
+
+  // Add numericBranchCode getter to fix the error
+  String get numericBranchCode {
+    // Ensure branchCode is numeric
+    if (branchCodeController.text.isEmpty || !RegExp(r'^\d+$').hasMatch(branchCodeController.text)) {
+      return '1'; // Default to '1' if not numeric
+    }
+    return branchCodeController.text;
+  }
+
+  // NEW: Toggle manual mode
+  void _toggleManualMode() {
+    setState(() {
+      _isManualMode = !_isManualMode;
+      if (_isManualMode) {
+        // Jika mode manual diaktifkan, tandai semua field sebagai valid
+        isNoCatridgeValid = noCatridgeController.text.isNotEmpty;
+        isNoSealValid = noSealController.text.isNotEmpty;
+        isBagCodeValid = bagCodeController.text.isNotEmpty;
+        isSealCodeReturnValid = sealCodeReturnController.text.isNotEmpty;
+        isCatridgeFisikValid = catridgeFisikController.text.isNotEmpty;
+      } else {
+        // Jika mode manual dinonaktifkan, kembalikan ke status scan
+        isNoCatridgeValid = noCatridgeController.text.isNotEmpty && scannedFields['noCatridge'] == true;
+        isNoSealValid = noSealController.text.isNotEmpty && scannedFields['noSeal'] == true;
+        isBagCodeValid = bagCodeController.text.isNotEmpty && scannedFields['bagCode'] == true;
+        isSealCodeReturnValid = sealCodeReturnController.text.isNotEmpty && scannedFields['sealCode'] == true;
+        isCatridgeFisikValid = catridgeFisikController.text.isNotEmpty && scannedFields['catridgeFisik'] == true;
+      }
+    });
   }
 }
 

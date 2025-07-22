@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:async';
+import '../services/auth_service.dart';
 
 class QRCodeGeneratorWidget extends StatefulWidget {
   final String action; // 'PREPARE' or 'RETURN'
@@ -24,20 +25,44 @@ class _QRCodeGeneratorWidgetState extends State<QRCodeGeneratorWidget> {
   Timer? _timer;
   Duration _remainingTime = const Duration(minutes: 5);
   bool _isExpired = false;
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
     super.initState();
-    _generateQRCode();
+    _initializeQRCode();
+  }
+  
+  Future<void> _initializeQRCode() async {
+    await _generateQRCode();
     _startTimer();
   }
 
-  void _generateQRCode() {
+  Future<void> _generateQRCode() async {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     _expiryTime = DateTime.now().add(const Duration(minutes: 5));
-    // Tambahkan flag untuk bypass NIK validation (nilai 1 berarti bypass diaktifkan)
-    _qrData = '${widget.action}|${widget.idTool}|$timestamp|1';
-    print('Generated QR Code with bypass enabled: $_qrData');
+    
+    // Cek apakah ada kredensial TLSPV yang tersimpan
+    final tlspvCredentials = await _authService.getTLSPVCredentials();
+    
+    if (tlspvCredentials != null) {
+      // Buat data terenkripsi yang berisi kredensial TLSPV
+      final qrDataMap = {
+        'action': widget.action,
+        'idTool': widget.idTool,
+        'timestamp': timestamp,
+        'username': tlspvCredentials['username'],
+        'password': tlspvCredentials['password']
+      };
+      
+      // Enkripsi data untuk QR code
+      _qrData = _authService.encryptDataForQR(qrDataMap);
+      print('Generated secure QR Code with TLSPV credentials');
+    } else {
+      // Fallback ke format lama jika tidak ada kredensial
+      _qrData = '${widget.action}|${widget.idTool}|$timestamp|1';
+      print('Generated QR Code with bypass flag (no credentials available)');
+    }
   }
 
   void _startTimer() {
@@ -60,12 +85,12 @@ class _QRCodeGeneratorWidgetState extends State<QRCodeGeneratorWidget> {
     });
   }
 
-  void _regenerateQRCode() {
+  Future<void> _regenerateQRCode() async {
     setState(() {
       _isExpired = false;
     });
     _timer?.cancel();
-    _generateQRCode();
+    await _generateQRCode();
     _startTimer();
   }
 

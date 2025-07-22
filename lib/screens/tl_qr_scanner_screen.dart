@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:convert';
 import '../widgets/barcode_scanner_widget.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
@@ -35,24 +36,64 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
     });
 
     try {
-      // Parse QR code data
-      // Format baru: "PREPARE|{idTool}|{timestamp}|{bypassFlag}" atau "RETURN|{idTool}|{timestamp}|{bypassFlag}"
-      final parts = qrCode.split('|');
+      String action;
+      String idTool;
+      int timestamp;
+      bool bypassNikValidation = false;
+      String? tlspvUsername;
+      String? tlspvPassword;
       
-      if (parts.length < 3) {
-        throw Exception('Format QR Code tidak valid');
+      // Coba periksa apakah ini format QR terenkripsi
+      bool isEncrypted = false;
+      try {
+        // Coba decode base64 untuk menentukan apakah ini QR terenkripsi
+        base64Decode(qrCode);
+        isEncrypted = true;
+      } catch (e) {
+        // Bukan format terenkripsi, gunakan parsing format lama
+        isEncrypted = false;
       }
-
-      final action = parts[0]; // PREPARE or RETURN
-      final idTool = parts[1];
-      final timestamp = int.tryParse(parts[2]);
       
-      // Check if bypass NIK is enabled (fourth part = "1")
-      final bypassNikValidation = parts.length > 3 && parts[3] == "1";
-      
-      print('QR Code parts: Action=$action, IdTool=$idTool, Timestamp=$timestamp, BypassNIK=$bypassNikValidation');
+      if (isEncrypted) {
+        // Ini adalah QR code terenkripsi dengan kredensial TLSPV
+        print('Detected encrypted QR code format');
+        
+        // Dekripsi data QR
+        final decryptedData = _authService.decryptDataFromQR(qrCode);
+        
+        if (decryptedData == null) {
+          throw Exception('QR Code tidak valid atau sudah expired');
+        }
+        
+        // Ekstrak data dari QR terenkripsi
+        action = decryptedData['action'] as String;
+        idTool = decryptedData['idTool'] as String;
+        timestamp = decryptedData['timestamp'] as int;
+        tlspvUsername = decryptedData['username'] as String?;
+        tlspvPassword = decryptedData['password'] as String?;
+        bypassNikValidation = true; // Selalu true untuk QR terenkripsi
+        
+        print('Decrypted QR data: Action=$action, IdTool=$idTool, HasCredentials=${tlspvUsername != null}');
+      } else {
+        // Format lama: "PREPARE|{idTool}|{timestamp}|{bypassFlag}"
+        final parts = qrCode.split('|');
+        
+        if (parts.length < 3) {
+          throw Exception('Format QR Code tidak valid');
+        }
 
-      if (timestamp == null) {
+        action = parts[0]; // PREPARE or RETURN
+        idTool = parts[1];
+        timestamp = int.tryParse(parts[2]) ?? 0;
+        
+        // Check if bypass NIK is enabled (fourth part = "1")
+        bypassNikValidation = parts.length > 3 && parts[3] == "1";
+        
+        print('QR Code parts: Action=$action, IdTool=$idTool, Timestamp=$timestamp, BypassNIK=$bypassNikValidation');
+      }
+      
+      // Validasi timestamp
+      if (timestamp == 0) {
         throw Exception('Format timestamp tidak valid');
       }
 
@@ -67,19 +108,24 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
 
       // Get current user data for approval
       final userData = await _authService.getUserData();
-      final tlNik = userData?['userID'] ?? userData?['nik'] ?? '';
+      String tlNik = userData?['userID'] ?? userData?['nik'] ?? '';
       final tlName = userData?['userName'] ?? '';
 
-      // Jika bypass diaktifkan, kita bisa melanjutkan meski NIK kosong
-      if (tlNik.isEmpty && !bypassNikValidation) {
+      // Jika ada kredensial TLSPV dari QR, gunakan itu
+      if (tlspvUsername != null && tlspvPassword != null) {
+        print('Using TLSPV credentials from QR code');
+        tlNik = tlspvUsername; // Gunakan NIK dari QR
+      } 
+      // Jika tidak ada kredensial dan tidak ada bypass, tolak
+      else if (tlNik.isEmpty && !bypassNikValidation) {
         throw Exception('Data TL tidak ditemukan dan QR tidak mengizinkan scan tanpa NIK');
       }
 
       // Process based on action type
       if (action == 'PREPARE') {
-        await _approvePrepare(idTool, tlNik, tlName, bypassNikValidation);
+        await _approvePrepare(idTool, tlNik, tlName, bypassNikValidation, tlspvPassword);
       } else if (action == 'RETURN') {
-        await _approveReturn(idTool, tlNik, tlName, bypassNikValidation);
+        await _approveReturn(idTool, tlNik, tlName, bypassNikValidation, tlspvPassword);
       } else {
         throw Exception('Tipe aksi tidak valid: $action');
       }
@@ -92,7 +138,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
 
     } catch (e) {
       // Add to recent scans as failed
-      _addToRecentScans('UNKNOWN', qrCode, false, error: e.toString());
+      _addToRecentScans('UNKNOWN', qrCode.length > 20 ? qrCode.substring(0, 20) + '...' : qrCode, false, error: e.toString());
       
       // Show error message
       _showErrorDialog(e.toString());
@@ -103,9 +149,24 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
     }
   }
 
-  Future<void> _approvePrepare(String idTool, String tlNik, String tlName, bool bypassNikValidation) async {
+  Future<void> _approvePrepare(String idTool, String tlNik, String tlName, bool bypassNikValidation, String? tlspvPassword) async {
     try {
-      print('Approving prepare for ID: $idTool by TL: $tlNik ($tlName), bypassValidation: $bypassNikValidation');
+      print('Approving prepare for ID: $idTool by TL: $tlNik ($tlName), bypassValidation: $bypassNikValidation, hasPassword: ${tlspvPassword != null}');
+      
+      // Jika password tersedia dari QR code, gunakan untuk validasi TLSPV
+      if (tlspvPassword != null) {
+        // Validasi TLSPV menggunakan kredensial dari QR code
+        final validationResponse = await _apiService.validateTLSupervisor(
+          nik: tlNik,
+          password: tlspvPassword
+        );
+        
+        if (!validationResponse.success) {
+          throw Exception('Validasi TLSPV gagal: ${validationResponse.message}');
+        }
+        
+        print('TLSPV validation successful using credentials from QR code');
+      }
       
       // Call the API service to approve prepare data with bypass flag
       final response = await _apiService.approvePrepareWithQR(
@@ -125,9 +186,24 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
     }
   }
 
-  Future<void> _approveReturn(String idTool, String tlNik, String tlName, bool bypassNikValidation) async {
+  Future<void> _approveReturn(String idTool, String tlNik, String tlName, bool bypassNikValidation, String? tlspvPassword) async {
     try {
-      print('Approving return for ID: $idTool by TL: $tlNik ($tlName), bypassValidation: $bypassNikValidation');
+      print('Approving return for ID: $idTool by TL: $tlNik ($tlName), bypassValidation: $bypassNikValidation, hasPassword: ${tlspvPassword != null}');
+      
+      // Jika password tersedia dari QR code, gunakan untuk validasi TLSPV
+      if (tlspvPassword != null) {
+        // Validasi TLSPV menggunakan kredensial dari QR code
+        final validationResponse = await _apiService.validateTLSupervisor(
+          nik: tlNik,
+          password: tlspvPassword
+        );
+        
+        if (!validationResponse.success) {
+          throw Exception('Validasi TLSPV gagal: ${validationResponse.message}');
+        }
+        
+        print('TLSPV validation successful using credentials from QR code');
+      }
       
       // Call the API service to approve return data with bypass flag
       // For now, we'll simulate the API call

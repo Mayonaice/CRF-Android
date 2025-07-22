@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import 'package:flutter/foundation.dart';
 import 'device_service.dart';
+import 'package:crypto/crypto.dart'; // Tambahkan import untuk enkripsi
 
 class AuthService {
   // Make base URL more flexible - allow for fallback
@@ -13,6 +14,8 @@ class AuthService {
   static const String tokenKey = 'auth_token';
   static const String userDataKey = 'user_data';
   static const String baseUrlKey = 'base_url';
+  static const String tlspvCredentialsKey = 'tlspv_credentials'; // Key untuk menyimpan kredensial TLSPV
+  static const String encryptionKey = 'CRF_SECURE_KEY_2025'; // Key untuk enkripsi data
   
   // API timeout duration
   static const Duration _timeout = Duration(seconds: 15);
@@ -221,6 +224,18 @@ class AuthService {
       if (selectedBranch != null && !userData.containsKey('branchCode')) {
         userData['branchCode'] = selectedBranch;
       }
+      
+      // Tambahkan username dan password untuk QR code jika role adalah CRF_TL
+      final userRole = userData['role']?.toString().toUpperCase() ?? 
+                      userData['roleID']?.toString().toUpperCase();
+      
+      if (userRole == 'CRF_TL') {
+        // Simpan kredensial untuk QR code
+        userData['username'] = username;
+        userData['password'] = password;
+        debugPrint('Storing TLSPV credentials for QR code generation');
+      }
+      
       await saveUserData(userData);
       
       // Double-check token storage by reading it back immediately
@@ -391,6 +406,16 @@ class AuthService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(userDataKey, json.encode(userData));
+      
+      // Jika role adalah CRF_TL, simpan kredensial untuk QR code
+      if (userData['role']?.toString().toUpperCase() == 'CRF_TL' || 
+          userData['roleID']?.toString().toUpperCase() == 'CRF_TL') {
+        // Simpan username dan password jika tersedia
+        if (userData['username'] != null && userData['password'] != null) {
+          await saveTLSPVCredentials(userData['username'], userData['password']);
+          debugPrint('TLSPV credentials saved for QR code usage');
+        }
+      }
     } catch (e) {
       debugPrint('Failed to save user data: $e');
     }
@@ -653,6 +678,107 @@ class AuthService {
     } catch (e) {
       debugPrint('Error getting available menus: $e');
       return [];
+    }
+  }
+
+  // Menyimpan kredensial TLSPV untuk digunakan dalam QR code
+  Future<bool> saveTLSPVCredentials(String username, String password) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final credentials = {
+        'username': username,
+        'password': password,
+        'timestamp': DateTime.now().millisecondsSinceEpoch
+      };
+      await prefs.setString(tlspvCredentialsKey, json.encode(credentials));
+      return true;
+    } catch (e) {
+      debugPrint('Failed to save TLSPV credentials: $e');
+      return false;
+    }
+  }
+  
+  // Mengambil kredensial TLSPV yang tersimpan
+  Future<Map<String, dynamic>?> getTLSPVCredentials() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final credentialsString = prefs.getString(tlspvCredentialsKey);
+      if (credentialsString != null && credentialsString.isNotEmpty) {
+        return json.decode(credentialsString) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('Failed to get TLSPV credentials: $e');
+    }
+    return null;
+  }
+  
+  // Enkripsi data untuk QR code
+  String encryptDataForQR(Map<String, dynamic> data) {
+    try {
+      // Konversi data ke JSON string
+      final jsonString = json.encode(data);
+      
+      // Tambahkan timestamp untuk keamanan
+      final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+      
+      // Buat signature dengan HMAC
+      final key = utf8.encode(encryptionKey + timestamp);
+      final bytes = utf8.encode(jsonString);
+      final hmacSha256 = Hmac(sha256, key);
+      final digest = hmacSha256.convert(bytes);
+      final signature = digest.toString();
+      
+      // Gabungkan data dengan timestamp dan signature
+      final secureData = {
+        'data': base64Encode(utf8.encode(jsonString)),
+        'timestamp': timestamp,
+        'signature': signature
+      };
+      
+      // Encode final data untuk QR
+      return base64Encode(utf8.encode(json.encode(secureData)));
+    } catch (e) {
+      debugPrint('Error encrypting data for QR: $e');
+      return '';
+    }
+  }
+  
+  // Dekripsi data dari QR code
+  Map<String, dynamic>? decryptDataFromQR(String encryptedData) {
+    try {
+      // Decode base64 string
+      final decodedString = utf8.decode(base64Decode(encryptedData));
+      final secureData = json.decode(decodedString) as Map<String, dynamic>;
+      
+      // Ambil komponen
+      final encodedData = secureData['data'] as String;
+      final timestamp = secureData['timestamp'] as String;
+      final receivedSignature = secureData['signature'] as String;
+      
+      // Decode data asli
+      final jsonString = utf8.decode(base64Decode(encodedData));
+      
+      // Verifikasi signature
+      final key = utf8.encode(encryptionKey + timestamp);
+      final bytes = utf8.encode(jsonString);
+      final hmacSha256 = Hmac(sha256, key);
+      final digest = hmacSha256.convert(bytes);
+      final calculatedSignature = digest.toString();
+      
+      // Periksa signature dan timestamp (maksimal 5 menit)
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final msgTime = int.parse(timestamp);
+      final validTime = (now - msgTime) < 5 * 60 * 1000; // 5 menit
+      
+      if (calculatedSignature == receivedSignature && validTime) {
+        return json.decode(jsonString) as Map<String, dynamic>;
+      } else {
+        debugPrint('QR data signature invalid or expired');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Error decrypting QR data: $e');
+      return null;
     }
   }
 } 

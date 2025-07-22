@@ -178,6 +178,86 @@ class _ReturnModePageState extends State<ReturnModePage> {
   }
 
   Future<void> _fetchReturnData() async {
+    // DEBUG: Print current token to verify it's correctly stored
+    try {
+      final token = await _authService.getToken();
+      debugPrint('🔴 DEBUG: Current token before fetch: ${token != null ? "Found (${token.length} chars)" : "NULL"}');
+      
+      // If token is null, try to log the user out and redirect to login page
+      if (token == null || token.isEmpty) {
+        debugPrint('🔴 DEBUG: Token is null or empty, forcing logout');
+        
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Sesi telah berakhir. Silakan login kembali.';
+        });
+        
+        // Show dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Sesi Berakhir'),
+              content: const Text('Sesi anda telah berakhir. Silakan login kembali.'),
+              actions: <Widget>[
+                TextButton(
+                  child: const Text('OK'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _authService.logout().then((_) {
+                      Navigator.of(context).pushReplacementNamed('/login');
+                    });
+                  },
+                ),
+              ],
+            );
+          },
+        );
+        return;
+      }
+      
+      // Validate token before proceeding
+      debugPrint('🔴 DEBUG: Validating token before fetch...');
+      final isTokenValid = await _apiService.checkTokenValidity();
+      if (!isTokenValid) {
+        debugPrint('🔴 DEBUG: Token validation failed, forcing logout');
+        
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Sesi telah berakhir. Silakan login kembali.';
+        });
+        
+        // Show dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Sesi Berakhir'),
+              content: const Text('Sesi anda telah berakhir. Silakan login kembali.'),
+              actions: <Widget>[
+                TextButton(
+                  child: const Text('OK'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _authService.logout().then((_) {
+                      Navigator.of(context).pushReplacementNamed('/login');
+                    });
+                  },
+                ),
+              ],
+            );
+          },
+        );
+        return;
+      }
+      
+      debugPrint('🔴 DEBUG: Token validation successful, proceeding with fetch');
+    } catch (e) {
+      debugPrint('🔴 DEBUG: Error getting token: $e');
+    }
+    
     final idCrf = _idCRFController.text.trim();
     if (idCrf.isEmpty) {
       _showErrorDialog('ID CRF tidak boleh kosong');

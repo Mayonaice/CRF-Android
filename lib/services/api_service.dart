@@ -25,8 +25,53 @@ class ApiService {
   
   // Auth service
   final AuthService _authService = AuthService();
-
-  ApiService._internal();
+  
+  // Http client with logging
+  final http.Client _client = http.Client();
+  
+  // Dio instance for better logging
+  late final Dio _dio;
+  
+  // Initialize with logging
+  ApiService._internal() {
+    _dio = Dio(BaseOptions(
+      connectTimeout: _timeout,
+      receiveTimeout: _timeout,
+      baseUrl: _currentBaseUrl,
+    ))
+      ..interceptors.add(LogInterceptor(
+        request: true,
+        requestHeader: true,
+        requestBody: true,
+        responseHeader: true,
+        responseBody: true,
+        error: true,
+        logPrint: (obj) => debugPrint('🔄 DIO: ${obj.toString()}'),
+      ));
+  }
+  
+  // Debug helper method for HTTP requests
+  Future<http.Response> _debugHttp(Future<http.Response> Function() request, String description) async {
+    try {
+      debugPrint('🔄 HTTP REQUEST [$description] - Starting...');
+      final stopwatch = Stopwatch()..start();
+      final response = await request();
+      stopwatch.stop();
+      
+      // Log partial response (to avoid huge logs)
+      final bodyPreview = response.body.length > 200 
+          ? '${response.body.substring(0, 200)}... (${response.body.length} chars total)'
+          : response.body;
+          
+      debugPrint('🔄 HTTP RESPONSE [$description] - Status: ${response.statusCode}, Time: ${stopwatch.elapsedMilliseconds}ms');
+      debugPrint('🔄 HTTP RESPONSE BODY: $bodyPreview');
+      
+      return response;
+    } catch (e) {
+      debugPrint('🔄 HTTP ERROR [$description]: $e');
+      rethrow;
+    }
+  }
 
   // Get headers for API requests with authorization token
   Future<Map<String, String>> get headers async {
@@ -46,7 +91,7 @@ class ApiService {
       };
     }
   }
-
+  
   // Save working base URL
   Future<void> _saveBaseUrl(String url) async {
     try {
@@ -72,7 +117,6 @@ class ApiService {
       
       // Check for auth errors
       if (response.statusCode == 401) {
-        // Let auth service handle token refresh
         debugPrint('Authentication error (401) with URL: $currentAttemptUrl');
         throw Exception('Session expired: Please login again');
       }
@@ -80,6 +124,11 @@ class ApiService {
       debugPrint('Request successful with URL: $currentAttemptUrl, Status: ${response.statusCode}');
       return response;
     } catch (e) {
+      // Skip token refresh retry for fallback if it's a session expired exception
+      if (e.toString().contains('Session expired')) {
+        rethrow;
+      }
+      
       errorDetails = 'Request failed with $currentAttemptUrl: $e';
       debugPrint(errorDetails);
       
@@ -112,6 +161,11 @@ class ApiService {
         final fallbackErrorDetails = 'Fallback request also failed with $fallbackUrl: $e2';
         debugPrint(fallbackErrorDetails);
         
+        // If the second error is about session expiration, prioritize that
+        if (e2.toString().contains('Session expired')) {
+          rethrow;
+        }
+        
         // Provide detailed error message combining both attempts
         throw Exception('Kedua URL server tidak dapat diakses.\n\nURL Utama: $_primaryBaseUrl\nKesalahan: $e\n\nURL Cadangan: $_fallbackBaseUrl\nKesalahan: $e2\n\nMohon periksa koneksi internet dan konfigurasi server.');
       }
@@ -123,34 +177,94 @@ class ApiService {
     try {
       final requestHeaders = await headers;
       
-      final response = await _tryRequestWithFallback(
-        requestFn: (baseUrl) => http.get(
-          Uri.parse('$baseUrl/CRF/atm/prepare-replenish/$id'),
-          headers: requestHeaders,
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        try {
-          final jsonData = json.decode(response.body);
-          return PrepareReplenishResponse.fromJson(jsonData);
-        } catch (e) {
-          debugPrint('Error parsing JSON: $e');
-          throw Exception('Invalid data format from server');
-        }
-      } else if (response.statusCode == 401) {
-        // Handle auth error - try to clear token and redirect to login
+      // Check if token is missing
+      if (!requestHeaders.containsKey('Authorization') || 
+          requestHeaders['Authorization'] == null || 
+          requestHeaders['Authorization']!.isEmpty ||
+          requestHeaders['Authorization'] == 'Bearer ') {
+        debugPrint('🚨 CRITICAL ERROR: Missing or empty Authorization header!');
         await _authService.logout();
-        throw Exception('Session expired: Please login again');
-      } else {
-        throw Exception('Server error (${response.statusCode}): ${response.body}');
+        throw Exception('Session invalid: Please login again');
+      }
+      
+      // First attempt
+      try {
+        debugPrint('🔍 Preparing to fetch ATM data for ID: $id');
+        debugPrint('🔍 Using URL: $_currentBaseUrl/CRF/atm/prepare-replenish/$id');
+        debugPrint('🔍 Headers: ${requestHeaders.toString()}');
+        
+        final response = await _debugHttp(
+          () => http.get(
+            Uri.parse('$_currentBaseUrl/CRF/atm/prepare-replenish/$id'),
+            headers: requestHeaders,
+          ).timeout(_timeout),
+          'GET ATM Prepare $id'
+        );
+
+        if (response.statusCode == 200) {
+          try {
+            final jsonData = json.decode(response.body);
+            return PrepareReplenishResponse.fromJson(jsonData);
+          } catch (e) {
+            debugPrint('Error parsing JSON: $e');
+            throw Exception('Invalid data format from server');
+          }
+        } else if (response.statusCode == 401) {
+          // On 401, force logout and throw exception
+          debugPrint('🚨 401 Unauthorized! Forcing logout...');
+          await _authService.logout();
+          throw Exception('Session expired: Please login again');
+        } else {
+          throw Exception('Server error (${response.statusCode}): ${response.body}');
+        }
+      } catch (firstAttemptError) {
+        // If first attempt fails with anything except session expired, try fallback URL
+        if (firstAttemptError.toString().contains('Session expired') || 
+            firstAttemptError.toString().contains('Session invalid')) {
+          rethrow;
+        }
+        
+        debugPrint('First attempt failed: $firstAttemptError, trying fallback URL');
+        
+        // Fallback attempt
+        final fallbackUrl = (_currentBaseUrl == _primaryBaseUrl) 
+            ? _fallbackBaseUrl 
+            : _primaryBaseUrl;
+            
+        final response = await _debugHttp(
+          () => http.get(
+            Uri.parse('$fallbackUrl/CRF/atm/prepare-replenish/$id'),
+            headers: requestHeaders,
+          ).timeout(_timeout),
+          'GET ATM Prepare $id (Fallback)'
+        );
+        
+        if (response.statusCode == 200) {
+          try {
+            // Save fallback URL if successful
+            await _saveBaseUrl(fallbackUrl);
+            
+            final jsonData = json.decode(response.body);
+            return PrepareReplenishResponse.fromJson(jsonData);
+          } catch (e) {
+            debugPrint('Error parsing JSON: $e');
+            throw Exception('Invalid data format from server');
+          }
+        } else if (response.statusCode == 401) {
+          // On 401, force logout and throw exception
+          debugPrint('🚨 401 Unauthorized on fallback! Forcing logout...');
+          await _authService.logout();
+          throw Exception('Session expired: Please login again');
+        } else {
+          throw Exception('Server error (${response.statusCode}): ${response.body}');
+        }
       }
     } catch (e) {
       debugPrint('API error: $e');
       if (e is TimeoutException) {
         throw Exception('Connection timeout: Please check your internet connection');
       }
-      throw Exception('Network error: ${e.toString()}');
+      rethrow; // Return original error message
     }
   }
 
@@ -159,34 +273,94 @@ class ApiService {
     try {
       final requestHeaders = await headers;
       
-      final response = await _tryRequestWithFallback(
-        requestFn: (baseUrl) => http.get(
-          Uri.parse('$baseUrl/CRF/atm/return-catridge/$idTool?branchCode=$branchCode'),
-          headers: requestHeaders,
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        try {
-          final jsonData = json.decode(response.body);
-          return ReturnCatridgeResponse.fromJson(jsonData);
-        } catch (e) {
-          debugPrint('Error parsing JSON: $e');
-          throw Exception('Invalid data format from server');
-        }
-      } else if (response.statusCode == 401) {
-        // Handle auth error - try to clear token and redirect to login
+      // Check if token is missing
+      if (!requestHeaders.containsKey('Authorization') || 
+          requestHeaders['Authorization'] == null || 
+          requestHeaders['Authorization']!.isEmpty ||
+          requestHeaders['Authorization'] == 'Bearer ') {
+        debugPrint('🚨 CRITICAL ERROR: Missing or empty Authorization header!');
         await _authService.logout();
-        throw Exception('Session expired: Please login again');
-      } else {
-        throw Exception('Server error (${response.statusCode}): ${response.body}');
+        throw Exception('Session invalid: Please login again');
+      }
+      
+      // First attempt
+      try {
+        debugPrint('🔍 Preparing to fetch Return data for ID: $idTool, Branch: $branchCode');
+        debugPrint('🔍 Using URL: $_currentBaseUrl/CRF/atm/return-catridge/$idTool?branchCode=$branchCode');
+        debugPrint('🔍 Headers: ${requestHeaders.toString()}');
+        
+        final response = await _debugHttp(
+          () => http.get(
+            Uri.parse('$_currentBaseUrl/CRF/atm/return-catridge/$idTool?branchCode=$branchCode'),
+            headers: requestHeaders,
+          ).timeout(_timeout),
+          'GET Return Catridge $idTool'
+        );
+
+        if (response.statusCode == 200) {
+          try {
+            final jsonData = json.decode(response.body);
+            return ReturnCatridgeResponse.fromJson(jsonData);
+          } catch (e) {
+            debugPrint('Error parsing JSON: $e');
+            throw Exception('Invalid data format from server');
+          }
+        } else if (response.statusCode == 401) {
+          // On 401, force logout and throw exception
+          debugPrint('🚨 401 Unauthorized! Forcing logout...');
+          await _authService.logout();
+          throw Exception('Session expired: Please login again');
+        } else {
+          throw Exception('Server error (${response.statusCode}): ${response.body}');
+        }
+      } catch (firstAttemptError) {
+        // If first attempt fails with anything except session expired, try fallback URL
+        if (firstAttemptError.toString().contains('Session expired') || 
+            firstAttemptError.toString().contains('Session invalid')) {
+          rethrow;
+        }
+        
+        debugPrint('First attempt failed: $firstAttemptError, trying fallback URL');
+        
+        // Fallback attempt
+        final fallbackUrl = (_currentBaseUrl == _primaryBaseUrl) 
+            ? _fallbackBaseUrl 
+            : _primaryBaseUrl;
+            
+        final response = await _debugHttp(
+          () => http.get(
+            Uri.parse('$fallbackUrl/CRF/atm/return-catridge/$idTool?branchCode=$branchCode'),
+            headers: requestHeaders,
+          ).timeout(_timeout),
+          'GET Return Catridge $idTool (Fallback)'
+        );
+        
+        if (response.statusCode == 200) {
+          try {
+            // Save fallback URL if successful
+            await _saveBaseUrl(fallbackUrl);
+            
+            final jsonData = json.decode(response.body);
+            return ReturnCatridgeResponse.fromJson(jsonData);
+          } catch (e) {
+            debugPrint('Error parsing JSON: $e');
+            throw Exception('Invalid data format from server');
+          }
+        } else if (response.statusCode == 401) {
+          // On 401, force logout and throw exception
+          debugPrint('🚨 401 Unauthorized on fallback! Forcing logout...');
+          await _authService.logout();
+          throw Exception('Session expired: Please login again');
+        } else {
+          throw Exception('Server error (${response.statusCode}): ${response.body}');
+        }
       }
     } catch (e) {
       debugPrint('API error: $e');
       if (e is TimeoutException) {
         throw Exception('Connection timeout: Please check your internet connection');
       }
-      throw Exception('Network error: ${e.toString()}');
+      rethrow; // Return original error message
     }
   }
 
@@ -1573,6 +1747,111 @@ class ApiService {
       return false;
     } catch (e) {
       debugPrint('Error refreshing token: $e');
+      return false;
+    }
+  }
+
+  // Check if an API response contains a session expired message
+  bool _isSessionExpiredResponse(http.Response response) {
+    try {
+      // First check status code
+      if (response.statusCode == 401) {
+        return true;
+      }
+      
+      // Then check response body for session expired messages
+      final Map<String, dynamic> responseData = json.decode(response.body);
+      
+      // Check for various forms of session expired messages
+      final String message = (responseData['message'] ?? '').toString().toLowerCase();
+      
+      return message.contains('session expired') || 
+             message.contains('sesi berakhir') || 
+             message.contains('sesi telah berakhir') ||
+             message.contains('login kembali') ||
+             message.contains('unauthorized') ||
+             message.contains('token expired') ||
+             message.contains('token invalid') ||
+             message.contains('token not valid');
+    } catch (e) {
+      // If we can't parse the response, it's not a session expired error
+      return false;
+    }
+  }
+  
+  // Handle a session expired error
+  Future<void> _handleSessionExpired() async {
+    debugPrint('🚨 SESSION EXPIRED: Logging out and redirecting to login');
+    await _authService.logout();
+    throw Exception('Session expired: Please login again');
+  }
+
+  // Debug method to check token validity
+  Future<bool> checkTokenValidity() async {
+    try {
+      final requestHeaders = await headers;
+      
+      // Check if token is missing
+      if (!requestHeaders.containsKey('Authorization') || 
+          requestHeaders['Authorization'] == null || 
+          requestHeaders['Authorization']!.isEmpty ||
+          requestHeaders['Authorization'] == 'Bearer ') {
+        debugPrint('🚨 Token is missing or empty');
+        return false;
+      }
+      
+      debugPrint('🔍 Checking token validity with headers: ${requestHeaders.toString()}');
+      
+      // First attempt
+      try {
+        final response = await _debugHttp(
+          () => http.get(
+            Uri.parse('$_currentBaseUrl/CRF/validate/seal/Dummy'),
+            headers: requestHeaders,
+          ).timeout(_timeout),
+          'DEBUG Token Validity Check'
+        );
+        
+        // Check status code
+        if (_isSessionExpiredResponse(response)) {
+          debugPrint('🚨 Token validation failed: Session expired');
+          return false;
+        }
+        
+        // Any response other than 401 means token is valid (even if request failed for other reasons)
+        debugPrint('✅ Token is valid (Status: ${response.statusCode})');
+        return true;
+      } catch (e) {
+        debugPrint('🚨 Error checking token validity: $e');
+        // Try fallback URL
+        try {
+          final fallbackUrl = (_currentBaseUrl == _primaryBaseUrl) 
+              ? _fallbackBaseUrl 
+              : _primaryBaseUrl;
+              
+          final response = await _debugHttp(
+            () => http.get(
+              Uri.parse('$fallbackUrl/CRF/validate/seal/Dummy'),
+              headers: requestHeaders,
+            ).timeout(_timeout),
+            'DEBUG Token Validity Check (Fallback)'
+          );
+          
+          if (_isSessionExpiredResponse(response)) {
+            debugPrint('🚨 Token validation failed (fallback): Session expired');
+            return false;
+          }
+          
+          // Any response other than 401 means token is valid
+          debugPrint('✅ Token is valid on fallback URL (Status: ${response.statusCode})');
+          return true;
+        } catch (e2) {
+          debugPrint('🚨 Error checking token validity on fallback URL: $e2');
+          return false;
+        }
+      }
+    } catch (e) {
+      debugPrint('🚨 Error in checkTokenValidity: $e');
       return false;
     }
   }

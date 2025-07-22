@@ -368,7 +368,7 @@ class _LoginPageState extends State<LoginPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    
+     
     if (_availableBranches.isEmpty) {
       ErrorDialogs.showErrorDialog(
         context,
@@ -378,7 +378,7 @@ class _LoginPageState extends State<LoginPage> {
       );
       return;
     }
-    
+     
     if (_selectedBranch == null && _availableBranches.length > 1) {
       ErrorDialogs.showErrorDialog(
         context,
@@ -389,11 +389,11 @@ class _LoginPageState extends State<LoginPage> {
       );
       return;
     }
-
+  
     setState(() {
       _isLoading = true;
     });
-
+  
     try {
       String? branchName;
       if (_selectedBranch != null) {
@@ -403,7 +403,7 @@ class _LoginPageState extends State<LoginPage> {
         );
         branchName = selectedBranchData['branchName'];
       }
-
+ 
       final result = await _authService.login(
         _usernameController.text.trim(),
         _passwordController.text.trim(),
@@ -411,9 +411,15 @@ class _LoginPageState extends State<LoginPage> {
         selectedBranch: branchName,
       );
       
+      // DEBUG: Check if token was stored properly
+      final token = await _authService.getToken();
+      debugPrint('🔴 DEBUG: Token after login: ${token != null ? "Found (${token.length} chars)" : "NULL"}');
+       
       if (result['success'] || (_isTestMode && result['errorType'] == 'ANDROID_ID_ERROR')) {
-        HapticFeedback.mediumImpact();
+        // startGlobalTokenRefresh(); // Removed as per edit hint
         
+        HapticFeedback.mediumImpact();
+         
         ErrorDialogs.showSuccessDialog(
           context,
           title: 'Login Berhasil!',
@@ -429,7 +435,7 @@ class _LoginPageState extends State<LoginPage> {
               if (userData != null) {
                 // Print all possible role fields for debugging
                 print('DEBUG: Available role fields on login success - roleID: ${userData['roleID']}, role: ${userData['role']}, userRole: ${userData['userRole']}');
-                
+                 
                 userRole = (userData['roleID'] ?? 
                            userData['RoleID'] ?? 
                            userData['role'] ?? 
@@ -441,7 +447,7 @@ class _LoginPageState extends State<LoginPage> {
                            '').toString().toUpperCase();
                 print('DEBUG: User role from userData on login success: $userRole');
               }
-              
+          
               if (userRole == 'CRF_TL') {
                 print('DEBUG LOGIN: Navigating to TLHomePage for CRF_TL role');
                 // Navigate to TL Home Page with portrait orientation using named route

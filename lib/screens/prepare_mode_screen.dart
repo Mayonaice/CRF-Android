@@ -69,13 +69,9 @@ class _PrepareModePageState extends State<PrepareModePage> {
   final TextEditingController _nikTLController = TextEditingController();
   final TextEditingController _passwordTLController = TextEditingController();
 
-  Timer? _tokenCheckTimer;
-  bool _isRefreshingToken = false;
-
   @override
   void initState() {
     super.initState();
-    _startTokenCheck();
     // Lock orientation to landscape
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -93,45 +89,6 @@ class _PrepareModePageState extends State<PrepareModePage> {
     _jamMulaiController.addListener(_checkAndHideApprovalForm);
   }
 
-  void _startTokenCheck() {
-    // Check token every 5 minutes
-    _tokenCheckTimer = Timer.periodic(Duration(minutes: 5), (timer) async {
-      await _checkAndRefreshToken();
-    });
-  }
-
-  Future<void> _checkAndRefreshToken() async {
-    if (_isRefreshingToken) return;
-    
-    try {
-      _isRefreshingToken = true;
-      
-      if (await _authService.shouldRefreshToken()) {
-        debugPrint('Token needs refresh, attempting to refresh...');
-        final success = await _authService.refreshToken();
-        
-        if (!success) {
-          debugPrint('Token refresh failed, redirecting to login');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Sesi telah berakhir. Silakan login kembali.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            Navigator.of(context).pushReplacementNamed('/login');
-          }
-        } else {
-          debugPrint('Token refreshed successfully');
-        }
-      }
-    } catch (e) {
-      debugPrint('Error during token refresh: $e');
-    } finally {
-      _isRefreshingToken = false;
-    }
-  }
-
   @override
   void dispose() {
     _idCRFController.dispose();
@@ -147,8 +104,6 @@ class _PrepareModePageState extends State<PrepareModePage> {
     // Dispose approval form controllers
     _nikTLController.dispose();
     _passwordTLController.dispose();
-    
-    _tokenCheckTimer?.cancel();
     
     super.dispose();
   }
@@ -830,34 +785,100 @@ class _PrepareModePageState extends State<PrepareModePage> {
     }
   }
   
-  // Fetch data from API
+  // Fetch data from API based on ID CRF
   Future<void> _fetchPrepareData() async {
-    if (_idCRFController.text.isEmpty || !mounted) {
-      if (mounted) {
+    // DEBUG: Print current token to verify it's correctly stored
+    try {
+      final token = await _authService.getToken();
+      debugPrint('🔴 DEBUG: Current token before fetch: ${token != null ? "Found (${token.length} chars)" : "NULL"}');
+      
+      // If token is null, try to log the user out and redirect to login page
+      if (token == null || token.isEmpty) {
+        debugPrint('🔴 DEBUG: Token is null or empty, forcing logout');
+        
         setState(() {
-          _errorMessage = 'Silakan masukkan ID CRF terlebih dahulu';
+          _isLoading = false;
+          _errorMessage = 'Sesi telah berakhir. Silakan login kembali.';
         });
+        
+        // Show dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Sesi Berakhir'),
+              content: const Text('Sesi anda telah berakhir. Silakan login kembali.'),
+              actions: <Widget>[
+                TextButton(
+                  child: const Text('OK'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _authService.logout().then((_) {
+                      Navigator.of(context).pushReplacementNamed('/login');
+                    });
+                  },
+                ),
+              ],
+            );
+          },
+        );
+        return;
       }
+      
+      // Validate token before proceeding
+      debugPrint('🔴 DEBUG: Validating token before fetch...');
+      final isTokenValid = await _apiService.checkTokenValidity();
+      if (!isTokenValid) {
+        debugPrint('🔴 DEBUG: Token validation failed, forcing logout');
+        
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Sesi telah berakhir. Silakan login kembali.';
+        });
+        
+        // Show dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Sesi Berakhir'),
+              content: const Text('Sesi anda telah berakhir. Silakan login kembali.'),
+              actions: <Widget>[
+                TextButton(
+                  child: const Text('OK'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _authService.logout().then((_) {
+                      Navigator.of(context).pushReplacementNamed('/login');
+                    });
+                  },
+                ),
+              ],
+            );
+          },
+        );
+        return;
+      }
+      
+      debugPrint('🔴 DEBUG: Token validation successful, proceeding with fetch');
+    } catch (e) {
+      debugPrint('🔴 DEBUG: Error getting token: $e');
+    }
+    
+    final idText = _idCRFController.text.trim();
+    if (idText.isEmpty) {
+      _showErrorDialog('ID CRF tidak boleh kosong');
       return;
     }
     
-    int id;
+    // Try to parse ID as integer
+    int? id;
     try {
-      id = int.parse(_idCRFController.text.trim());
-      if (id <= 0) {
-        if (mounted) {
-          setState(() {
-            _errorMessage = 'ID CRF harus berupa angka positif yang valid';
-          });
-        }
-        return;
-      }
+      id = int.parse(idText);
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Format ID CRF tidak valid. Masukkan angka yang benar, contoh: 12345';
-        });
-      }
+      _showErrorDialog('ID CRF harus berupa angka');
       return;
     }
     
@@ -3481,6 +3502,29 @@ class _PrepareModePageState extends State<PrepareModePage> {
         ),
       );
     }
+  }
+
+  // Show error dialog
+  void _showErrorDialog(String message) {
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Error'),
+          content: Text(message),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('OK'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 

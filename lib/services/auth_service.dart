@@ -143,132 +143,117 @@ class AuthService {
   // Enhanced login method with role-based authentication
   Future<Map<String, dynamic>> login(String username, String password, String noMeja, {String? selectedBranch}) async {
     try {
-      // Get client type and Android ID for device validation
+      // Get device ID for validation
+      final deviceId = await DeviceService.getDeviceId();
+      
+      // Get client type
       final clientType = _getClientType();
-      var androidId = await DeviceService.getDeviceId();
       
-      // If androidId is error_unknown_device, use test device ID
-      if (androidId == 'error_unknown_device' || androidId.isEmpty) {
-        androidId = '1234567fortest89';
-        debugPrint('Using test device ID: $androidId');
-      }
-      
-      print('🚀 DEBUG LOGIN: username=$username, noMeja=$noMeja');
-      print('🚀 DEBUG LOGIN: clientType=$clientType');
-      print('🚀 DEBUG LOGIN: androidId=$androidId');
-      print('🚀 DEBUG LOGIN: selectedBranch=$selectedBranch');
-      print('🚀 DEBUG LOGIN: baseUrl=$_currentBaseUrl');
-      
-      final requestBody = {
-        'Username': username,
-        'Password': password,
-        'NoMeja': noMeja,
-        'ClientType': clientType,
-        'AndroidId': androidId,
-        if (selectedBranch != null) 'SelectedBranch': selectedBranch,
-      };
-      
-      print('🚀 DEBUG LOGIN: Request body = ${json.encode(requestBody)}');
+      debugPrint('Login attempt for user: $username, deviceId: $deviceId, selectedBranch: $selectedBranch');
       
       final response = await _tryRequestWithFallback(
         requestFn: (baseUrl) => http.post(
           Uri.parse('$baseUrl/CRF/login'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(requestBody),
+          body: json.encode({
+            'username': username,
+            'password': password,
+            'noMeja': noMeja,
+            'androidId': deviceId,
+            'clientType': clientType,
+            'selectedBranch': selectedBranch
+          }),
         ),
       );
-
-      print('🚀 DEBUG LOGIN: Response status = ${response.statusCode}');
-      print('🚀 DEBUG LOGIN: Response body = ${response.body}');
-
-      // Check if we have a valid JSON response
-      Map<String, dynamic> responseData;
-      try {
-        responseData = json.decode(response.body) as Map<String, dynamic>;
-      } catch (e) {
-        debugPrint('Error parsing JSON: $e');
+      
+      final Map<String, dynamic> responseData = json.decode(response.body);
+      
+      // Check for API error
+      if (responseData['success'] != true) {
         return {
           'success': false,
-          'message': 'Server returned invalid data: ${response.body.substring(0, min(100, response.body.length))}',
+          'message': responseData['message'] ?? 'Unknown error',
+          'errorType': (responseData['message'] ?? '').toString().contains('AndroidID') 
+              ? 'ANDROID_ID_ERROR' 
+              : 'LOGIN_ERROR'
         };
       }
       
-      if (response.statusCode == 200 && responseData['success'] == true) {
-        print('🚀 DEBUG LOGIN: SUCCESS!');
-        // Save token and user data with role information
-        if (responseData['data'] != null) {
-          final userData = responseData['data'];
-          
-          // Extract role information - prioritizing roleID as it's the field name from API
-          String? userRole;
-          if (userData['roleID'] != null) {
-            userRole = userData['roleID'].toString().toUpperCase();
-          } else if (userData['RoleID'] != null) {
-            userRole = userData['RoleID'].toString().toUpperCase();
-          } else if (userData['role'] != null) {
-            userRole = userData['role'].toString().toUpperCase();
-          } else if (userData['Role'] != null) {
-            userRole = userData['Role'].toString().toUpperCase();
-          } else if (userData['userRole'] != null) {
-            userRole = userData['userRole'].toString().toUpperCase();
-          } else if (userData['UserRole'] != null) {
-            userRole = userData['UserRole'].toString().toUpperCase();
-          } else if (userData['position'] != null) {
-            userRole = userData['position'].toString().toUpperCase();
-          } else if (userData['Position'] != null) {
-            userRole = userData['Position'].toString().toUpperCase();
-          }
-          
-          print('🚀 DEBUG LOGIN: Original role fields: role=${userData['role']}, Role=${userData['Role']}, userRole=${userData['userRole']}, roleID=${userData['roleID']}');
-          print('🚀 DEBUG LOGIN: Normalized role: $userRole');
-          
-          // Enhanced user data with role information - ensuring roleID is set correctly
-          final enhancedUserData = <String, dynamic>{
-            ...Map<String, dynamic>.from(userData),
-            'roleID': userRole, // Prioritize roleID as the main role field
-            'role': userRole, // Keep role field for backward compatibility
-            'branchCode': userData['groupId'] ?? userData['GroupId'] ?? userData['branchCode'] ?? userData['BranchCode'],
-            'branchName': userData['branchName'] ?? userData['BranchName'] ?? userData['groupName'] ?? userData['GroupName'],
-            'tableCode': userData['tableCode'] ?? userData['TableCode'] ?? noMeja,
-            'warehouseCode': userData['warehouseCode'] ?? userData['WarehouseCode'] ?? 'Cideng',
-            'loginTimestamp': DateTime.now().toIso8601String(),
-          };
-          
-          print('🚀 DEBUG LOGIN: User role detected: $userRole');
-          print('🚀 DEBUG LOGIN: Enhanced user data: ${json.encode(enhancedUserData)}');
-          
-          await saveUserData(enhancedUserData);
-          await saveToken(responseData['token'] ?? '');
-        }
-        
-        return {
-          'success': true,
-          'message': responseData['message'] ?? 'Login successful',
-          'data': responseData['data'],
-          'role': responseData['data']?['role'],
-        };
-      } else {
-        print('🚀 DEBUG LOGIN: FAILED - ${responseData['message']}');
-        
-        // Handle specific error cases
-        if (responseData['errorType'] == 'ANDROID_ID_ERROR') {
-          return {
-            'success': false,
-            'message': responseData['message'] ?? 'Device registration error',
-            'errorType': 'ANDROID_ID_ERROR',
-          };
-        }
-        
+      // Store token - Check if token exists in response
+      if (responseData['data'] == null || responseData['data']['token'] == null) {
+        debugPrint('ERROR: Login response missing token data!');
+        debugPrint('Response data: ${json.encode(responseData)}');
         return {
           'success': false,
-          'message': responseData['message'] ?? 'Login failed (${response.statusCode})',
+          'message': 'Server error: Login response missing token',
+          'errorType': 'TOKEN_MISSING'
         };
       }
+      
+      final token = responseData['data']['token'];
+      if (token == null || token.isEmpty) {
+        debugPrint('ERROR: Token is null or empty!');
+        return {
+          'success': false,
+          'message': 'Server error: Token is empty',
+          'errorType': 'TOKEN_EMPTY'
+        };
+      }
+      
+      // Print token for debugging (partial for security)
+      final displayToken = token.length > 10 ? "${token.substring(0, 5)}...${token.substring(token.length - 5)}" : token;
+      debugPrint('Token received: $displayToken (length: ${token.length})');
+      
+      // Store token with verification
+      final tokenStored = await saveToken(token);
+      if (!tokenStored) {
+        debugPrint('ERROR: Failed to store token!');
+        return {
+          'success': false,
+          'message': 'Error storing token',
+          'errorType': 'TOKEN_STORAGE_ERROR'
+        };
+      }
+      
+      // Store user data
+      Map<String, dynamic> userData = responseData['data'];
+      // Ensure branchCode is included
+      if (selectedBranch != null && !userData.containsKey('branchCode')) {
+        userData['branchCode'] = selectedBranch;
+      }
+      await saveUserData(userData);
+      
+      // Double-check token storage by reading it back immediately
+      final storedToken = await getToken();
+      if (storedToken == null || storedToken.isEmpty) {
+        debugPrint('WARNING: Token storage verification failed! Stored token is null or empty.');
+        
+        // Try one more time with a slight delay
+        await Future.delayed(Duration(milliseconds: 100));
+        final retryToken = await getToken();
+        if (retryToken == null || retryToken.isEmpty) {
+          debugPrint('ERROR: Token storage retry failed! Token still null or empty.');
+          return {
+            'success': false,
+            'message': 'Error retrieving stored token',
+            'errorType': 'TOKEN_RETRIEVAL_ERROR'
+          };
+        }
+      } else {
+        debugPrint('Token storage verification successful');
+      }
+      
+      return {
+        'success': true,
+        'message': 'Login successful',
+        'role': responseData['data']['role']
+      };
     } catch (e) {
       debugPrint('Login error: $e');
       return {
         'success': false,
-        'message': 'Connection error: $e',
+        'message': 'Connection error: ${e.toString()}',
+        'errorType': 'CONNECTION_ERROR'
       };
     }
   }
@@ -339,23 +324,65 @@ class AuthService {
   }
 
   // Save token to shared preferences
-  Future<void> saveToken(String token) async {
+  Future<bool> saveToken(String token) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(tokenKey, token);
+      
+      // Validate token
+      if (token.isEmpty) {
+        debugPrint('WARNING: Attempting to save empty token!');
+        return false;
+      }
+      
+      // Clear token first to ensure clean state
+      await prefs.remove(tokenKey);
+      
+      // Store token
+      final success = await prefs.setString(tokenKey, token);
+      
+      if (!success) {
+        debugPrint('WARNING: Failed to save token to SharedPreferences!');
+        return false;
+      } else {
+        debugPrint('Token saved successfully (length: ${token.length})');
+        return true;
+      }
     } catch (e) {
-      debugPrint('Failed to save token: $e');
+      debugPrint('Error saving token: $e');
+      return false;
     }
   }
-
+  
   // Get token from shared preferences
   Future<String?> getToken() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getString(tokenKey);
+      final token = prefs.getString(tokenKey);
+      
+      // Log token details for debugging (partial token for security)
+      if (token != null && token.isNotEmpty) {
+        final parts = token.split('.');
+        final displayPart = token.length > 10 ? "${token.substring(0, 5)}...${token.substring(token.length - 5)}" : token;
+        debugPrint('Retrieved token: $displayPart (length: ${token.length}, parts: ${parts.length})');
+      } else {
+        debugPrint('Retrieved token is null or empty');
+      }
+      
+      return token;
     } catch (e) {
-      debugPrint('Failed to get token: $e');
+      debugPrint('Error getting token: $e');
       return null;
+    }
+  }
+  
+  // Forcefully reset token (for testing)
+  Future<void> resetToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(tokenKey);
+      debugPrint('Token forcefully reset');
+    } catch (e) {
+      debugPrint('Error resetting token: $e');
     }
   }
 
@@ -415,21 +442,31 @@ class AuthService {
       final parts = token.split('.');
       if (parts.length != 3) return false;
 
-      // Decode payload
-      final payload = json.decode(
-        utf8.decode(base64Url.decode(base64Url.normalize(parts[1])))
-      );
-      
-      // Get expiration timestamp
-      final expiration = DateTime.fromMillisecondsSinceEpoch(payload['exp'] * 1000);
-      
-      // Refresh if less than 1 hour remaining
-      final shouldRefresh = DateTime.now().isAfter(expiration.subtract(Duration(hours: 1)));
-      debugPrint('Token expires at: $expiration, shouldRefresh: $shouldRefresh');
-      return shouldRefresh;
+      try {
+        // Decode payload
+        final payload = json.decode(
+          utf8.decode(base64Url.decode(base64Url.normalize(parts[1])))
+        );
+        
+        // Get expiration timestamp
+        if (!payload.containsKey('exp')) {
+          debugPrint('Token does not contain expiration claim');
+          return false; // Don't refresh if no expiration found - API will handle it
+        }
+        
+        final expiration = DateTime.fromMillisecondsSinceEpoch((payload['exp'] as int) * 1000);
+        
+        // Only refresh if token is actually expired
+        final isExpired = DateTime.now().isAfter(expiration);
+        debugPrint('Token expires at: $expiration, isExpired: $isExpired');
+        return isExpired;
+      } catch (parseError) {
+        debugPrint('Error parsing token payload: $parseError');
+        return false; // Don't refresh if parsing fails - API will handle it
+      }
     } catch (e) {
       debugPrint('Error checking token expiration: $e');
-      return false;
+      return false; // Don't refresh if any error occurs - API will handle it
     }
   }
 
@@ -441,29 +478,62 @@ class AuthService {
 
       debugPrint('Attempting to refresh token');
       
-      final response = await _tryRequestWithFallback(
-        requestFn: (baseUrl) => http.post(
-          Uri.parse('$baseUrl/CRF/refresh-token'),
+      // Try primary URL first
+      try {
+        final response = await http.post(
+          Uri.parse('$_primaryBaseUrl/CRF/refresh-token'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token'
           },
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        debugPrint('Refresh token response: ${response.body}');
+        ).timeout(Duration(seconds: 10));
         
-        if (responseData['success'] == true && responseData['data'] != null) {
-          final newToken = responseData['data']['token'];
-          await saveToken(newToken);
-          debugPrint('Token refreshed successfully');
-          return true;
+        if (response.statusCode == 200) {
+          final responseData = json.decode(response.body);
+          debugPrint('Refresh token response: ${response.body}');
+          
+          if (responseData['success'] == true && responseData['data'] != null && 
+              responseData['data']['token'] != null) {
+            final newToken = responseData['data']['token'];
+            await saveToken(newToken);
+            debugPrint('Token refreshed successfully');
+            return true;
+          }
+        } else {
+          debugPrint('Failed to refresh token with primary URL: ${response.statusCode}');
         }
+      } catch (e) {
+        debugPrint('Error refreshing token with primary URL: $e');
       }
       
-      debugPrint('Failed to refresh token: ${response.statusCode}');
+      // Try fallback URL if primary fails
+      try {
+        final response = await http.post(
+          Uri.parse('$_fallbackBaseUrl/CRF/refresh-token'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token'
+          },
+        ).timeout(Duration(seconds: 10));
+        
+        if (response.statusCode == 200) {
+          final responseData = json.decode(response.body);
+          debugPrint('Refresh token response (fallback): ${response.body}');
+          
+          if (responseData['success'] == true && responseData['data'] != null && 
+              responseData['data']['token'] != null) {
+            final newToken = responseData['data']['token'];
+            await saveToken(newToken);
+            debugPrint('Token refreshed successfully with fallback URL');
+            return true;
+          }
+        }
+      } catch (e) {
+        debugPrint('Error refreshing token with fallback URL: $e');
+      }
+      
+      // If we get here, both attempts failed
+      debugPrint('Failed to refresh token with both URLs');
       return false;
     } catch (e) {
       debugPrint('Error refreshing token: $e');

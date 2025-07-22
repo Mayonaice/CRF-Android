@@ -502,375 +502,319 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final isTablet = size.width > 600;
-    final buttonColor = const Color(0xFF2196F3);
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenHeight < 600;
     
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      // Add AppBar for test mode switch
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          // Test mode switch
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Row(
-              children: [
-                const Text(
-                  'Test Mode',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Switch(
-                  value: _isTestMode,
-                  onChanged: (value) {
-                    if (value) {
-                      _showTokenInputDialog();
-                    } else {
-                      setState(() {
-                        _isTestMode = false;
-                      });
-                    }
-                  },
-                  activeColor: Colors.greenAccent,
-                ),
-              ],
+      backgroundColor: const Color(0xFF0056A4),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Container(
+            height: screenHeight,
+            width: screenWidth,
+            decoration: const BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage('assets/images/bg-login.png'),
+                fit: BoxFit.cover,
+              ),
             ),
-          ),
-        ],
-      ),
-      body: Container(
-        width: size.width,
-        height: size.height,
-        // Use background image with better fit
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: const AssetImage('assets/images/bg-login.png'),
-            fit: BoxFit.cover,
-            // Pastikan gambar tidak terpotong dengan alignment yang tepat
-            alignment: Alignment.center,
-          ),
-        ),
-        // Use SafeArea to ensure content is visible
-        child: SafeArea(
-          // Use SingleChildScrollView to handle overflow on smaller screens
-          child: SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                // Responsive layout based on screen size
-                return Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: isTablet ? size.width * 0.9 : size.width,
-                      minHeight: size.height,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: screenWidth * 0.05,
+                vertical: 20,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Spacer untuk memberikan ruang di atas
+                  SizedBox(height: screenHeight * 0.1),
+                  
+                  // Logo and form section with responsive width
+                  Container(
+                    width: screenWidth * 0.6,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 10,
+                          spreadRadius: 5,
+                        ),
+                      ],
                     ),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isTablet ? size.width * 0.05 : 16,
-                        vertical: 20,
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Spacer untuk memberikan ruang di atas
-                          SizedBox(height: size.height * 0.1),
-                          
-                          // Logo and form section with responsive width
-                          Container(
-                            width: isTablet ? size.width * 0.6 : size.width * 0.9,
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.9),
-                              borderRadius: BorderRadius.circular(15),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 10,
-                                  spreadRadius: 5,
-                                ),
-                              ],
-                            ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Login text - responsive
+                        Text(
+                          'Login Your Account',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF0056A4),
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 30),
+                        
+                        // Form - responsive dengan padding tambahan
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 10.0),
+                          child: Form(
+                            key: _formKey,
                             child: Column(
-                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Login text - responsive
-                                Text(
-                                  'Login Your Account',
+                                // Username/ID/Email/HP
+                                const Text(
+                                  'User ID/Email/No.Hp',
                                   style: TextStyle(
-                                    fontSize: isTablet ? 28 : 22,
+                                    fontSize: 16,
                                     fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF0056A4),
                                   ),
+                                ),
+                                const SizedBox(height: 5),
+                                TextFormField(
+                                  controller: _usernameController,
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter your User ID, Email or Phone Number',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                                    suffixIcon: const Icon(Icons.person),
+                                  ),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter your username';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                
+                                const SizedBox(height: 15),
+                                
+                                // Password
+                                const Text(
+                                  'Password',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                TextFormField(
+                                  controller: _passwordController,
+                                  obscureText: !_isPasswordVisible,
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter your password',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _isPasswordVisible = !_isPasswordVisible;
+                                        });
+                                        // Android haptic feedback
+                                        HapticFeedback.lightImpact();
+                                      },
+                                    ),
+                                  ),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter your password';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                
+                                const SizedBox(height: 15),
+                                
+                                // No. Meja
+                                const Text(
+                                  'No. Meja',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                TextFormField(
+                                  controller: _noMejaController,
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter table number',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                                    suffixIcon: const Icon(Icons.table_chart),
+                                  ),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter table number';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                
+                                const SizedBox(height: 15),
+                                
+                                // Branch/Role dropdown (auto-populated)
+                                Row(
+                                  children: [
+                                    const Text(
+                                      'Branch & Role',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    if (_isLoadingBranches) ...[
+                                      const SizedBox(width: 10),
+                                      const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height: 5),
+                                DropdownButtonFormField<String>(
+                                  value: _selectedBranch,
+                                  decoration: InputDecoration(
+                                    hintText: _isLoadingBranches 
+                                        ? 'Loading branches...'
+                                        : _availableBranches.isEmpty 
+                                            ? 'Fill all fields above to load branches'
+                                            : 'Select branch & role',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                    filled: true,
+                                    fillColor: _availableBranches.isEmpty ? Colors.grey.shade100 : Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                                    suffixIcon: _isLoadingBranches 
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          )
+                                        : Icon(
+                                            _availableBranches.isNotEmpty ? Icons.business : Icons.info_outline,
+                                            color: _availableBranches.isNotEmpty ? null : Colors.grey,
+                                          ),
+                                  ),
+                                  items: _availableBranches.map((branch) {
+                                    return DropdownMenuItem<String>(
+                                      value: branch['displayText'] as String,
+                                      child: Text(
+                                        (branch['displayText'] as String?) ?? '',
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: _availableBranches.isEmpty ? null : (String? value) {
+                                    setState(() {
+                                      _selectedBranch = value;
+                                    });
+                                    // Android haptic feedback
+                                    HapticFeedback.selectionClick();
+                                  },
+                                  validator: (value) {
+                                    if (_availableBranches.isEmpty) {
+                                      return 'No branches available. Check your credentials.';
+                                    }
+                                    if (_availableBranches.length > 1 && value == null) {
+                                      return 'Please select a branch';
+                                    }
+                                    return null;
+                                  },
                                 ),
                                 
                                 const SizedBox(height: 30),
                                 
-                                // Form - responsive dengan padding tambahan
-                                Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: isTablet ? 20.0 : 10.0),
-                                  child: Form(
-                                    key: _formKey,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        // Username/ID/Email/HP
-                                        const Text(
-                                          'User ID/Email/No.Hp',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 5),
-                                        TextFormField(
-                                          controller: _usernameController,
-                                          decoration: InputDecoration(
-                                            hintText: 'Enter your User ID, Email or Phone Number',
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(30),
+                                // Login button
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 50,
+                                  child: ElevatedButton(
+                                    onPressed: _isLoading ? null : _performLogin,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2196F3),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(30),
+                                      ),
+                                      elevation: 3,
+                                    ),
+                                    child: _isLoading
+                                        ? const SizedBox(
+                                            width: 24,
+                                            height: 24,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                             ),
-                                            filled: true,
-                                            fillColor: Colors.white,
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                                            suffixIcon: const Icon(Icons.person),
-                                          ),
-                                          validator: (value) {
-                                            if (value == null || value.isEmpty) {
-                                              return 'Please enter your username';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                        
-                                        const SizedBox(height: 15),
-                                        
-                                        // Password
-                                        const Text(
-                                          'Password',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 5),
-                                        TextFormField(
-                                          controller: _passwordController,
-                                          obscureText: !_isPasswordVisible,
-                                          decoration: InputDecoration(
-                                            hintText: 'Enter your password',
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(30),
-                                            ),
-                                            filled: true,
-                                            fillColor: Colors.white,
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                                            suffixIcon: IconButton(
-                                              icon: Icon(
-                                                _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                                              ),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _isPasswordVisible = !_isPasswordVisible;
-                                                });
-                                                // Android haptic feedback
-                                                HapticFeedback.lightImpact();
-                                              },
+                                          )
+                                        : const Text(
+                                            'Login',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
                                             ),
                                           ),
-                                          validator: (value) {
-                                            if (value == null || value.isEmpty) {
-                                              return 'Please enter your password';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                        
-                                        const SizedBox(height: 15),
-                                        
-                                        // No. Meja
-                                        const Text(
-                                          'No. Meja',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 5),
-                                        TextFormField(
-                                          controller: _noMejaController,
-                                          decoration: InputDecoration(
-                                            hintText: 'Enter table number',
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(30),
-                                            ),
-                                            filled: true,
-                                            fillColor: Colors.white,
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                                            suffixIcon: const Icon(Icons.table_chart),
-                                          ),
-                                          validator: (value) {
-                                            if (value == null || value.isEmpty) {
-                                              return 'Please enter table number';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                        
-                                        const SizedBox(height: 15),
-                                        
-                                        // Branch/Role dropdown (auto-populated)
-                                        Row(
-                                          children: [
-                                            const Text(
-                                              'Branch & Role',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            if (_isLoadingBranches) ...[
-                                              const SizedBox(width: 10),
-                                              const SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                        const SizedBox(height: 5),
-                                        DropdownButtonFormField<String>(
-                                          value: _selectedBranch,
-                                          decoration: InputDecoration(
-                                            hintText: _isLoadingBranches 
-                                                ? 'Loading branches...'
-                                                : _availableBranches.isEmpty 
-                                                    ? 'Fill all fields above to load branches'
-                                                    : 'Select branch & role',
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(30),
-                                            ),
-                                            filled: true,
-                                            fillColor: _availableBranches.isEmpty ? Colors.grey.shade100 : Colors.white,
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                                            suffixIcon: _isLoadingBranches 
-                                                ? const SizedBox(
-                                                    width: 20,
-                                                    height: 20,
-                                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                                  )
-                                                : Icon(
-                                                    _availableBranches.isNotEmpty ? Icons.business : Icons.info_outline,
-                                                    color: _availableBranches.isNotEmpty ? null : Colors.grey,
-                                                  ),
-                                          ),
-                                          items: _availableBranches.map((branch) {
-                                            return DropdownMenuItem<String>(
-                                              value: branch['displayText'] as String,
-                                              child: Text(
-                                                (branch['displayText'] as String?) ?? '',
-                                                style: const TextStyle(fontSize: 14),
-                                              ),
-                                            );
-                                          }).toList(),
-                                          onChanged: _availableBranches.isEmpty ? null : (String? value) {
-                                            setState(() {
-                                              _selectedBranch = value;
-                                            });
-                                            // Android haptic feedback
-                                            HapticFeedback.selectionClick();
-                                          },
-                                          validator: (value) {
-                                            if (_availableBranches.isEmpty) {
-                                              return 'No branches available. Check your credentials.';
-                                            }
-                                            if (_availableBranches.length > 1 && value == null) {
-                                              return 'Please select a branch';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                        
-                                        const SizedBox(height: 30),
-                                        
-                                        // Login button
-                                        SizedBox(
-                                          width: double.infinity,
-                                          height: 50,
-                                          child: ElevatedButton(
-                                            onPressed: _isLoading ? null : _performLogin,
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: buttonColor,
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(30),
-                                              ),
-                                              elevation: 3,
-                                            ),
-                                            child: _isLoading
-                                                ? const SizedBox(
-                                                    width: 24,
-                                                    height: 24,
-                                                    child: CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                                    ),
-                                                  )
-                                                : const Text(
-                                                    'Login',
-                                                    style: TextStyle(
-                                                      fontSize: 18,
-                                                      fontWeight: FontWeight.bold,
-                                                    ),
-                                                  ),
-                                          ),
-                                        ),
+                                  ),
+                                ),
 
-                                        // Simple AndroidID display
-                                        const SizedBox(height: 16),
-                                        Center(
-                                          child: Text(
-                                            'IMEI = $_androidId',
-                                            style: const TextStyle(
-                                              fontSize: 13.5,
-                                              color: Colors.black54,
-                                              fontFamily: 'monospace',
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                // Simple AndroidID display
+                                const SizedBox(height: 16),
+                                Center(
+                                  child: Text(
+                                    'IMEI = $_androidId',
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      color: Colors.black54,
+                                      fontFamily: 'monospace',
                                     ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          
-                          const SizedBox(height: 20),
-                          
-                          // Versi aplikasi dengan tulisan kecil di bagian bawah
-                          Text(
-                            'CRF Android App v1.0',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: isTablet ? 14 : 12,
-                              fontWeight: FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                );
-              },
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Versi aplikasi dengan tulisan kecil di bagian bawah
+                  Text(
+                    'CRF Android App v1.0',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

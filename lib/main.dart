@@ -20,6 +20,31 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
 import 'screens/return_page.dart';
 
+// Method channel for native communication
+const MethodChannel _channel = MethodChannel('com.advantage.crf/app_channel');
+
+// Function to enable fullscreen mode
+Future<void> enableFullscreen() async {
+  try {
+    if (Platform.isAndroid) {
+      await _channel.invokeMethod('toggleFullscreen', {'enable': true});
+    }
+  } catch (e) {
+    debugPrint('Error enabling fullscreen: $e');
+  }
+}
+
+// Function to disable fullscreen mode
+Future<void> disableFullscreen() async {
+  try {
+    if (Platform.isAndroid) {
+      await _channel.invokeMethod('toggleFullscreen', {'enable': false});
+    }
+  } catch (e) {
+    debugPrint('Error disabling fullscreen: $e');
+  }
+}
+
 // Global error handler
 void _handleError(Object error, StackTrace stack) {
   debugPrint('CRITICAL ERROR: $error');
@@ -60,6 +85,8 @@ class _CrfSplashScreenState extends State<CrfSplashScreen> {
   @override
   void initState() {
     super.initState();
+    // Ensure fullscreen mode is enabled
+    enableFullscreen();
     _initializeApp();
   }
   
@@ -145,90 +172,108 @@ class _CrfSplashScreenState extends State<CrfSplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0056A4),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset(
-              'assets/images/bg-login.png',
-              width: 150,
-              height: 150,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                debugPrint('Failed to load splash image: $error');
-                return const Icon(
-                  Icons.account_balance,
-                  size: 150,
+      backgroundColor: const Color(0xFF29CC29), // Changed to green background
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Removed image and replaced with a simple logo
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
                   color: Colors.white,
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'CRF APP',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 48),
-            if (_hasError)
-              Column(
-                children: [
-                  const Icon(
-                    Icons.error_outline,
-                    color: Colors.red,
-                    size: 48,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    _statusMessage,
-                    style: const TextStyle(color: Colors.red, fontSize: 18),
-                  ),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text(
-                      _errorDetails,
-                      style: const TextStyle(color: Colors.white70),
-                      textAlign: TextAlign.center,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Text(
+                    'CRF',
+                    style: TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF29CC29),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () async {
-                      // Clear data and try again
-                      await SafePrefs.clearAll();
-                      if (mounted) {
-                        setState(() {
-                          _hasError = false;
-                          _statusMessage = 'Retrying...';
-                        });
-                        _initializeApp();
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF0056A4),
-                    ),
-                    child: const Text('Retry'),
-                  ),
-                ],
-              )
-            else
-              Column(
-                children: [
-                  const CircularProgressIndicator(color: Colors.white),
-                  const SizedBox(height: 24),
-                  Text(
-                    _statusMessage,
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ],
+                ),
               ),
-          ],
+              const SizedBox(height: 24),
+              const Text(
+                'CRF APP',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 48),
+              if (_hasError)
+                Column(
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 48,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _statusMessage,
+                      style: const TextStyle(color: Colors.red, fontSize: 18),
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        _errorDetails,
+                        style: const TextStyle(color: Colors.white70),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () async {
+                        // Clear data and try again
+                        await SafePrefs.clearAll();
+                        if (mounted) {
+                          setState(() {
+                            _hasError = false;
+                            _statusMessage = 'Retrying...';
+                          });
+                          _initializeApp();
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF29CC29), // Updated color to match background
+                      ),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                )
+              else
+                Column(
+                  children: [
+                    const CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 3.0, // Slightly thicker progress indicator
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      _statusMessage,
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ],
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -245,6 +290,9 @@ Future<void> main() async {
       FlutterError.presentError(details);
       _handleError(details.exception, details.stack ?? StackTrace.empty);
     };
+    
+    // Enable fullscreen mode to hide notification bar
+    await enableFullscreen();
     
     // Start with splash screen
     runApp(const MyApp());
@@ -298,7 +346,7 @@ class _MyAppState extends State<MyApp> {
           foregroundColor: Colors.white,
           elevation: 4,
           systemOverlayStyle: SystemUiOverlayStyle(
-            statusBarColor: Color(0xFF0056A4),
+            statusBarColor: Colors.transparent,
             statusBarIconBrightness: Brightness.light,
           ),
         ),
@@ -335,53 +383,14 @@ class _MyAppState extends State<MyApp> {
       navigatorKey: GlobalKey<NavigatorState>(),
       // Handle errors in the app
       builder: (context, child) {
-        // Error handling UI wrapper
-        Widget errorScreen(FlutterErrorDetails details) {
-          return Scaffold(
-            backgroundColor: Colors.white,
-            body: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.red, size: 60),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'An error occurred',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      details.exception.toString(),
-                      style: TextStyle(fontSize: 16, color: Colors.grey[700]),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: () {
-                        // Try to restart app to home page
-                        Navigator.of(context).pushReplacementNamed('/');
-                      },
-                      child: const Text('Go to Login'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
-
-        // Set the custom error widget builder
-        ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
-          return errorScreen(errorDetails);
-        };
-        
-        // Return the child or error screen
-        return child ?? errorScreen(FlutterErrorDetails(
-          exception: 'Failed to build UI',
-          library: 'CRF app',
-        ));
+        // Add SafeArea to ensure content doesn't go under status bar
+        return SafeArea(
+          top: true,
+          bottom: false,
+          left: false,
+          right: false,
+          child: child ?? const SizedBox(),
+        );
       },
     );
   }

@@ -30,6 +30,11 @@ class ValidateAndGetReplenishData {
   final String atmCode;
   final String idToolPrepare;
   final int currentIdTool;
+  final String codeBank;
+  final String jnsMesin;
+  final String lokasi;
+  final String idTypeAtm;
+  final String timeSTReturn;
   final List<CatridgeReplenishData> catridges;
 
   ValidateAndGetReplenishData({
@@ -39,6 +44,11 @@ class ValidateAndGetReplenishData {
     required this.atmCode,
     required this.idToolPrepare,
     required this.currentIdTool,
+    this.codeBank = '',
+    this.jnsMesin = '',
+    this.lokasi = '',
+    this.idTypeAtm = '',
+    this.timeSTReturn = '',
     required this.catridges,
   });
 
@@ -60,6 +70,11 @@ class ValidateAndGetReplenishData {
       atmCode: json['atmCode'] ?? '',
       idToolPrepare: json['idToolPrepare'] ?? '',
       currentIdTool: json['currentIdTool'] ?? 0,
+      codeBank: json['codeBank'] ?? '',
+      jnsMesin: json['jnsMesin'] ?? '',
+      lokasi: json['lokasi'] ?? '',
+      idTypeAtm: json['idTypeAtm'] ?? '',
+      timeSTReturn: json['timeSTReturn'] ?? '',
       catridges: catridgesList,
     );
   }
@@ -310,12 +325,21 @@ class ReturnHeaderData {
   String namaBank;
   String lokasi;
   String typeATM;
+  // Add new fields to match the API response
+  String codeBank;
+  String jnsMesin;
+  String idTypeAtm;
+  String timeSTReturn;
 
   ReturnHeaderData({
     this.atmCode = '',
     this.namaBank = '',
     this.lokasi = '',
     this.typeATM = '',
+    this.codeBank = '',
+    this.jnsMesin = '',
+    this.idTypeAtm = '',
+    this.timeSTReturn = '',
   });
 
   factory ReturnHeaderData.fromJson(Map<String, dynamic> json) {
@@ -324,6 +348,10 @@ class ReturnHeaderData {
       namaBank: json['namaBank'] ?? '',
       lokasi: json['lokasi'] ?? '',
       typeATM: json['typeATM'] ?? '',
+      codeBank: json['codeBank'] ?? '',
+      jnsMesin: json['jnsMesin'] ?? '',
+      idTypeAtm: json['idTypeAtm'] ?? '',
+      timeSTReturn: json['timeSTReturn'] ?? '',
     );
   }
 }

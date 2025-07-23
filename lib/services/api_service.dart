@@ -1338,8 +1338,7 @@ class ApiService {
       
       final requestBody = {
         "IdTool": idTool,
-        "TLNik": tlNik,
-        "BypassNikValidation": bypassNikValidation
+        "TlNik": tlNik, // Ubah dari TLNik menjadi TlNik sesuai dengan model di server
       };
       
       debugPrint('🔍 Approve prepare with QR request: ${json.encode(requestBody)}');
@@ -1351,6 +1350,9 @@ class ApiService {
           body: json.encode(requestBody),
         ),
       );
+      
+      // Log response untuk debugging
+      debugPrint('🔍 Approve prepare with QR response: ${response.statusCode}, ${response.body}');
       
       if (response.statusCode == 200) {
         final jsonData = json.decode(response.body);

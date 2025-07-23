@@ -168,11 +168,10 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         print('TLSPV validation successful using credentials from QR code');
       }
       
-      // Call the API service to approve prepare data with bypass flag
+      // Call the API service to approve prepare data
       final response = await _apiService.approvePrepareWithQR(
         idTool, 
-        tlNik,
-        bypassNikValidation: bypassNikValidation
+        tlNik
       );
       
       if (!response.success) {

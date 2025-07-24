@@ -16,6 +16,20 @@ allprojects {
         google()
         mavenCentral()
     }
+    
+    // Tambahkan konfigurasi namespace untuk semua subprojects
+    plugins.withType(com.android.build.gradle.BasePlugin).configureEach {
+        android {
+            buildFeatures {
+                buildConfig true
+            }
+            
+            // Pastikan namespace diatur untuk setiap subproject
+            if (!hasProperty('namespace')) {
+                namespace = "com.example.${project.name}"
+            }
+        }
+    }
 }
 
 rootProject.buildDir = '../build'

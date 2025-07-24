@@ -17,6 +17,9 @@ class AuthService {
   static const String tlspvCredentialsKey = 'tlspv_credentials'; // Key untuk menyimpan kredensial TLSPV
   static const String encryptionKey = 'CRF_SECURE_KEY_2025'; // Key untuk enkripsi data
   
+  // Cache untuk data user
+  String? _cachedUserData;
+  
   // API timeout duration
   static const Duration _timeout = Duration(seconds: 15);
 
@@ -415,10 +418,13 @@ class AuthService {
   }
 
   // Save user data to shared preferences
-  Future<void> saveUserData(Map<String, dynamic> userData) async {
+  Future<bool> saveUserData(Map<String, dynamic> userData) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(userDataKey, json.encode(userData));
+      final userDataString = json.encode(userData);
+      
+      // Update cache
+      _cachedUserData = userDataString;
       
       // Jika role adalah CRF_TL, simpan kredensial untuk QR code
       if (userData['role']?.toString().toUpperCase() == 'CRF_TL' || 
@@ -429,21 +435,47 @@ class AuthService {
           debugPrint('TLSPV credentials saved for QR code usage');
         }
       }
+      
+      return await prefs.setString(userDataKey, userDataString);
     } catch (e) {
       debugPrint('Failed to save user data: $e');
+      return false;
     }
   }
-
-  // Get user data from shared preferences
+  
+  // Get user data
   Future<Map<String, dynamic>?> getUserData() async {
     try {
+      // Try cache first
+      if (_cachedUserData != null && _cachedUserData!.isNotEmpty) {
+        return json.decode(_cachedUserData!) as Map<String, dynamic>;
+      }
+      
+      // If not in cache, read from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final userDataString = prefs.getString(userDataKey);
+      
       if (userDataString != null && userDataString.isNotEmpty) {
+        // Update cache
+        _cachedUserData = userDataString;
         return json.decode(userDataString) as Map<String, dynamic>;
       }
     } catch (e) {
       debugPrint('Failed to get user data: $e');
+    }
+    return null;
+  }
+
+  // Get user data (synchronous version)
+  Map<String, dynamic>? getUserDataSync() {
+    try {
+      // Gunakan data yang sudah di-cache
+      final userDataString = _cachedUserData;
+      if (userDataString != null && userDataString.isNotEmpty) {
+        return json.decode(userDataString) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('Error getting user data sync: $e');
     }
     return null;
   }

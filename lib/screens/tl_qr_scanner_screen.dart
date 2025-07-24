@@ -4,6 +4,8 @@ import 'dart:convert';
 import '../widgets/barcode_scanner_widget.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../models/prepare_model.dart';
+import '../services/notification_service.dart';
 
 class TLQRScannerScreen extends StatefulWidget {
   const TLQRScannerScreen({Key? key}) : super(key: key);
@@ -15,6 +17,7 @@ class TLQRScannerScreen extends StatefulWidget {
 class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
   final ApiService _apiService = ApiService();
   final AuthService _authService = AuthService();
+  final NotificationService _notificationService = NotificationService();
   bool _isProcessing = false;
   List<Map<String, dynamic>> _recentScans = [];
   
@@ -22,6 +25,10 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
   final TextEditingController _nikController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isSavingCredentials = false;
+
+  // Variabel untuk notifikasi ke CRF_OPR
+  String? _operatorId;
+  String? _operatorName;
 
   @override
   void initState() {
@@ -119,6 +126,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       bool bypassNikValidation = false;
       String? tlspvUsername;
       String? tlspvPassword;
+      List<CatridgeQRData>? catridgeData;
       
       // Coba periksa apakah ini format QR terenkripsi
       bool isEncrypted = false;
@@ -145,13 +153,70 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         // Ekstrak data dari QR terenkripsi dengan validasi tipe data
         try {
           action = decryptedData['action']?.toString() ?? '';
-          idTool = decryptedData['idTool']?.toString() ?? '';
           timestamp = int.tryParse(decryptedData['timestamp']?.toString() ?? '0') ?? 0;
           tlspvUsername = decryptedData['username']?.toString();
           tlspvPassword = decryptedData['password']?.toString();
           bypassNikValidation = true; // Selalu true untuk QR terenkripsi
           
-          print('Decrypted QR data: Action=$action, IdTool=$idTool, HasCredentials=${tlspvUsername != null}, Username=$tlspvUsername');
+          // Cek apakah ada data catridge (format baru)
+          if (decryptedData.containsKey('catridges')) {
+            print('QR contains catridge data');
+            
+            // Parse catridge data
+            final catridges = decryptedData['catridges'];
+            if (catridges is List) {
+              catridgeData = [];
+              
+              for (var item in catridges) {
+                if (item is Map<String, dynamic>) {
+                  try {
+                    final catridge = CatridgeQRData(
+                      idTool: item['idTool'] as int,
+                      bagCode: item['bagCode'] as String,
+                      catridgeCode: item['catridgeCode'] as String,
+                      sealCode: item['sealCode'] as String,
+                      catridgeSeal: item['catridgeSeal'] as String,
+                      denomCode: item['denomCode'] as String,
+                      qty: item['qty'] as String,
+                      userInput: item['userInput'] as String,
+                      sealReturn: item['sealReturn'] as String,
+                      typeCatridgeTrx: item['typeCatridgeTrx'] as String,
+                      tableCode: item['tableCode'] as String,
+                      warehouseCode: item['warehouseCode'] as String,
+                      operatorId: item['operatorId'] as String,
+                      operatorName: item['operatorName'] as String,
+                    );
+                    
+                    // Simpan operator ID dan name untuk notifikasi
+                    _operatorId = item['operatorId'] as String;
+                    _operatorName = item['operatorName'] as String;
+                    
+                    catridgeData.add(catridge);
+                  } catch (e) {
+                    print('Error parsing catridge data: $e');
+                  }
+                }
+              }
+              
+              print('Parsed ${catridgeData.length} catridge items from QR');
+              
+              // Ambil idTool dari catridge pertama
+              if (catridgeData.isNotEmpty) {
+                idTool = catridgeData[0].idTool.toString();
+                print('Using idTool from catridge data: $idTool');
+              } else {
+                throw Exception('Tidak ada data catridge yang valid dalam QR');
+              }
+            } else {
+              throw Exception('Format data catridge tidak valid');
+            }
+          } else {
+            // Format lama tanpa data catridge
+            idTool = decryptedData['idTool']?.toString() ?? '';
+            print('Using old QR format with idTool: $idTool');
+          }
+          
+          print('Decrypted QR data: Action=$action, IdTool=$idTool, HasCredentials=${tlspvUsername != null}, Username=$tlspvUsername, HasCatridges=${catridgeData != null}');
           
           // Validasi data yang diekstrak
           if (action.isEmpty) {
@@ -222,7 +287,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       // Jika ada kredensial TLSPV dari QR, gunakan itu
       if (tlspvUsername != null && tlspvUsername.isNotEmpty && tlspvPassword != null) {
         print('Using TLSPV credentials from QR code: $tlspvUsername');
-        tlNik = tlspvUsername.trim(); // Gunakan NIK dari QR dan pastikan bersih dari whitespace
+        tlNik = tlspvUsername.trim(); // Gunakan NIK dari QR
       } 
       // Jika tidak ada kredensial dan tidak ada bypass, tolak
       else if (tlNik.isEmpty && !bypassNikValidation) {
@@ -238,7 +303,13 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
 
       // Process based on action type
       if (action == 'PREPARE') {
-        await _approvePrepare(idTool, tlNik, tlName, bypassNikValidation, tlspvPassword);
+        if (catridgeData != null && catridgeData.isNotEmpty) {
+          // Format baru: proses data catridge langsung
+          await _approveAndProcessCatridges(idTool, tlNik, tlName, tlspvPassword, catridgeData);
+        } else {
+          // Format lama: hanya approve prepare
+          await _approvePrepare(idTool, tlNik, tlName, bypassNikValidation, tlspvPassword);
+        }
       } else if (action == 'RETURN') {
         await _approveReturn(idTool, tlNik, tlName, bypassNikValidation, tlspvPassword);
       } else {
@@ -261,6 +332,165 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       setState(() {
         _isProcessing = false;
       });
+    }
+  }
+
+  // Fungsi baru untuk memproses data catridge sekaligus
+  Future<void> _approveAndProcessCatridges(String idTool, String tlNik, String tlName, String? tlspvPassword, List<CatridgeQRData> catridges) async {
+    try {
+      print('Processing ${catridges.length} catridges for ID: $idTool by TL: $tlNik ($tlName)');
+      
+      // Validasi nilai NIK
+      if (tlNik.isEmpty) {
+        throw Exception('NIK TL tidak boleh kosong');
+      }
+      
+      // Jika password tersedia dari QR code, gunakan untuk validasi TLSPV
+      if (tlspvPassword == null || tlspvPassword.isEmpty) {
+        throw Exception('Password TL tidak tersedia dalam QR');
+      }
+      
+      // Debug log untuk memastikan nilai tlNik dan tlspvPassword tidak kosong
+      print('TL NIK: "$tlNik", isEmpty=${tlNik.isEmpty}');
+      print('TL Password: ${tlspvPassword.isNotEmpty ? "PROVIDED" : "EMPTY"}');
+      
+      // Pastikan NIK dan password bersih dari whitespace
+      final cleanNik = tlNik.trim();
+      final cleanPassword = tlspvPassword.trim();
+      
+      // Step 1: Validasi TL Supervisor credentials dan role - sama seperti flow manual
+      print('=== STEP 1: VALIDATE TL SUPERVISOR ===');
+      final validationResponse = await _apiService.validateTLSupervisor(
+        nik: cleanNik,
+        password: cleanPassword
+      );
+      
+      if (!validationResponse.success || validationResponse.data?.validationStatus != 'SUCCESS') {
+        throw Exception('Validasi TLSPV gagal: ${validationResponse.message}');
+      }
+      
+      print('TLSPV validation successful: ${validationResponse.data?.userName} (${validationResponse.data?.userRole})');
+      
+      // Pastikan idTool valid (hilangkan spasi dan karakter non-alfanumerik)
+      String cleanIdTool = idTool.trim();
+      int idToolInt;
+      try {
+        idToolInt = int.parse(cleanIdTool);
+      } catch (e) {
+        throw Exception('Format ID Tool tidak valid: $cleanIdTool');
+      }
+      
+      // Dapatkan data user saat ini untuk parameter tambahan
+      final userData = await _authService.getUserData();
+      final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
+      final tableCode = catridges[0].tableCode; // Gunakan tableCode dari catridge pertama
+      final warehouseCode = catridges[0].warehouseCode; // Gunakan warehouseCode dari catridge pertama
+      
+      // Step 2: Update Planning API - sama seperti flow manual
+      print('=== STEP 2: UPDATE PLANNING ===');
+      print('Calling updatePlanning with: idTool=$idToolInt, cashierCode=$currentUser, spvTLCode=$cleanNik, tableCode=$tableCode');
+      
+      final planningResponse = await _apiService.updatePlanning(
+        idTool: idToolInt,
+        cashierCode: currentUser,
+        spvTLCode: cleanNik,
+        tableCode: tableCode,
+        warehouseCode: warehouseCode,
+      );
+      
+      if (!planningResponse.success) {
+        throw Exception('Update planning gagal: ${planningResponse.message}');
+      }
+      
+      print('Planning update success for ID: $idTool by TL: $tlNik ($tlName)');
+      
+      // Step 3: Insert ATM Catridge untuk setiap item catridge
+      print('=== STEP 3: INSERT ATM CATRIDGE ===');
+      List<String> successMessages = [];
+      List<String> errorMessages = [];
+      
+      for (var catridge in catridges) {
+        try {
+          print('Processing catridge: ${catridge.catridgeCode} (${catridge.typeCatridgeTrx})');
+          
+          final catridgeResponse = await _apiService.insertAtmCatridge(
+            idTool: catridge.idTool,
+            bagCode: catridge.bagCode,
+            catridgeCode: catridge.catridgeCode,
+            sealCode: catridge.sealCode,
+            catridgeSeal: catridge.catridgeSeal,
+            denomCode: catridge.denomCode,
+            qty: catridge.qty,
+            userInput: currentUser, // Gunakan user TL sebagai userInput
+            sealReturn: catridge.sealReturn,
+            typeCatridgeTrx: catridge.typeCatridgeTrx,
+          );
+          
+          if (catridgeResponse.success) {
+            successMessages.add('${catridge.catridgeCode}: ${catridgeResponse.message}');
+            print('Catridge ${catridge.catridgeCode} inserted successfully');
+          } else {
+            errorMessages.add('${catridge.catridgeCode}: ${catridgeResponse.message}');
+            print('Error inserting catridge ${catridge.catridgeCode}: ${catridgeResponse.message}');
+          }
+        } catch (e) {
+          errorMessages.add('${catridge.catridgeCode}: ${e.toString()}');
+          print('Exception inserting catridge ${catridge.catridgeCode}: $e');
+        }
+      }
+      
+      // Step 4: Kirim notifikasi ke CRF_OPR (tidak menggunakan FCM)
+      if (_operatorId != null && _operatorId!.isNotEmpty) {
+        print('=== STEP 4: SEND NOTIFICATION TO CRF_OPR ===');
+        try {
+          final userData = await _authService.getUserData();
+          final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
+          final currentUserName = userData?['userName'] ?? userData?['name'] ?? 'UNKNOWN';
+          
+          await _notificationService.sendNotification(
+            idTool: idTool,
+            action: 'PREPARE_APPROVED',
+            status: 'SUCCESS',
+            message: 'Prepare dengan ID: $idTool telah berhasil diapprove oleh TL: $currentUserName',
+            fromUser: currentUser,
+            toUser: _operatorId!,
+            additionalData: {
+              'successCount': successMessages.length,
+              'errorCount': errorMessages.length,
+              'timestamp': DateTime.now().toIso8601String(),
+            },
+          );
+          
+          print('Notification sent to CRF_OPR: ${_operatorId}');
+        } catch (e) {
+          print('Error sending notification: $e');
+        }
+      } else {
+        print('Cannot send notification: Operator ID not available');
+      }
+      
+      // Log hasil
+      print('Catridge insertion results:');
+      print('Success: ${successMessages.length}');
+      print('Errors: ${errorMessages.length}');
+      
+      if (errorMessages.isNotEmpty) {
+        print('Error messages:');
+        for (var error in errorMessages) {
+          print('- $error');
+        }
+      }
+      
+      // Jika ada error, tampilkan pesan warning
+      if (errorMessages.isNotEmpty) {
+        _showWarningDialog(
+          'Sebagian Catridge Gagal',
+          'Berhasil: ${successMessages.length}, Gagal: ${errorMessages.length}\n\nDetail error:\n${errorMessages.join('\n')}'
+        );
+      }
+    } catch (e) {
+      print('Error processing catridges: $e');
+      throw Exception('Proses catridge gagal: ${e.toString()}');
     }
   }
 
@@ -331,6 +561,29 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       }
       
       print('Planning update success for ID: $idTool by TL: $tlNik ($tlName)');
+      
+      // Kirim notifikasi ke CRF_OPR jika ada informasi operator
+      if (_operatorId != null && _operatorId!.isNotEmpty) {
+        try {
+          final userData = await _authService.getUserData();
+          final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
+          final currentUserName = userData?['userName'] ?? userData?['name'] ?? 'UNKNOWN';
+          
+          await _notificationService.sendNotification(
+            idTool: idTool,
+            action: 'PREPARE_APPROVED',
+            status: 'SUCCESS',
+            message: 'Prepare dengan ID: $idTool telah berhasil diapprove oleh TL: $currentUserName',
+            fromUser: currentUser,
+            toUser: _operatorId!,
+            additionalData: null,
+          );
+          
+          print('Notification sent to CRF_OPR: ${_operatorId}');
+        } catch (e) {
+          print('Error sending notification: $e');
+        }
+      }
     } catch (e) {
       print('Error approving prepare: $e');
       throw Exception('Approval gagal: ${e.toString()}');
@@ -397,6 +650,29 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       }
       
       print('Return approved for ID: $idTool by TL: $tlNik ($tlName)');
+      
+      // Kirim notifikasi ke CRF_OPR jika ada informasi operator
+      if (_operatorId != null && _operatorId!.isNotEmpty) {
+        try {
+          final userData = await _authService.getUserData();
+          final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
+          final currentUserName = userData?['userName'] ?? userData?['name'] ?? 'UNKNOWN';
+          
+          await _notificationService.sendNotification(
+            idTool: idTool,
+            action: 'RETURN_APPROVED',
+            status: 'SUCCESS',
+            message: 'Return dengan ID: $idTool telah berhasil diapprove oleh TL: $currentUserName',
+            fromUser: currentUser,
+            toUser: _operatorId!,
+            additionalData: null,
+          );
+          
+          print('Notification sent to CRF_OPR: ${_operatorId}');
+        } catch (e) {
+          print('Error sending notification: $e');
+        }
+      }
     } catch (e) {
       print('Error approving return: $e');
       throw Exception('Approval return gagal: ${e.toString()}');
@@ -460,6 +736,31 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
           ],
         ),
         content: Text(error),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _showWarningDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.warning, color: Colors.orange),
+            const SizedBox(width: 8),
+            Text(title),
+          ],
+        ),
+        content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

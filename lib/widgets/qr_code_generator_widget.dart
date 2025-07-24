@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:async';
 import '../services/auth_service.dart';
+import '../models/prepare_model.dart';
 
 class QRCodeGeneratorWidget extends StatefulWidget {
-  final String action; // 'PREPARE' or 'RETURN'
+  final String action; // 'PREPARE' atau 'RETURN'
   final String idTool;
   final VoidCallback? onExpired;
+  final List<CatridgeQRData>? catridgeData; // Data catridge untuk dikirimkan dalam QR
 
   const QRCodeGeneratorWidget({
     Key? key,
     required this.action,
     required this.idTool,
     this.onExpired,
+    this.catridgeData, // Optional parameter untuk data catridge
   }) : super(key: key);
 
   @override
@@ -57,14 +60,34 @@ class _QRCodeGeneratorWidgetState extends State<QRCodeGeneratorWidget> {
       
       print('Using TLSPV credentials for QR: username=$username');
       
-      // Buat data terenkripsi yang berisi kredensial TLSPV
-      final qrDataMap = {
-        'action': widget.action,
-        'idTool': widget.idTool,
-        'timestamp': timestamp,
-        'username': username,
-        'password': password
-      };
+      // Buat data terenkripsi yang berisi kredensial TLSPV dan data catridge
+      Map<String, dynamic> qrDataMap;
+      
+      if (widget.catridgeData != null && widget.catridgeData!.isNotEmpty) {
+        // Format baru dengan data catridge
+        final prepareQRData = PrepareQRData(
+          action: widget.action,
+          timestamp: timestamp,
+          catridges: widget.catridgeData!,
+        );
+        
+        qrDataMap = {
+          ...prepareQRData.toJson(),
+          'username': username,
+          'password': password,
+        };
+        
+        print('Generated QR with catridge data: ${widget.catridgeData!.length} items');
+      } else {
+        // Format lama tanpa data catridge
+        qrDataMap = {
+          'action': widget.action,
+          'idTool': widget.idTool,
+          'timestamp': timestamp,
+          'username': username,
+          'password': password
+        };
+      }
       
       // Enkripsi data untuk QR code
       _qrData = _authService.encryptDataForQR(qrDataMap);

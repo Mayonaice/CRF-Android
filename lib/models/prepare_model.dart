@@ -705,3 +705,107 @@ class TLSupervisorValidationResponse {
     );
   }
 } 
+
+// Model untuk data catridge yang akan dikirimkan dalam QR code
+class CatridgeQRData {
+  final int idTool;
+  final String bagCode;
+  final String catridgeCode;
+  final String sealCode;
+  final String catridgeSeal;
+  final String denomCode;
+  final String qty;
+  final String userInput;
+  final String sealReturn;
+  final String typeCatridgeTrx;
+  final String tableCode;
+  final String warehouseCode;
+  final String operatorId;
+  final String operatorName;
+
+  CatridgeQRData({
+    required this.idTool,
+    required this.bagCode,
+    required this.catridgeCode,
+    required this.sealCode,
+    required this.catridgeSeal,
+    required this.denomCode,
+    required this.qty,
+    required this.userInput,
+    required this.sealReturn,
+    required this.typeCatridgeTrx,
+    required this.tableCode,
+    required this.warehouseCode,
+    required this.operatorId,
+    required this.operatorName,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'idTool': idTool,
+      'bagCode': bagCode,
+      'catridgeCode': catridgeCode,
+      'sealCode': sealCode,
+      'catridgeSeal': catridgeSeal,
+      'denomCode': denomCode,
+      'qty': qty,
+      'userInput': userInput,
+      'sealReturn': sealReturn,
+      'typeCatridgeTrx': typeCatridgeTrx,
+      'tableCode': tableCode,
+      'warehouseCode': warehouseCode,
+      'operatorId': operatorId,
+      'operatorName': operatorName,
+    };
+  }
+
+  factory CatridgeQRData.fromJson(Map<String, dynamic> json) {
+    return CatridgeQRData(
+      idTool: json['idTool'] as int,
+      bagCode: json['bagCode'] as String,
+      catridgeCode: json['catridgeCode'] as String,
+      sealCode: json['sealCode'] as String,
+      catridgeSeal: json['catridgeSeal'] as String,
+      denomCode: json['denomCode'] as String,
+      qty: json['qty'] as String,
+      userInput: json['userInput'] as String,
+      sealReturn: json['sealReturn'] as String,
+      typeCatridgeTrx: json['typeCatridgeTrx'] as String,
+      tableCode: json['tableCode'] as String,
+      warehouseCode: json['warehouseCode'] as String,
+      operatorId: json['operatorId'] as String,
+      operatorName: json['operatorName'] as String,
+    );
+  }
+}
+
+// Model untuk data QR code yang berisi informasi catridge dan kredensial TL
+class PrepareQRData {
+  final String action;
+  final int timestamp;
+  final List<CatridgeQRData> catridges;
+
+  PrepareQRData({
+    required this.action,
+    required this.timestamp,
+    required this.catridges,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action': action,
+      'timestamp': timestamp,
+      'catridges': catridges.map((c) => c.toJson()).toList(),
+    };
+  }
+
+  factory PrepareQRData.fromJson(Map<String, dynamic> json) {
+    return PrepareQRData(
+      action: json['action'] as String,
+      timestamp: json['timestamp'] as int,
+      catridges: (json['catridges'] as List)
+          .map((c) => CatridgeQRData.fromJson(c as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+} 

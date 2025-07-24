@@ -2536,6 +2536,7 @@ class _PrepareModePageState extends State<PrepareModePage> {
           QRCodeGeneratorWidget(
             action: 'PREPARE',
             idTool: _prepareData?.id?.toString() ?? _idCRFController.text,
+            catridgeData: _prepareCatridgeQRData(),
           ),
           
           SizedBox(height: isSmallScreen ? 16 : 20),
@@ -3843,6 +3844,135 @@ class _PrepareModePageState extends State<PrepareModePage> {
         );
       },
     );
+  }
+
+  // Konversi detail catridge items ke CatridgeQRData untuk QR code
+  List<CatridgeQRData> _prepareCatridgeQRData() {
+    if (_detailCatridgeItems.isEmpty) {
+      return [];
+    }
+    
+    // Get current user data
+    String userInput = 'UNKNOWN';
+    try {
+      final userData = _authService.getUserDataSync();
+      if (userData != null) {
+        userInput = userData['nik'] ?? userData['userID'] ?? userData['userCode'] ?? 'UNKNOWN';
+      }
+    } catch (e) {
+      print('Error getting user data for QR code: $e');
+    }
+    
+    // Ensure denomCode is not empty
+    String finalDenomCode = _prepareData?.denomCode ?? '';
+    if (finalDenomCode.isEmpty) finalDenomCode = 'A50';
+    
+    // Get tableCode and warehouseCode
+    String tableCode = _prepareData?.tableCode ?? 'DEFAULT';
+    String warehouseCode = 'Cideng'; // Default value
+    
+    // Get operator name
+    String operatorName = '';
+    try {
+      final userData = _authService.getUserDataSync();
+      if (userData != null) {
+        operatorName = userData['userName'] ?? userData['name'] ?? '';
+      }
+    } catch (e) {
+      print('Error getting operator name for QR code: $e');
+    }
+    
+    // Convert each detail item to CatridgeQRData
+    List<CatridgeQRData> result = [];
+    for (var item in _detailCatridgeItems) {
+      // Skip items with errors or incomplete data
+      if (item.noCatridge.isEmpty || item.sealCatridge.isEmpty || item.value <= 0) {
+        continue;
+      }
+      
+      if (item.total.contains('Error') || item.total.contains('tidak ditemukan') ||
+          item.sealCatridge.contains('Error') || item.sealCatridge.contains('tidak valid')) {
+        continue;
+      }
+      
+      // Create CatridgeQRData
+      try {
+        final catridgeData = CatridgeQRData(
+          idTool: _prepareData?.id ?? int.parse(_idCRFController.text),
+          bagCode: 'TEST', // Default value
+          catridgeCode: item.noCatridge,
+          sealCode: 'TEST', // Default value
+          catridgeSeal: item.sealCatridge,
+          denomCode: finalDenomCode,
+          qty: '1', // Default value
+          userInput: userInput,
+          sealReturn: '', // Default value
+          typeCatridgeTrx: 'C', // Default value for Catridge
+          tableCode: tableCode,
+          warehouseCode: warehouseCode,
+          operatorId: userInput,
+          operatorName: operatorName,
+        );
+        
+        result.add(catridgeData);
+      } catch (e) {
+        print('Error creating CatridgeQRData: $e');
+      }
+    }
+    
+    // Add divert and pocket items if available
+    if (_divertDetailItem != null) {
+      try {
+        final catridgeData = CatridgeQRData(
+          idTool: _prepareData?.id ?? int.parse(_idCRFController.text),
+          bagCode: _divertControllers[2].text.isNotEmpty ? _divertControllers[2].text : 'TEST',
+          catridgeCode: _divertDetailItem!.noCatridge,
+          sealCode: _divertControllers[3].text.isNotEmpty ? _divertControllers[3].text : 'TEST',
+          catridgeSeal: _divertDetailItem!.sealCatridge,
+          denomCode: finalDenomCode,
+          qty: '1', // Default value
+          userInput: userInput,
+          sealReturn: _divertControllers[4].text.isNotEmpty ? _divertControllers[4].text : '',
+          typeCatridgeTrx: 'D', // 'D' for Divert
+          tableCode: tableCode,
+          warehouseCode: warehouseCode,
+          operatorId: userInput,
+          operatorName: operatorName,
+        );
+        
+        result.add(catridgeData);
+      } catch (e) {
+        print('Error creating Divert CatridgeQRData: $e');
+      }
+    }
+    
+    if (_pocketDetailItem != null) {
+      try {
+        final catridgeData = CatridgeQRData(
+          idTool: _prepareData?.id ?? int.parse(_idCRFController.text),
+          bagCode: _pocketControllers[2].text.isNotEmpty ? _pocketControllers[2].text : 'TEST',
+          catridgeCode: _pocketDetailItem!.noCatridge,
+          sealCode: _pocketControllers[3].text.isNotEmpty ? _pocketControllers[3].text : 'TEST',
+          catridgeSeal: _pocketDetailItem!.sealCatridge,
+          denomCode: finalDenomCode,
+          qty: '1', // Default value
+          userInput: userInput,
+          sealReturn: _pocketControllers[4].text.isNotEmpty ? _pocketControllers[4].text : '',
+          typeCatridgeTrx: 'P', // 'P' for Pocket
+          tableCode: tableCode,
+          warehouseCode: warehouseCode,
+          operatorId: userInput,
+          operatorName: operatorName,
+        );
+        
+        result.add(catridgeData);
+      } catch (e) {
+        print('Error creating Pocket CatridgeQRData: $e');
+      }
+    }
+    
+    print('Prepared ${result.length} catridge items for QR code');
+    return result;
   }
 }
 

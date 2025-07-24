@@ -7,18 +7,18 @@ import 'screens/return_mode_screen.dart';
 import 'screens/profile_menu_screen.dart';
 import 'screens/device_info_screen.dart';
 import 'screens/return_validation_screen.dart';
-import 'screens/tl_home_page.dart'; // Import TLHomePage
-import 'screens/tl_device_info_screen.dart'; // Import TL Device Info
-import 'screens/tl_profile_screen.dart'; // Import TL Profile
-import 'screens/tl_qr_scanner_screen.dart'; // Import TL QR Scanner
-import 'screens/konsol_mode_screen.dart'; // Import Konsol Mode Screen
-import 'screens/konsol_data_return_screen.dart'; // Import Konsol Data Return Screen
-import 'screens/konsol_data_pengurangan_screen.dart'; // Import Konsol Data Pengurangan Screen
-import 'screens/konsol_data_closing_screen.dart'; // Import Konsol Data Closing Screen
+import 'screens/tl_home_page.dart';
+import 'screens/tl_device_info_screen.dart';
+import 'screens/tl_profile_screen.dart';
+import 'screens/tl_qr_scanner_screen.dart';
+import 'screens/konsol_mode_screen.dart';
+import 'screens/konsol_data_return_screen.dart';
+import 'screens/konsol_data_pengurangan_screen.dart';
+import 'screens/konsol_data_closing_screen.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
-import 'screens/return_page.dart';
+import 'widgets/notification_listener_widget.dart';
 
 // Method channel for native communication
 const MethodChannel _channel = MethodChannel('com.advantage.crf/app_channel');
@@ -50,9 +50,6 @@ void _handleError(Object error, StackTrace stack) {
   debugPrint('CRITICAL ERROR: $error');
   debugPrintStack(stackTrace: stack);
 }
-
-// App-level initialization that happens only once
-bool _isAppInitialized = false;
 
 // SafePrefs Class to handle all preference operations safely
 class SafePrefs {
@@ -150,10 +147,13 @@ class _CrfSplashScreenState extends State<CrfSplashScreen> {
       // Add a small delay to ensure all async tasks have completed
       await Future.delayed(const Duration(seconds: 1));
       
-      // Mark initialization as complete
-      _isAppInitialized = true;
+      // Update status to indicate completion
+      if (mounted) setState(() => _statusMessage = 'Initialization complete!');
       
-      // Inform parent that initialization is complete
+      // Add a small delay to show the "Initialization complete!" message
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Call the callback to signal completion
       if (mounted) {
         widget.onInitializationComplete();
       }
@@ -280,128 +280,73 @@ class _CrfSplashScreenState extends State<CrfSplashScreen> {
   }
 }
 
-Future<void> main() async {
-  // Ensure proper Flutter binding and handle errors globally
-  runZonedGuarded(() async {
+void main() {
+  // Set error handlers
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    _handleError(details.exception, details.stack ?? StackTrace.current);
+  };
+  
+  // Set up zone-level error handling
+  runZonedGuarded(() {
     WidgetsFlutterBinding.ensureInitialized();
     
-    // Set error handlers
-    FlutterError.onError = (FlutterErrorDetails details) {
-      FlutterError.presentError(details);
-      _handleError(details.exception, details.stack ?? StackTrace.empty);
-    };
+    // Enable fullscreen mode
+    enableFullscreen();
     
-    // Enable fullscreen mode to hide notification bar
-    await enableFullscreen();
-    
-    // Start with splash screen
-    runApp(const MyApp());
-  }, _handleError);
+    // Run the app
+    runApp(const CrfApp());
+  }, (error, stackTrace) {
+    _handleError(error, stackTrace);
+  });
 }
 
-class MyApp extends StatefulWidget {
-  const MyApp({Key? key}) : super(key: key);
+class CrfApp extends StatefulWidget {
+  const CrfApp({Key? key}) : super(key: key);
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  State<CrfApp> createState() => _CrfAppState();
 }
 
-class _MyAppState extends State<MyApp> {
-  bool _showMainApp = false;
-  
-  @override
-  void initState() {
-    super.initState();
-  }
-  
-  @override
-  void dispose() {
-    super.dispose();
-  }
-  
-  void _completeInitialization() {
+class _CrfAppState extends State<CrfApp> {
+  bool _isInitialized = false;
+
+  void _handleInitializationComplete() {
     setState(() {
-      _showMainApp = true;
+      _isInitialized = true;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_showMainApp) {
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: CrfSplashScreen(
-          onInitializationComplete: _completeInitialization,
+    return NotificationListenerWidget(
+      child: MaterialApp(
+        title: 'CRF App',
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
+          visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-      );
-    }
-    
-    return MaterialApp(
-      title: 'CRF App',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-        // Menggunakan tema Android
-        platform: TargetPlatform.android,
-        // Material 3 untuk tampilan Android modern
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0056A4),
-          brightness: Brightness.light,
+        home: _isInitialized ? const LoginPage() : CrfSplashScreen(
+          onInitializationComplete: _handleInitializationComplete,
         ),
-        // Android-specific theme settings
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0056A4),
-          foregroundColor: Colors.white,
-          elevation: 4,
-          systemOverlayStyle: SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness: Brightness.light,
-          ),
-        ),
-        // Android button style
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF0056A4),
-            foregroundColor: Colors.white,
-            elevation: 4,
-          ),
-        ),
+        routes: {
+          '/login': (context) => const LoginPage(),
+          '/home': (context) => const HomePage(),
+          '/prepare_mode': (context) => const PrepareModePage(),
+          '/return_page': (context) => const ReturnModeScreen(),
+          '/profile': (context) => const ProfileMenuScreen(),
+          '/device_info': (context) => const DeviceInfoScreen(),
+          '/return_validation': (context) => const ReturnValidationScreen(),
+          '/tl_home': (context) => const TLHomePage(),
+          '/tl_device_info': (context) => const TLDeviceInfoScreen(),
+          '/tl_profile': (context) => const TLProfileScreen(),
+          '/tl_qr_scanner': (context) => const TLQRScannerScreen(),
+          '/konsol_mode': (context) => const KonsolModePage(),
+          '/konsol_data_return': (context) => const KonsolDataReturnPage(),
+          '/konsol_data_pengurangan': (context) => const KonsolDataPenguranganPage(),
+          '/konsol_data_closing': (context) => const KonsolDataClosingPage(),
+        },
       ),
-      // Use '/' as initial route to prevent navigation issues
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const LoginPage(), // Default route
-        '/login': (context) => const LoginPage(),
-        '/home': (context) => const HomePage(),
-        '/tl_home': (context) => const TLHomePage(), // Add TLHomePage route
-        '/prepare_mode': (context) => const PrepareModePage(),
-        '/return_page': (context) => const ReturnModePage(),
-        '/profile': (context) => const ProfileMenuScreen(),
-        '/device_info': (context) => const DeviceInfoScreen(),
-        '/tl_device_info': (context) => const TLDeviceInfoScreen(), // Add TL Device Info route
-        '/tl_profile': (context) => const TLProfileScreen(), // Add TL Profile route
-        '/tl_qr_scanner': (context) => const TLQRScannerScreen(), // Add TL QR Scanner route
-        '/return-validation': (context) => const ReturnValidationScreen(),
-        '/konsol_mode': (context) => const KonsolModePage(), // Add Konsol Mode route
-        '/konsol_data_return': (context) => const KonsolDataReturnPage(), // Add Konsol Data Return route
-        '/konsol_data_pengurangan': (context) => const KonsolDataPenguranganPage(), // Add Konsol Data Pengurangan route
-        '/konsol_data_closing': (context) => const KonsolDataClosingPage(), // Add Konsol Data Closing route
-      },
-      // Global error handling for navigator
-      navigatorKey: GlobalKey<NavigatorState>(),
-      // Handle errors in the app
-      builder: (context, child) {
-        // Add SafeArea to ensure content doesn't go under status bar
-        return SafeArea(
-          top: true,
-          bottom: false,
-          left: false,
-          right: false,
-          child: child ?? const SizedBox(),
-        );
-      },
     );
   }
 } 

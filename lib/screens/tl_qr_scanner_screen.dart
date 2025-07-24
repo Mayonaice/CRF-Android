@@ -73,7 +73,16 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         tlspvPassword = decryptedData['password'] as String?;
         bypassNikValidation = true; // Selalu true untuk QR terenkripsi
         
-        print('Decrypted QR data: Action=$action, IdTool=$idTool, HasCredentials=${tlspvUsername != null}');
+        print('Decrypted QR data: Action=$action, IdTool=$idTool, HasCredentials=${tlspvUsername != null}, Username=$tlspvUsername');
+        
+        // Validasi username dan password dari QR
+        if (tlspvUsername == null || tlspvUsername.isEmpty) {
+          throw Exception('Username TL tidak tersedia dalam QR');
+        }
+        
+        if (tlspvPassword == null || tlspvPassword.isEmpty) {
+          throw Exception('Password TL tidak tersedia dalam QR');
+        }
       } else {
         // Format lama: "PREPARE|{idTool}|{timestamp}|{bypassFlag}"
         final parts = qrCode.split('|');
@@ -112,13 +121,20 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       final tlName = userData?['userName'] ?? '';
 
       // Jika ada kredensial TLSPV dari QR, gunakan itu
-      if (tlspvUsername != null && tlspvPassword != null) {
-        print('Using TLSPV credentials from QR code');
+      if (tlspvUsername != null && tlspvUsername.isNotEmpty && tlspvPassword != null) {
+        print('Using TLSPV credentials from QR code: $tlspvUsername');
         tlNik = tlspvUsername; // Gunakan NIK dari QR
       } 
       // Jika tidak ada kredensial dan tidak ada bypass, tolak
       else if (tlNik.isEmpty && !bypassNikValidation) {
         throw Exception('Data TL tidak ditemukan dan QR tidak mengizinkan scan tanpa NIK');
+      }
+      
+      // Debug log untuk memastikan nilai tlNik tidak kosong
+      print('Final TL NIK being used: "$tlNik", isEmpty=${tlNik.isEmpty}');
+      
+      if (tlNik.isEmpty) {
+        throw Exception('NIK TL tidak boleh kosong (setelah pemrosesan QR)');
       }
 
       // Process based on action type
@@ -159,15 +175,23 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       }
       
       // Jika password tersedia dari QR code, gunakan untuk validasi TLSPV
-      if (tlspvPassword == null) {
+      if (tlspvPassword == null || tlspvPassword.isEmpty) {
         throw Exception('Password TL tidak tersedia dalam QR');
       }
+      
+      // Debug log untuk memastikan nilai tlNik dan tlspvPassword tidak kosong
+      print('TL NIK: "$tlNik", isEmpty=${tlNik.isEmpty}');
+      print('TL Password: ${tlspvPassword.isNotEmpty ? "PROVIDED" : "EMPTY"}');
+      
+      // Pastikan NIK dan password bersih dari whitespace
+      final cleanNik = tlNik.trim();
+      final cleanPassword = tlspvPassword.trim();
       
       // Step 1: Validasi TL Supervisor credentials dan role - sama seperti flow manual
       print('=== STEP 1: VALIDATE TL SUPERVISOR ===');
       final validationResponse = await _apiService.validateTLSupervisor(
-        nik: tlNik,
-        password: tlspvPassword
+        nik: cleanNik,
+        password: cleanPassword
       );
       
       if (!validationResponse.success || validationResponse.data?.validationStatus != 'SUCCESS') {
@@ -193,10 +217,12 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       
       // Step 2: Update Planning API - sama seperti flow manual
       print('=== STEP 2: UPDATE PLANNING ===');
+      print('Calling updatePlanning with: idTool=$idToolInt, cashierCode=$currentUser, spvTLCode=$cleanNik, tableCode=$tableCode');
+      
       final planningResponse = await _apiService.updatePlanning(
         idTool: idToolInt,
         cashierCode: currentUser,
-        spvTLCode: tlNik,
+        spvTLCode: cleanNik,
         tableCode: tableCode,
         warehouseCode: warehouseCode,
       );
@@ -222,15 +248,19 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       }
       
       // Jika password tersedia dari QR code, gunakan untuk validasi TLSPV
-      if (tlspvPassword == null) {
+      if (tlspvPassword == null || tlspvPassword.isEmpty) {
         throw Exception('Password TL tidak tersedia dalam QR');
       }
+      
+      // Pastikan NIK dan password bersih dari whitespace
+      final cleanNik = tlNik.trim();
+      final cleanPassword = tlspvPassword.trim();
       
       // Step 1: Validasi TL Supervisor credentials dan role - sama seperti flow manual
       print('=== STEP 1: VALIDATE TL SUPERVISOR ===');
       final validationResponse = await _apiService.validateTLSupervisor(
-        nik: tlNik,
-        password: tlspvPassword
+        nik: cleanNik,
+        password: cleanPassword
       );
       
       if (!validationResponse.success || validationResponse.data?.validationStatus != 'SUCCESS') {
@@ -256,8 +286,8 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         "TableReturnCode": tableCode,
         "DateStartReturn": DateTime.now().toIso8601String(),
         "WarehouseCode": warehouseCode,
-        "UserATMReturn": tlNik,
-        "SPVBARusak": tlNik,
+        "UserATMReturn": cleanNik,
+        "SPVBARusak": cleanNik,
         "IsManual": "N"
       };
       

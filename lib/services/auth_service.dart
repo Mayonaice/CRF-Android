@@ -771,7 +771,21 @@ class AuthService {
       final validTime = (now - msgTime) < 5 * 60 * 1000; // 5 menit
       
       if (calculatedSignature == receivedSignature && validTime) {
-        return json.decode(jsonString) as Map<String, dynamic>;
+        final decodedData = json.decode(jsonString) as Map<String, dynamic>;
+        
+        // Debug log untuk memeriksa data yang didekripsi
+        debugPrint('Decrypted QR data: ${json.encode(decodedData)}');
+        
+        // Pastikan username dan password ada dan tidak kosong
+        if (!decodedData.containsKey('username') || decodedData['username'] == null || decodedData['username'].toString().isEmpty) {
+          debugPrint('QR data missing username or username is empty');
+        }
+        
+        if (!decodedData.containsKey('password') || decodedData['password'] == null || decodedData['password'].toString().isEmpty) {
+          debugPrint('QR data missing password or password is empty');
+        }
+        
+        return decodedData;
       } else {
         debugPrint('QR data signature invalid or expired');
         return null;

@@ -45,14 +45,25 @@ class _QRCodeGeneratorWidgetState extends State<QRCodeGeneratorWidget> {
     // Cek apakah ada kredensial TLSPV yang tersimpan
     final tlspvCredentials = await _authService.getTLSPVCredentials();
     
-    if (tlspvCredentials != null) {
+    if (tlspvCredentials != null && 
+        tlspvCredentials['username'] != null && 
+        tlspvCredentials['username'].toString().isNotEmpty &&
+        tlspvCredentials['password'] != null && 
+        tlspvCredentials['password'].toString().isNotEmpty) {
+      
+      // Pastikan username dan password tidak kosong
+      final username = tlspvCredentials['username'].toString();
+      final password = tlspvCredentials['password'].toString();
+      
+      print('Using TLSPV credentials for QR: username=$username');
+      
       // Buat data terenkripsi yang berisi kredensial TLSPV
       final qrDataMap = {
         'action': widget.action,
         'idTool': widget.idTool,
         'timestamp': timestamp,
-        'username': tlspvCredentials['username'],
-        'password': tlspvCredentials['password']
+        'username': username,
+        'password': password
       };
       
       // Enkripsi data untuk QR code

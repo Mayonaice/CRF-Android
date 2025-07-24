@@ -229,11 +229,24 @@ class AuthService {
       final userRole = userData['role']?.toString().toUpperCase() ?? 
                       userData['roleID']?.toString().toUpperCase();
       
+      debugPrint('USER ROLE: $userRole');
+      
       if (userRole == 'CRF_TL') {
         // Simpan kredensial untuk QR code
         userData['username'] = username;
         userData['password'] = password;
-        debugPrint('Storing TLSPV credentials for QR code generation');
+        
+        // Simpan kredensial secara terpisah untuk QR code
+        final credentialsSaved = await saveTLSPVCredentials(username, password);
+        debugPrint('Storing TLSPV credentials for QR code generation: ${credentialsSaved ? "SUCCESS" : "FAILED"}');
+        
+        // Verifikasi kredensial tersimpan
+        final savedCreds = await getTLSPVCredentials();
+        if (savedCreds != null) {
+          debugPrint('Verified saved TLSPV credentials: username=${savedCreds['username']}, hasPassword=${savedCreds['password'] != null}');
+        } else {
+          debugPrint('WARNING: Failed to verify saved TLSPV credentials!');
+        }
       }
       
       await saveUserData(userData);
@@ -684,13 +697,32 @@ class AuthService {
   // Menyimpan kredensial TLSPV untuk digunakan dalam QR code
   Future<bool> saveTLSPVCredentials(String username, String password) async {
     try {
+      if (username.isEmpty || password.isEmpty) {
+        debugPrint('Cannot save TLSPV credentials: username or password is empty');
+        return false;
+      }
+      
+      debugPrint('Saving TLSPV credentials: username=$username, passwordLength=${password.length}');
+      
       final prefs = await SharedPreferences.getInstance();
       final credentials = {
         'username': username,
         'password': password,
         'timestamp': DateTime.now().millisecondsSinceEpoch
       };
-      await prefs.setString(tlspvCredentialsKey, json.encode(credentials));
+      
+      final jsonStr = json.encode(credentials);
+      debugPrint('Credentials JSON length: ${jsonStr.length}');
+      
+      await prefs.setString(tlspvCredentialsKey, jsonStr);
+      
+      // Verify saved
+      final saved = prefs.getString(tlspvCredentialsKey);
+      if (saved == null || saved.isEmpty) {
+        debugPrint('ERROR: Failed to save TLSPV credentials to SharedPreferences!');
+        return false;
+      }
+      
       return true;
     } catch (e) {
       debugPrint('Failed to save TLSPV credentials: $e');
@@ -703,13 +735,41 @@ class AuthService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final credentialsString = prefs.getString(tlspvCredentialsKey);
-      if (credentialsString != null && credentialsString.isNotEmpty) {
-        return json.decode(credentialsString) as Map<String, dynamic>;
+      
+      if (credentialsString == null) {
+        debugPrint('No TLSPV credentials found in SharedPreferences');
+        return null;
       }
+      
+      if (credentialsString.isEmpty) {
+        debugPrint('TLSPV credentials string is empty');
+        return null;
+      }
+      
+      debugPrint('Retrieved TLSPV credentials string length: ${credentialsString.length}');
+      
+      final credentials = json.decode(credentialsString) as Map<String, dynamic>;
+      
+      // Validate credentials
+      final username = credentials['username'];
+      final password = credentials['password'];
+      
+      if (username == null || username.toString().isEmpty) {
+        debugPrint('Retrieved TLSPV credentials have empty username');
+        return null;
+      }
+      
+      if (password == null || password.toString().isEmpty) {
+        debugPrint('Retrieved TLSPV credentials have empty password');
+        return null;
+      }
+      
+      debugPrint('Successfully retrieved TLSPV credentials: username=$username, hasPassword=${password != null}');
+      return credentials;
     } catch (e) {
       debugPrint('Failed to get TLSPV credentials: $e');
+      return null;
     }
-    return null;
   }
   
   // Enkripsi data untuk QR code

@@ -17,6 +17,11 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
   final AuthService _authService = AuthService();
   bool _isProcessing = false;
   List<Map<String, dynamic>> _recentScans = [];
+  
+  // Controllers untuk form kredensial TL
+  final TextEditingController _nikController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _isSavingCredentials = false;
 
   @override
   void initState() {
@@ -26,6 +31,78 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
+    
+    // Cek kredensial TL yang tersimpan
+    _checkSavedCredentials();
+  }
+  
+  @override
+  void dispose() {
+    _nikController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+  
+  // Cek kredensial TL yang tersimpan
+  Future<void> _checkSavedCredentials() async {
+    final credentials = await _authService.getTLSPVCredentials();
+    if (credentials != null) {
+      print('Found saved TL credentials: username=${credentials['username']}');
+    } else {
+      print('No saved TL credentials found');
+    }
+  }
+  
+  // Simpan kredensial TL
+  Future<void> _saveCredentials() async {
+    if (_nikController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('NIK dan Password harus diisi'))
+      );
+      return;
+    }
+    
+    setState(() {
+      _isSavingCredentials = true;
+    });
+    
+    try {
+      final success = await _authService.saveTLSPVCredentials(
+        _nikController.text.trim(),
+        _passwordController.text.trim()
+      );
+      
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Kredensial TL berhasil disimpan'),
+            backgroundColor: Colors.green,
+          )
+        );
+        
+        // Clear form
+        _nikController.clear();
+        _passwordController.clear();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gagal menyimpan kredensial TL'),
+            backgroundColor: Colors.red,
+          )
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        )
+      );
+    } finally {
+      setState(() {
+        _isSavingCredentials = false;
+      });
+    }
   }
 
   Future<void> _processQRCode(String qrCode) async {
@@ -65,22 +142,42 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
           throw Exception('QR Code tidak valid atau sudah expired');
         }
         
-        // Ekstrak data dari QR terenkripsi
-        action = decryptedData['action'] as String;
-        idTool = decryptedData['idTool'] as String;
-        timestamp = decryptedData['timestamp'] as int;
-        tlspvUsername = decryptedData['username'] as String?;
-        tlspvPassword = decryptedData['password'] as String?;
-        bypassNikValidation = true; // Selalu true untuk QR terenkripsi
-        
-        print('Decrypted QR data: Action=$action, IdTool=$idTool, HasCredentials=${tlspvUsername != null}, Username=$tlspvUsername');
+        // Ekstrak data dari QR terenkripsi dengan validasi tipe data
+        try {
+          action = decryptedData['action']?.toString() ?? '';
+          idTool = decryptedData['idTool']?.toString() ?? '';
+          timestamp = int.tryParse(decryptedData['timestamp']?.toString() ?? '0') ?? 0;
+          tlspvUsername = decryptedData['username']?.toString();
+          tlspvPassword = decryptedData['password']?.toString();
+          bypassNikValidation = true; // Selalu true untuk QR terenkripsi
+          
+          print('Decrypted QR data: Action=$action, IdTool=$idTool, HasCredentials=${tlspvUsername != null}, Username=$tlspvUsername');
+          
+          // Validasi data yang diekstrak
+          if (action.isEmpty) {
+            throw Exception('QR Code tidak memiliki informasi action');
+          }
+          
+          if (idTool.isEmpty) {
+            throw Exception('QR Code tidak memiliki informasi ID Tool');
+          }
+          
+          if (timestamp == 0) {
+            throw Exception('QR Code tidak memiliki timestamp yang valid');
+          }
+        } catch (e) {
+          print('Error extracting data from QR: $e');
+          throw Exception('Format data QR tidak valid: ${e.toString()}');
+        }
         
         // Validasi username dan password dari QR
         if (tlspvUsername == null || tlspvUsername.isEmpty) {
+          print('ERROR: Username TL is empty or null in QR data!');
           throw Exception('Username TL tidak tersedia dalam QR');
         }
         
         if (tlspvPassword == null || tlspvPassword.isEmpty) {
+          print('ERROR: Password TL is empty or null in QR data!');
           throw Exception('Password TL tidak tersedia dalam QR');
         }
       } else {
@@ -119,11 +216,13 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       final userData = await _authService.getUserData();
       String tlNik = userData?['userID'] ?? userData?['nik'] ?? '';
       final tlName = userData?['userName'] ?? '';
+      
+      print('User data from auth service: userID=${userData?['userID']}, nik=${userData?['nik']}, userName=${userData?['userName']}');
 
       // Jika ada kredensial TLSPV dari QR, gunakan itu
       if (tlspvUsername != null && tlspvUsername.isNotEmpty && tlspvPassword != null) {
         print('Using TLSPV credentials from QR code: $tlspvUsername');
-        tlNik = tlspvUsername; // Gunakan NIK dari QR
+        tlNik = tlspvUsername.trim(); // Gunakan NIK dari QR dan pastikan bersih dari whitespace
       } 
       // Jika tidak ada kredensial dan tidak ada bypass, tolak
       else if (tlNik.isEmpty && !bypassNikValidation) {
@@ -131,7 +230,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       }
       
       // Debug log untuk memastikan nilai tlNik tidak kosong
-      print('Final TL NIK being used: "$tlNik", isEmpty=${tlNik.isEmpty}');
+      print('Final TL NIK being used: "$tlNik", isEmpty=${tlNik.isEmpty}, length=${tlNik.length}');
       
       if (tlNik.isEmpty) {
         throw Exception('NIK TL tidak boleh kosong (setelah pemrosesan QR)');
@@ -414,137 +513,144 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                // Main QR Scanner Card
-                Card(
-                  elevation: 8,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        // QR Code Icon
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0056A4),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.qr_code_scanner,
-                            color: Colors.white,
-                            size: 48,
-                          ),
-                        ),
-                        
-                        const SizedBox(height: 16),
-                        
-                        const Text(
-                          'QR Code TLSPV Approval',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0056A4),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        
-                        const SizedBox(height: 8),
-                        
-                        const Text(
-                          'Scan QR Code untuk approve prepare atau return tanpa memasukkan NIK TL dan password',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        
-                        const SizedBox(height: 24),
-                        
-                        // Scan Button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _isProcessing ? null : _openQRScanner,
-                            icon: _isProcessing 
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                )
-                              : const Icon(Icons.qr_code_scanner),
-                            label: Text(
-                              _isProcessing ? 'Processing...' : 'Scan QR Code',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0056A4),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 4,
-                            ),
-                          ),
-                        ),
-                      ],
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Kredensial TL form card
+                  Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ),
-                ),
-                
-                const SizedBox(height: 16),
-                
-                // Recent Scans Section
-                if (_recentScans.isNotEmpty) ...[
-                  Expanded(
-                    child: Card(
-                      elevation: 4,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Recent Approvals',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0056A4),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Simpan Kredensial TL',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Simpan kredensial TL untuk digunakan dalam QR code',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _nikController,
+                            decoration: const InputDecoration(
+                              labelText: 'NIK TL',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Expanded(
-                              child: ListView.builder(
-                                itemCount: _recentScans.length,
-                                itemBuilder: (context, index) {
-                                  final scan = _recentScans[index];
-                                  return _buildRecentScanItem(scan);
-                                },
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _passwordController,
+                            obscureText: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Password',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _isSavingCredentials ? null : _saveCredentials,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: _isSavingCredentials
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
+                                : const Text('Simpan Kredensial'),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Existing content
+                  Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Scan QR Code',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _isProcessing ? null : _openQRScanner,
+                              icon: const Icon(Icons.qr_code_scanner),
+                              label: const Text('Scan QR Code'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0056A4),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Recent scans
+                  if (_recentScans.isNotEmpty) ...[
+                    const Text(
+                      'Riwayat Scan',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ..._recentScans.map((scan) => _buildScanHistoryItem(scan)),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -613,9 +719,64 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
     );
   }
 
-  @override
-  void dispose() {
-    // Keep portrait orientation for CRF_TL
-    super.dispose();
+  Widget _buildScanHistoryItem(Map<String, dynamic> scan) {
+    final success = scan['success'] as bool;
+    final action = scan['action'] as String;
+    final idTool = scan['idTool'] as String;
+    final timestamp = scan['timestamp'] as DateTime;
+    final error = scan['error'] as String?;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: success ? Colors.green.shade50 : Colors.red.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: success ? Colors.green.shade200 : Colors.red.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            success ? Icons.check_circle : Icons.error,
+            color: success ? Colors.green : Colors.red,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$action: $idTool',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: success ? Colors.green.shade800 : Colors.red.shade800,
+                  ),
+                ),
+                if (!success && error != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    error,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.red.shade600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Text(
+            '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.grey,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 } 

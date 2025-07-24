@@ -1068,38 +1068,71 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
   // PERBAIKAN: Metode untuk memulai scan QR code
   Future<void> _startQRScan() async {
     try {
-      // Set to portrait mode before scanning
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-      ]);
-      
-      print('🔍 Opening QR scanner...');
-      
-      // Gunakan navigator untuk membuka scanner
-      final qrResult = await Navigator.push<String>(
-        context,
-        MaterialPageRoute(
-          builder: (context) => BarcodeScannerWidget(
-            title: 'Scan QR Code',
-            onBarcodeDetected: (code) {
-              // Callback akan dijalankan oleh scanner widget
-              print('🔍 QR Code detected in callback: ${code.length > 20 ? code.substring(0, 20) + "..." : code}');
-              // PENTING: Jangan pop navigator di sini, biarkan widget scanner yang menangani
-            },
-            fieldKey: 'qrcode', // Use consistent field key
-            fieldLabel: 'Approval QR',
-          ),
-        ),
+      // Tampilkan dialog pilihan metode scan
+      final scanMethod = await showDialog<String>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Pilih Metode Scan'),
+            content: const Text('Pilih metode untuk scan QR code:'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('camera'),
+                child: const Text('Kamera'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('manual'),
+                child: const Text('Input Manual'),
+              ),
+            ],
+          );
+        },
       );
       
-      // Reset orientation to portrait for this screen
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-      ]);
+      if (scanMethod == null) {
+        // User canceled
+        return;
+      }
       
-      print('🔍 Scanner closed. QR Result: ${qrResult != null ? "Found (${qrResult.length} chars)" : "NULL"}');
+      String? qrResult;
+      
+      if (scanMethod == 'camera') {
+        // Set to portrait mode before scanning
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+        ]);
+        
+        print('🔍 Opening QR scanner...');
+        
+        // Gunakan navigator untuk membuka scanner
+        qrResult = await Navigator.push<String>(
+          context,
+          MaterialPageRoute(
+            builder: (context) => BarcodeScannerWidget(
+              title: 'Scan QR Code',
+              onBarcodeDetected: (code) {
+                // Callback akan dijalankan oleh scanner widget
+                print('🔍 QR Code detected in callback: ${code.length > 20 ? code.substring(0, 20) + "..." : code}');
+                // PENTING: Jangan pop navigator di sini, biarkan widget scanner yang menangani
+              },
+              fieldKey: 'qrcode', // Use consistent field key
+              fieldLabel: 'Approval QR',
+            ),
+          ),
+        );
+        
+        // Reset orientation to portrait for this screen
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+        ]);
+      } else if (scanMethod == 'manual') {
+        // Tampilkan dialog untuk input manual
+        qrResult = await _showManualInputDialog();
+      }
+      
+      print('🔍 Scanner/Input closed. QR Result: ${qrResult != null ? "Found (${qrResult.length} chars)" : "NULL"}');
       
       // If QR code was scanned, process it
       if (qrResult != null && qrResult.isNotEmpty) {
@@ -1148,6 +1181,59 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         });
       }
     }
+  }
+  
+  // Metode untuk menampilkan dialog input QR code manual
+  Future<String?> _showManualInputDialog() async {
+    final textController = TextEditingController();
+    
+    return showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Input QR Code Manual'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Paste QR code yang telah discan dengan aplikasi lain:',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: textController,
+                decoration: const InputDecoration(
+                  hintText: 'Paste QR code di sini...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 5,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Batal'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (textController.text.isNotEmpty) {
+                  Navigator.of(context).pop(textController.text);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('QR code tidak boleh kosong'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Proses'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   String _formatTimestamp(DateTime timestamp) {

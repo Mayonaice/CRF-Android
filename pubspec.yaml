@@ -40,7 +40,7 @@ dependencies:
   connectivity_plus: ^4.0.2
   package_info_plus: ^4.2.0
   device_info_plus: ^9.1.0
-  mobile_scanner: ^3.5.6
+  mobile_scanner: ^3.5.7 # Versi terbaru yang kompatibel dengan Flutter saat ini
   crypto: ^3.0.3
   android_id: ^0.3.6
   dio: ^5.3.2

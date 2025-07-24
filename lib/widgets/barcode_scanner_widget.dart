@@ -61,9 +61,9 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
     // Configure camera for portrait orientation during scanning
     facing: CameraFacing.back,
     torchEnabled: false,
-    formats: [BarcodeFormat.qrCode], // Fokus hanya pada QR code
+    formats: BarcodeFormat.values, // Support ALL barcode formats
     useNewCameraSelector: true,
-    detectionSpeed: DetectionSpeed.noDuplicates, // Hindari duplikasi deteksi
+    detectionSpeed: DetectionSpeed.normal, // Use normal detection speed for better accuracy
   );
   bool _screenOpened = false;
   bool _processingBarcode = false; // Tambahkan flag untuk mencegah multiple processing
@@ -81,7 +81,8 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
     ]);
     
     // Debug log
-    print('🔍 Barcode scanner initialized with formats: ${BarcodeFormat.qrCode}');
+    print('🔍 Barcode scanner initialized with ALL formats');
+    print('🔍 Supported formats: ${BarcodeFormat.values}');
   }
 
   @override
@@ -236,18 +237,58 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
     });
     
     try {
-      // Gunakan rawValue jika displayValue kosong atau null
-      final String? rawValue = barcodes.first.rawValue;
-      final String? displayValue = barcodes.first.displayValue;
+      // LOGGING EKSTENSIF
+      print('🔍 BARCODE DETECTED COUNT: ${barcodes.length}');
       
-      // Tambahkan logging ekstensif
-      print('🔍 BARCODE DETECTED RAW: $rawValue');
-      print('🔍 BARCODE DETECTED DISPLAY: $displayValue');
-      print('🔍 BARCODE FORMAT: ${barcodes.first.format}');
-      print('🔍 BARCODE TYPE: ${barcodes.first.type}');
+      // Loop through all detected barcodes
+      for (int i = 0; i < barcodes.length; i++) {
+        final barcode = barcodes[i];
+        print('🔍 BARCODE #${i+1} FORMAT: ${barcode.format}');
+        print('🔍 BARCODE #${i+1} TYPE: ${barcode.type}');
+        print('🔍 BARCODE #${i+1} RAW: ${barcode.rawValue}');
+        print('🔍 BARCODE #${i+1} DISPLAY: ${barcode.displayValue}');
+        
+        // Tambahan: Log corners jika ada
+        if (barcode.corners != null) {
+          print('🔍 BARCODE #${i+1} HAS CORNERS: ${barcode.corners!.length}');
+        }
+      }
+      
+      // Gunakan barcode pertama
+      final Barcode barcode = barcodes.first;
+      
+      // Gunakan rawValue jika displayValue kosong atau null
+      final String? rawValue = barcode.rawValue;
+      final String? displayValue = barcode.displayValue;
       
       // Pilih nilai yang akan digunakan
-      final String code = rawValue ?? displayValue ?? '';
+      String code = '';
+      
+      // PENDEKATAN ALTERNATIF: Coba beberapa metode untuk mendapatkan nilai barcode
+      if (rawValue != null && rawValue.isNotEmpty) {
+        code = rawValue;
+        print('🔍 Using rawValue: ${code.length} chars');
+      } else if (displayValue != null && displayValue.isNotEmpty) {
+        code = displayValue;
+        print('🔍 Using displayValue: ${code.length} chars');
+      } else {
+        // Coba ekstrak data langsung dari corners jika ada
+        if (barcode.corners != null && barcode.corners!.isNotEmpty) {
+          print('🔍 Trying to extract data from corners');
+          // Kode untuk ekstraksi data dari corners jika diperlukan
+        }
+        
+        // Jika masih kosong, coba gunakan bytes jika tersedia
+        if (code.isEmpty && barcode.rawBytes != null) {
+          try {
+            // Coba konversi bytes ke string dengan berbagai encoding
+            code = String.fromCharCodes(barcode.rawBytes!);
+            print('🔍 Extracted from rawBytes: ${code.length} chars');
+          } catch (e) {
+            print('🔍 Error extracting from rawBytes: $e');
+          }
+        }
+      }
       
       if (code.isEmpty) {
         print('🚫 SCANNER: Empty barcode content detected');

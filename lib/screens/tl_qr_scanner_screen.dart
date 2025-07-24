@@ -153,32 +153,59 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
     try {
       print('Approving prepare for ID: $idTool by TL: $tlNik ($tlName), bypassValidation: $bypassNikValidation, hasPassword: ${tlspvPassword != null}');
       
-      // Jika password tersedia dari QR code, gunakan untuk validasi TLSPV
-      if (tlspvPassword != null) {
-        // Validasi TLSPV menggunakan kredensial dari QR code
-        final validationResponse = await _apiService.validateTLSupervisor(
-          nik: tlNik,
-          password: tlspvPassword
-        );
-        
-        if (!validationResponse.success) {
-          throw Exception('Validasi TLSPV gagal: ${validationResponse.message}');
-        }
-        
-        print('TLSPV validation successful using credentials from QR code');
+      // Validasi nilai NIK
+      if (tlNik.isEmpty) {
+        throw Exception('NIK TL tidak boleh kosong');
       }
       
-      // Call the API service to approve prepare data
-      final response = await _apiService.approvePrepareWithQR(
-        idTool, 
-        tlNik
+      // Jika password tersedia dari QR code, gunakan untuk validasi TLSPV
+      if (tlspvPassword == null) {
+        throw Exception('Password TL tidak tersedia dalam QR');
+      }
+      
+      // Step 1: Validasi TL Supervisor credentials dan role - sama seperti flow manual
+      print('=== STEP 1: VALIDATE TL SUPERVISOR ===');
+      final validationResponse = await _apiService.validateTLSupervisor(
+        nik: tlNik,
+        password: tlspvPassword
       );
       
-      if (!response.success) {
-        throw Exception('Approval gagal: ${response.message}');
+      if (!validationResponse.success || validationResponse.data?.validationStatus != 'SUCCESS') {
+        throw Exception('Validasi TLSPV gagal: ${validationResponse.message}');
       }
       
-      print('Prepare approved successfully for ID: $idTool by TL: $tlNik ($tlName)');
+      print('TLSPV validation successful: ${validationResponse.data?.userName} (${validationResponse.data?.userRole})');
+      
+      // Pastikan idTool valid (hilangkan spasi dan karakter non-alfanumerik)
+      String cleanIdTool = idTool.trim();
+      int idToolInt;
+      try {
+        idToolInt = int.parse(cleanIdTool);
+      } catch (e) {
+        throw Exception('Format ID Tool tidak valid: $cleanIdTool');
+      }
+      
+      // Dapatkan data user saat ini untuk parameter tambahan
+      final userData = await _authService.getUserData();
+      final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
+      final tableCode = userData?['tableCode'] ?? 'DEFAULT';
+      final warehouseCode = userData?['warehouseCode'] ?? 'Cideng';
+      
+      // Step 2: Update Planning API - sama seperti flow manual
+      print('=== STEP 2: UPDATE PLANNING ===');
+      final planningResponse = await _apiService.updatePlanning(
+        idTool: idToolInt,
+        cashierCode: currentUser,
+        spvTLCode: tlNik,
+        tableCode: tableCode,
+        warehouseCode: warehouseCode,
+      );
+      
+      if (!planningResponse.success) {
+        throw Exception('Update planning gagal: ${planningResponse.message}');
+      }
+      
+      print('Planning update success for ID: $idTool by TL: $tlNik ($tlName)');
     } catch (e) {
       print('Error approving prepare: $e');
       throw Exception('Approval gagal: ${e.toString()}');
@@ -189,27 +216,56 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
     try {
       print('Approving return for ID: $idTool by TL: $tlNik ($tlName), bypassValidation: $bypassNikValidation, hasPassword: ${tlspvPassword != null}');
       
-      // Jika password tersedia dari QR code, gunakan untuk validasi TLSPV
-      if (tlspvPassword != null) {
-        // Validasi TLSPV menggunakan kredensial dari QR code
-        final validationResponse = await _apiService.validateTLSupervisor(
-          nik: tlNik,
-          password: tlspvPassword
-        );
-        
-        if (!validationResponse.success) {
-          throw Exception('Validasi TLSPV gagal: ${validationResponse.message}');
-        }
-        
-        print('TLSPV validation successful using credentials from QR code');
+      // Validasi nilai NIK
+      if (tlNik.isEmpty) {
+        throw Exception('NIK TL tidak boleh kosong');
       }
       
-      // Call the API service to approve return data with bypass flag
-      // For now, we'll simulate the API call
-      await Future.delayed(const Duration(seconds: 1)); // Simulate API call
+      // Jika password tersedia dari QR code, gunakan untuk validasi TLSPV
+      if (tlspvPassword == null) {
+        throw Exception('Password TL tidak tersedia dalam QR');
+      }
       
-      // In real implementation, this would call the API service
-      // Example: await _apiService.approveReturnWithQR(idTool, tlNik, bypassNikValidation: bypassNikValidation);
+      // Step 1: Validasi TL Supervisor credentials dan role - sama seperti flow manual
+      print('=== STEP 1: VALIDATE TL SUPERVISOR ===');
+      final validationResponse = await _apiService.validateTLSupervisor(
+        nik: tlNik,
+        password: tlspvPassword
+      );
+      
+      if (!validationResponse.success || validationResponse.data?.validationStatus != 'SUCCESS') {
+        throw Exception('Validasi TLSPV gagal: ${validationResponse.message}');
+      }
+      
+      print('TLSPV validation successful: ${validationResponse.data?.userName} (${validationResponse.data?.userRole})');
+      
+      // Pastikan idTool valid
+      String cleanIdTool = idTool.trim();
+      
+      // Dapatkan data user saat ini untuk parameter tambahan
+      final userData = await _authService.getUserData();
+      final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
+      final tableCode = userData?['tableCode'] ?? 'DEFAULT';
+      final warehouseCode = userData?['warehouseCode'] ?? 'Cideng';
+      
+      // Step 2: Update Planning RTN - sama seperti flow manual
+      print('=== STEP 2: UPDATE PLANNING RTN ===');
+      final updateParams = {
+        "idTool": cleanIdTool,
+        "CashierReturnCode": currentUser,
+        "TableReturnCode": tableCode,
+        "DateStartReturn": DateTime.now().toIso8601String(),
+        "WarehouseCode": warehouseCode,
+        "UserATMReturn": tlNik,
+        "SPVBARusak": tlNik,
+        "IsManual": "N"
+      };
+      
+      final updateResponse = await _apiService.updatePlanningRTN(updateParams);
+      
+      if (!updateResponse.success) {
+        throw Exception('Update planning RTN gagal: ${updateResponse.message}');
+      }
       
       print('Return approved for ID: $idTool by TL: $tlNik ($tlName)');
     } catch (e) {

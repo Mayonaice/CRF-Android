@@ -1327,66 +1327,6 @@ class ApiService {
     }
   }
 
-  // Approve prepare with QR
-  Future<ApiResponse> approvePrepareWithQR(
-    String idTool,
-    String tlNik,
-    {bool bypassNikValidation = false}
-  ) async {
-    try {
-      final requestHeaders = await headers;
-      
-      final requestBody = {
-        "IdTool": idTool,
-        "TlNik": tlNik, // Ubah dari TLNik menjadi TlNik sesuai dengan model di server
-      };
-      
-      debugPrint('🔍 Approve prepare with QR request: ${json.encode(requestBody)}');
-      
-      final response = await _tryRequestWithFallback(
-        requestFn: (baseUrl) => http.post(
-          Uri.parse('$baseUrl/CRF/approve-prepare-qr'),
-          headers: requestHeaders,
-          body: json.encode(requestBody),
-        ),
-      );
-      
-      // Log response untuk debugging
-      debugPrint('🔍 Approve prepare with QR response: ${response.statusCode}, ${response.body}');
-      
-      if (response.statusCode == 200) {
-        final jsonData = json.decode(response.body);
-        return ApiResponse.fromJson(jsonData);
-      } else if (response.statusCode == 401) {
-        await _authService.logout();
-        return ApiResponse(
-          success: false,
-          message: 'Session expired: Please login again',
-          status: 'error'
-        );
-      } else {
-        return ApiResponse(
-          success: false,
-          message: 'Server error (${response.statusCode}): ${response.body}',
-          status: 'error'
-        );
-      }
-    } catch (e) {
-      debugPrint('❌ Approve prepare with QR error: $e');
-      
-      String errorMessage = 'Network error: ${e.toString()}';
-      if (e is TimeoutException) {
-        errorMessage = 'Connection timeout: Please check your internet connection';
-      }
-      
-      return ApiResponse(
-        success: false,
-        message: errorMessage,
-        status: 'error'
-      );
-    }
-  }
-
   // Validate TL Supervisor for approval
   Future<TLSupervisorValidationResponse> validateTLSupervisor({
     required String nik,
@@ -1433,8 +1373,6 @@ class ApiService {
       throw Exception('Network error: ${e.toString()}');
     }
   }
-
-  // Fungsi ini sudah didefinisikan di atas, jadi tidak perlu didefinisikan lagi
 
   // Get Return Header and Catridge data by ID
   Future<ReturnHeaderResponse> getReturnHeaderAndCatridge(String idTool, {String branchCode = "0"}) async {

@@ -290,7 +290,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
           
           if (jsonData.containsKey('timestamp')) {
             timestamp = int.tryParse(jsonData['timestamp'].toString()) ?? 0;
-          } else {
+      } else {
             timestamp = DateTime.now().millisecondsSinceEpoch; // Default to current time
           }
           
@@ -825,7 +825,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       ),
     );
   }
-  
+
   void _showWarningDialog(String title, String message) {
     showDialog(
       context: context,
@@ -845,7 +845,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('OK'),
-          ),
+        ),
         ],
       ),
     );
@@ -894,9 +894,9 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                   ),
                     child: Padding(
                     padding: const EdgeInsets.all(16.0),
-                        child: Column(
+                    child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+                      children: [
                           const Text(
                             'TL Supervisor Credentials',
                             style: TextStyle(
@@ -914,8 +914,8 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                               contentPadding: EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 8,
-                              ),
-                            ),
+                          ),
+                        ),
                           ),
                           const SizedBox(height: 12),
                           // Password TL Field
@@ -928,7 +928,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                               contentPadding: EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 8,
-                              ),
+                        ),
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -938,7 +938,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                               onPressed: _isSavingCredentials ? null : _saveCredentials,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
-                              ),
+                          ),
                               child: _isSavingCredentials
                                   ? const SizedBox(
                                       width: 20,
@@ -954,13 +954,13 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                         ],
                       ),
                     ),
-                  ),
-                  
+                        ),
+                        
                   const SizedBox(height: 20),
-                  
+                        
                   // Scan QR Button
                   Center(
-                    child: ElevatedButton.icon(
+                          child: ElevatedButton.icon(
                       onPressed: _isProcessing ? null : _startQRScan,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.orange,
@@ -969,23 +969,23 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                           vertical: 12,
                         ),
                       ),
-                      icon: _isProcessing
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Icon(Icons.qr_code_scanner),
+                            icon: _isProcessing 
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Icon(Icons.qr_code_scanner),
                       label: Text(_isProcessing ? 'Processing...' : 'Scan QR Code'),
-                    ),
+                            ),
                   ),
-                  
+                
                   const SizedBox(height: 20),
-                  
-                  // Recent Scans Section
+                
+                // Recent Scans Section
                   const Text(
                     'Recent Scans',
                     style: TextStyle(
@@ -997,15 +997,15 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     child: _recentScans.isEmpty
                         ? const Padding(
                             padding: EdgeInsets.all(16.0),
                             child: Center(
                               child: Text(
                                 'No recent scans',
-                                style: TextStyle(
+                              style: TextStyle(
                                   color: Colors.grey,
                                   fontStyle: FontStyle.italic,
                                 ),
@@ -1015,10 +1015,10 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                         : ListView.separated(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _recentScans.length,
+                                itemCount: _recentScans.length,
                             separatorBuilder: (context, index) => const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              final scan = _recentScans[index];
+                                itemBuilder: (context, index) {
+                                  final scan = _recentScans[index];
                               return ListTile(
                                 leading: Icon(
                                   scan['success'] ? Icons.check_circle : Icons.error,
@@ -1053,18 +1053,18 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                                   ),
                                 ),
                               );
-                            },
-                          ),
-                  ),
-                ],
-              ),
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
             ),
           ),
         ),
       ),
     );
   }
-  
+
   // PERBAIKAN: Metode untuk memulai scan QR code
   Future<void> _startQRScan() async {
     try {
@@ -1074,6 +1074,8 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         DeviceOrientation.portraitDown,
       ]);
       
+      print('🔍 Opening QR scanner...');
+      
       // Gunakan navigator untuk membuka scanner
       final qrResult = await Navigator.push<String>(
         context,
@@ -1081,8 +1083,9 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
           builder: (context) => BarcodeScannerWidget(
             title: 'Scan QR Code',
             onBarcodeDetected: (code) {
-              // Callback will be handled by the scanner widget
-              print('QR Code detected in callback: ${code.length > 20 ? code.substring(0, 20) + "..." : code}');
+              // Callback akan dijalankan oleh scanner widget
+              print('🔍 QR Code detected in callback: ${code.length > 20 ? code.substring(0, 20) + "..." : code}');
+              // PENTING: Jangan pop navigator di sini, biarkan widget scanner yang menangani
             },
             fieldKey: 'qrcode', // Use consistent field key
             fieldLabel: 'Approval QR',
@@ -1090,29 +1093,60 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         ),
       );
       
-      print('QR Result from navigator: ${qrResult != null ? "Found (${qrResult.length} chars)" : "NULL"}');
-      
       // Reset orientation to portrait for this screen
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.portraitUp,
         DeviceOrientation.portraitDown,
       ]);
       
+      print('🔍 Scanner closed. QR Result: ${qrResult != null ? "Found (${qrResult.length} chars)" : "NULL"}');
+      
       // If QR code was scanned, process it
       if (qrResult != null && qrResult.isNotEmpty) {
-        print('Processing QR code: ${qrResult.length > 20 ? qrResult.substring(0, 20) + "..." : qrResult}');
-        await _processQRCode(qrResult);
+        print('🔍 Processing QR code: ${qrResult.length > 20 ? qrResult.substring(0, 20) + "..." : qrResult}');
+        
+        // TAMBAHAN: Tampilkan indikator loading
+        setState(() {
+          _isProcessing = true;
+        });
+        
+        // Proses QR code dalam try-catch terpisah
+        try {
+          await _processQRCode(qrResult);
+        } catch (e) {
+          print('🔍 Error processing QR code: $e');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error memproses QR code: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        } finally {
+          // Pastikan loading indicator dihilangkan
+          if (mounted) {
+            setState(() {
+              _isProcessing = false;
+            });
+          }
+        }
       } else {
-        print('No QR code scanned or scan was canceled');
+        print('🔍 No QR code scanned or scan was canceled');
       }
     } catch (e) {
-      print('Error during QR scanning: $e');
+      print('🔍 Error during QR scanning: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error scanning QR code: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );
+      
+      // Reset processing state
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 

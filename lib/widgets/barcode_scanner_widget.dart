@@ -61,20 +61,27 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
     // Configure camera for portrait orientation during scanning
     facing: CameraFacing.back,
     torchEnabled: false,
+    formats: [BarcodeFormat.qrCode], // Fokus hanya pada QR code
     useNewCameraSelector: true,
+    detectionSpeed: DetectionSpeed.noDuplicates, // Hindari duplikasi deteksi
   );
   bool _screenOpened = false;
+  bool _processingBarcode = false; // Tambahkan flag untuk mencegah multiple processing
 
   @override
   void initState() {
     super.initState();
     _screenOpened = false;
+    _processingBarcode = false;
     
     // Change to portrait orientation for camera scanning
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
+    
+    // Debug log
+    print('🔍 Barcode scanner initialized with formats: ${BarcodeFormat.qrCode}');
   }
 
   @override
@@ -169,72 +176,130 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
                 color: Colors.black.withOpacity(0.7),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(
-                'Arahkan kamera ke barcode${widget.fieldLabel != null ? " untuk ${widget.fieldLabel}" : ""}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                ),
+              child: Column(
+                children: [
+                  Text(
+                    'Arahkan kamera ke QR code${widget.fieldLabel != null ? " untuk ${widget.fieldLabel}" : ""}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Pastikan QR code terlihat jelas dan dalam fokus',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
+          
+          // Processing indicator
+          if (_processingBarcode)
+            Container(
+              color: Colors.black.withOpacity(0.7),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 16),
+                    Text(
+                      'Memproses QR Code...',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
   void _foundBarcode(BarcodeCapture barcodeCapture) {
-    if (!_screenOpened && mounted) {
-      final List<Barcode> barcodes = barcodeCapture.barcodes;
-      if (barcodes.isNotEmpty) {
-        // Gunakan rawValue jika displayValue kosong atau null
-        final String code = barcodes.first.rawValue ?? barcodes.first.displayValue ?? '';
-        
-        // Tambahkan logging ekstensif
-        print('🔍 BARCODE DETECTED RAW: ${barcodes.first.rawValue}');
-        print('🔍 BARCODE DETECTED DISPLAY: ${barcodes.first.displayValue}');
-        print('🔍 BARCODE FORMAT: ${barcodes.first.format}');
-        print('🔍 BARCODE TYPE: ${barcodes.first.type}');
-        
-        if (code.isNotEmpty) {
-          _screenOpened = true;
-          print('🎯 SCANNER: Barcode detected: ${code.length > 50 ? code.substring(0, 50) + "..." : code}');
-          
-          // Stop the camera safely
-          try {
-            cameraController.stop();
-          } catch (e) {
-            print('Error stopping camera: $e');
-          }
-          
-          // Return to landscape orientation before calling callback
-          SystemChrome.setPreferredOrientations([
-            DeviceOrientation.landscapeLeft,
-            DeviceOrientation.landscapeRight,
-          ]);
-          
-          // ADD TO STREAM INSTEAD OF RELYING ON NAVIGATION
-          if (widget.fieldKey != null) {
-            BarcodeResultStream().addResult(
-              barcode: code,
-              fieldKey: widget.fieldKey!,
-              label: widget.fieldLabel ?? widget.title,
-              sectionId: widget.sectionId, // NEW: Pass section ID to stream
-            );
-          }
-          
-          // Call the callback function with the scanned code
-          widget.onBarcodeDetected(code);
-          
-          // Close the scanner screen with the code as result
-          if (mounted && Navigator.of(context).canPop()) {
-            Navigator.of(context).pop(code);
-          }
-        } else {
-          print('🚫 SCANNER: Empty barcode content detected');
-        }
+    // Hindari pemrosesan berulang
+    if (_screenOpened || _processingBarcode || !mounted) return;
+
+    final List<Barcode> barcodes = barcodeCapture.barcodes;
+    if (barcodes.isEmpty) return;
+    
+    // Set flag processing
+    setState(() {
+      _processingBarcode = true;
+    });
+    
+    try {
+      // Gunakan rawValue jika displayValue kosong atau null
+      final String? rawValue = barcodes.first.rawValue;
+      final String? displayValue = barcodes.first.displayValue;
+      
+      // Tambahkan logging ekstensif
+      print('🔍 BARCODE DETECTED RAW: $rawValue');
+      print('🔍 BARCODE DETECTED DISPLAY: $displayValue');
+      print('🔍 BARCODE FORMAT: ${barcodes.first.format}');
+      print('🔍 BARCODE TYPE: ${barcodes.first.type}');
+      
+      // Pilih nilai yang akan digunakan
+      final String code = rawValue ?? displayValue ?? '';
+      
+      if (code.isEmpty) {
+        print('🚫 SCANNER: Empty barcode content detected');
+        setState(() {
+          _processingBarcode = false;
+        });
+        return;
       }
+      
+      print('🎯 SCANNER: Barcode detected: ${code.length > 50 ? code.substring(0, 50) + "..." : code}');
+      
+      // Tandai screen sebagai sudah terbuka
+      _screenOpened = true;
+      
+      // Stop the camera safely
+      try {
+        cameraController.stop();
+      } catch (e) {
+        print('Error stopping camera: $e');
+      }
+      
+      // Return to landscape orientation before calling callback
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      
+      // ADD TO STREAM INSTEAD OF RELYING ON NAVIGATION
+      if (widget.fieldKey != null) {
+        BarcodeResultStream().addResult(
+          barcode: code,
+          fieldKey: widget.fieldKey!,
+          label: widget.fieldLabel ?? widget.title,
+          sectionId: widget.sectionId,
+        );
+      }
+      
+      // Call the callback function with the scanned code
+      widget.onBarcodeDetected(code);
+      
+      // Delay sebentar untuk memastikan callback selesai
+      Future.delayed(Duration(milliseconds: 500), () {
+        // Close the scanner screen with the code as result
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(code);
+        }
+      });
+    } catch (e) {
+      print('🚫 Error processing barcode: $e');
+      setState(() {
+        _processingBarcode = false;
+      });
     }
   }
 

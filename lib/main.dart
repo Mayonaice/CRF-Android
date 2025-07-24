@@ -287,6 +287,9 @@ void main() {
     _handleError(details.exception, details.stack ?? StackTrace.current);
   };
   
+  // Tambahkan log debugging
+  print('🚀 Starting CRF Android application...');
+  
   // Set up zone-level error handling
   runZonedGuarded(() {
     WidgetsFlutterBinding.ensureInitialized();

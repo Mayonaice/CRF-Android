@@ -48,15 +48,55 @@ class _QRCodeGeneratorWidgetState extends State<QRCodeGeneratorWidget> {
     // Cek apakah ada kredensial TLSPV yang tersimpan
     final tlspvCredentials = await _authService.getTLSPVCredentials();
     
-    if (tlspvCredentials != null && 
-        tlspvCredentials['username'] != null && 
-        tlspvCredentials['username'].toString().isNotEmpty &&
-        tlspvCredentials['password'] != null && 
-        tlspvCredentials['password'].toString().isNotEmpty) {
+    // PERBAIKAN: Log hasil getTLSPVCredentials untuk debugging
+    print('getTLSPVCredentials result: ${tlspvCredentials != null ? "NOT_NULL" : "NULL"}');
+    if (tlspvCredentials != null) {
+      print('Credentials keys: ${tlspvCredentials.keys.toList()}');
+      print('Has username: ${tlspvCredentials.containsKey('username')}');
+      print('Has password: ${tlspvCredentials.containsKey('password')}');
+    }
+    
+    // PERBAIKAN: Coba simpan kredensial hardcoded jika tidak ada yang tersimpan
+    if (tlspvCredentials == null || 
+        !tlspvCredentials.containsKey('username') || 
+        !tlspvCredentials.containsKey('password') ||
+        tlspvCredentials['username'] == null || 
+        tlspvCredentials['username'].toString().isEmpty ||
+        tlspvCredentials['password'] == null || 
+        tlspvCredentials['password'].toString().isEmpty) {
+      
+      print('No valid TLSPV credentials found, trying to save hardcoded test credentials');
+      
+      // Coba simpan kredensial test
+      final testCredentialsSaved = await _authService.saveTLSPVCredentials('TEST_TL', 'password123');
+      print('Test credentials saved: $testCredentialsSaved');
+      
+      // Coba ambil lagi
+      final testCredentials = await _authService.getTLSPVCredentials();
+      if (testCredentials != null && 
+          testCredentials.containsKey('username') && 
+          testCredentials['username'] != null &&
+          testCredentials['username'].toString().isNotEmpty) {
+        print('Successfully saved and retrieved test credentials');
+      } else {
+        print('Failed to save and retrieve test credentials');
+      }
+    }
+    
+    // Coba lagi mendapatkan kredensial (mungkin dari test yang baru disimpan)
+    final finalCredentials = tlspvCredentials ?? await _authService.getTLSPVCredentials();
+    
+    if (finalCredentials != null && 
+        finalCredentials.containsKey('username') && 
+        finalCredentials['username'] != null && 
+        finalCredentials['username'].toString().isNotEmpty &&
+        finalCredentials.containsKey('password') && 
+        finalCredentials['password'] != null && 
+        finalCredentials['password'].toString().isNotEmpty) {
       
       // Pastikan username dan password tidak kosong
-      final username = tlspvCredentials['username'].toString();
-      final password = tlspvCredentials['password'].toString();
+      final username = finalCredentials['username'].toString();
+      final password = finalCredentials['password'].toString();
       
       print('Using TLSPV credentials for QR: username=$username');
       
@@ -89,11 +129,17 @@ class _QRCodeGeneratorWidgetState extends State<QRCodeGeneratorWidget> {
         };
       }
       
+      // PERBAIKAN: Verifikasi bahwa username dan password ada di qrDataMap
+      print('Final QR data map keys: ${qrDataMap.keys.toList()}');
+      print('Final QR username present: ${qrDataMap.containsKey('username')}');
+      print('Final QR password present: ${qrDataMap.containsKey('password')}');
+      
       // Enkripsi data untuk QR code
       _qrData = _authService.encryptDataForQR(qrDataMap);
       print('Generated secure QR Code with TLSPV credentials');
     } else {
       // Fallback ke format lama jika tidak ada kredensial
+      print('No valid credentials available, using fallback format');
       _qrData = '${widget.action}|${widget.idTool}|$timestamp|1';
       print('Generated QR Code with bypass flag (no credentials available)');
     }

@@ -838,17 +838,25 @@ class AuthService {
   // Dekripsi data dari QR code
   Map<String, dynamic>? decryptDataFromQR(String encryptedData) {
     try {
+      debugPrint('Decrypting QR data, length: ${encryptedData.length}');
+      
       // Decode base64 string
       final decodedString = utf8.decode(base64Decode(encryptedData));
       final secureData = json.decode(decodedString) as Map<String, dynamic>;
       
       // Ambil komponen
+      if (!secureData.containsKey('data') || !secureData.containsKey('timestamp') || !secureData.containsKey('signature')) {
+        debugPrint('QR data missing required fields: data=${secureData.containsKey('data')}, timestamp=${secureData.containsKey('timestamp')}, signature=${secureData.containsKey('signature')}');
+        return null;
+      }
+      
       final encodedData = secureData['data'] as String;
       final timestamp = secureData['timestamp'] as String;
       final receivedSignature = secureData['signature'] as String;
       
       // Decode data asli
       final jsonString = utf8.decode(base64Decode(encodedData));
+      debugPrint('Decoded JSON string: ${jsonString.length > 100 ? jsonString.substring(0, 100) + "..." : jsonString}');
       
       // Verifikasi signature
       final key = utf8.encode(encryptionKey + timestamp);
@@ -861,25 +869,49 @@ class AuthService {
       final now = DateTime.now().millisecondsSinceEpoch;
       final msgTime = int.parse(timestamp);
       final validTime = (now - msgTime) < 5 * 60 * 1000; // 5 menit
+      final validSignature = calculatedSignature == receivedSignature;
       
-      if (calculatedSignature == receivedSignature && validTime) {
-        final decodedData = json.decode(jsonString) as Map<String, dynamic>;
+      debugPrint('Signature validation: ${validSignature ? "VALID" : "INVALID"}');
+      debugPrint('Time validation: ${validTime ? "VALID" : "EXPIRED"} (${(now - msgTime) / (60 * 1000)} minutes old)');
+      
+      if (validSignature && validTime) {
+        Map<String, dynamic> decodedData;
+        try {
+          decodedData = json.decode(jsonString) as Map<String, dynamic>;
+        } catch (e) {
+          debugPrint('Error parsing JSON from QR: $e');
+          return null;
+        }
         
         // Debug log untuk memeriksa data yang didekripsi
-        debugPrint('Decrypted QR data: ${json.encode(decodedData)}');
+        debugPrint('Decrypted QR data keys: ${decodedData.keys.toList()}');
         
         // Pastikan username dan password ada dan tidak kosong
-        if (!decodedData.containsKey('username') || decodedData['username'] == null || decodedData['username'].toString().isEmpty) {
-          debugPrint('QR data missing username or username is empty');
+        if (!decodedData.containsKey('username')) {
+          debugPrint('QR data missing username key');
+        } else if (decodedData['username'] == null || decodedData['username'].toString().isEmpty) {
+          debugPrint('QR data username is null or empty: ${decodedData['username']}');
+        } else {
+          debugPrint('QR data username is present: ${decodedData['username']}');
         }
         
-        if (!decodedData.containsKey('password') || decodedData['password'] == null || decodedData['password'].toString().isEmpty) {
-          debugPrint('QR data missing password or password is empty');
+        if (!decodedData.containsKey('password')) {
+          debugPrint('QR data missing password key');
+        } else if (decodedData['password'] == null || decodedData['password'].toString().isEmpty) {
+          debugPrint('QR data password is null or empty');
+        } else {
+          debugPrint('QR data password is present and not empty');
         }
         
+        // Pastikan data yang dikembalikan tidak null
         return decodedData;
       } else {
-        debugPrint('QR data signature invalid or expired');
+        if (!validSignature) {
+          debugPrint('QR data signature invalid: expected=$calculatedSignature, received=$receivedSignature');
+        }
+        if (!validTime) {
+          debugPrint('QR data expired: ${(now - msgTime) / (60 * 1000)} minutes old');
+        }
         return null;
       }
     } catch (e) {

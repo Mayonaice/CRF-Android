@@ -120,13 +120,13 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
     });
 
     try {
-      String action;
-      String idTool;
-      int timestamp;
-      bool bypassNikValidation = false;
-      String? tlspvUsername;
-      String? tlspvPassword;
+      String action = '';
+      String idTool = '';
+      int timestamp = 0;
       List<CatridgeQRData>? catridgeData;
+      
+      // PENTING: Log QR code awal untuk debugging
+      print('Processing QR Code: ${qrCode.length > 20 ? qrCode.substring(0, 20) + "..." : qrCode}');
       
       // Coba periksa apakah ini format QR terenkripsi
       bool isEncrypted = false;
@@ -134,29 +134,49 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         // Coba decode base64 untuk menentukan apakah ini QR terenkripsi
         base64Decode(qrCode);
         isEncrypted = true;
+        print('QR code appears to be encrypted (valid base64)');
       } catch (e) {
         // Bukan format terenkripsi, gunakan parsing format lama
         isEncrypted = false;
+        print('QR code is not encrypted (not valid base64): $e');
       }
       
       if (isEncrypted) {
-        // Ini adalah QR code terenkripsi dengan kredensial TLSPV
+        // Ini adalah QR code terenkripsi dengan data catridge
         print('Detected encrypted QR code format');
         
         // Dekripsi data QR
         final decryptedData = _authService.decryptDataFromQR(qrCode);
+        print('Decrypted data: ${decryptedData != null ? "success" : "failed"}');
         
         if (decryptedData == null) {
           throw Exception('QR Code tidak valid atau sudah expired');
         }
         
+        // TAMBAHAN: Log semua keys dalam decryptedData untuk debugging
+        print('Decrypted data keys: ${decryptedData.keys.toList()}');
+        
         // Ekstrak data dari QR terenkripsi dengan validasi tipe data
         try {
-          action = decryptedData['action']?.toString() ?? '';
-          timestamp = int.tryParse(decryptedData['timestamp']?.toString() ?? '0') ?? 0;
-          tlspvUsername = decryptedData['username']?.toString();
-          tlspvPassword = decryptedData['password']?.toString();
-          bypassNikValidation = true; // Selalu true untuk QR terenkripsi
+          // PERBAIKAN: Ekstraksi data dengan lebih eksplisit dan pengecekan yang lebih ketat
+          if (decryptedData.containsKey('action')) {
+            action = decryptedData['action'].toString();
+            print('Extracted action: $action');
+          } else {
+            print('ERROR: action key missing in decrypted data');
+            throw Exception('QR Code tidak memiliki informasi action');
+          }
+          
+          if (decryptedData.containsKey('timestamp')) {
+            timestamp = int.tryParse(decryptedData['timestamp'].toString()) ?? 0;
+            print('Extracted timestamp: $timestamp');
+          } else {
+            print('ERROR: timestamp key missing in decrypted data');
+            timestamp = 0;
+          }
+          
+          // PERBAIKAN: Untuk flow baru, kita hanya perlu data catridge dari QR
+          // Kredensial TL akan diambil dari login user CRF_TL
           
           // Cek apakah ada data catridge (format baru)
           if (decryptedData.containsKey('catridges')) {
@@ -212,38 +232,35 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
             }
           } else {
             // Format lama tanpa data catridge
-            idTool = decryptedData['idTool']?.toString() ?? '';
-            print('Using old QR format with idTool: $idTool');
+            if (decryptedData.containsKey('idTool')) {
+              idTool = decryptedData['idTool'].toString();
+              print('Using old QR format with idTool: $idTool');
+            } else {
+              print('ERROR: idTool key missing in decrypted data');
+              throw Exception('QR Code tidak memiliki informasi ID Tool');
+            }
           }
           
-          print('Decrypted QR data: Action=$action, IdTool=$idTool, HasCredentials=${tlspvUsername != null}, Username=$tlspvUsername, HasCatridges=${catridgeData != null}');
+          print('Decrypted QR data summary: Action=$action, IdTool=$idTool, HasCatridges=${catridgeData != null && catridgeData.isNotEmpty}');
           
           // Validasi data yang diekstrak
           if (action.isEmpty) {
+            print('ERROR: Action is empty after extraction');
             throw Exception('QR Code tidak memiliki informasi action');
           }
           
           if (idTool.isEmpty) {
+            print('ERROR: IdTool is empty after extraction');
             throw Exception('QR Code tidak memiliki informasi ID Tool');
           }
           
           if (timestamp == 0) {
+            print('ERROR: Timestamp is 0 or invalid after extraction');
             throw Exception('QR Code tidak memiliki timestamp yang valid');
           }
         } catch (e) {
           print('Error extracting data from QR: $e');
           throw Exception('Format data QR tidak valid: ${e.toString()}');
-        }
-        
-        // Validasi username dan password dari QR
-        if (tlspvUsername == null || tlspvUsername.isEmpty) {
-          print('ERROR: Username TL is empty or null in QR data!');
-          throw Exception('Username TL tidak tersedia dalam QR');
-        }
-        
-        if (tlspvPassword == null || tlspvPassword.isEmpty) {
-          print('ERROR: Password TL is empty or null in QR data!');
-          throw Exception('Password TL tidak tersedia dalam QR');
         }
       } else {
         // Format lama: "PREPARE|{idTool}|{timestamp}|{bypassFlag}"
@@ -257,10 +274,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         idTool = parts[1];
         timestamp = int.tryParse(parts[2]) ?? 0;
         
-        // Check if bypass NIK is enabled (fourth part = "1")
-        bypassNikValidation = parts.length > 3 && parts[3] == "1";
-        
-        print('QR Code parts: Action=$action, IdTool=$idTool, Timestamp=$timestamp, BypassNIK=$bypassNikValidation');
+        print('QR Code parts: Action=$action, IdTool=$idTool, Timestamp=$timestamp');
       }
       
       // Validasi timestamp
@@ -277,41 +291,29 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         throw Exception('QR Code sudah expired (lebih dari 5 menit)');
       }
 
-      // Get current user data for approval
+      // Get user data for TL name
       final userData = await _authService.getUserData();
-      String tlNik = userData?['userID'] ?? userData?['nik'] ?? '';
       final tlName = userData?['userName'] ?? '';
-      
-      print('User data from auth service: userID=${userData?['userID']}, nik=${userData?['nik']}, userName=${userData?['userName']}');
-
-      // Jika ada kredensial TLSPV dari QR, gunakan itu
-      if (tlspvUsername != null && tlspvUsername.isNotEmpty && tlspvPassword != null) {
-        print('Using TLSPV credentials from QR code: $tlspvUsername');
-        tlNik = tlspvUsername.trim(); // Gunakan NIK dari QR
-      } 
-      // Jika tidak ada kredensial dan tidak ada bypass, tolak
-      else if (tlNik.isEmpty && !bypassNikValidation) {
-        throw Exception('Data TL tidak ditemukan dan QR tidak mengizinkan scan tanpa NIK');
-      }
+      final tlNik = userData?['userID'] ?? userData?['nik'] ?? '';
       
       // Debug log untuk memastikan nilai tlNik tidak kosong
-      print('Final TL NIK being used: "$tlNik", isEmpty=${tlNik.isEmpty}, length=${tlNik.length}');
+      print('TL NIK being used: "$tlNik", isEmpty=${tlNik.isEmpty}, length=${tlNik.length}');
       
       if (tlNik.isEmpty) {
-        throw Exception('NIK TL tidak boleh kosong (setelah pemrosesan QR)');
+        throw Exception('NIK TL tidak boleh kosong (tidak ditemukan di data login)');
       }
 
       // Process based on action type
       if (action == 'PREPARE') {
         if (catridgeData != null && catridgeData.isNotEmpty) {
           // Format baru: proses data catridge langsung
-          await _approveAndProcessCatridges(idTool, tlNik, tlName, tlspvPassword, catridgeData);
+          await _approveAndProcessCatridges(idTool, tlNik, tlName, null, catridgeData);
         } else {
           // Format lama: hanya approve prepare
-          await _approvePrepare(idTool, tlNik, tlName, bypassNikValidation, tlspvPassword);
+          await _approvePrepare(idTool, tlNik, tlName, false, null);
         }
       } else if (action == 'RETURN') {
-        await _approveReturn(idTool, tlNik, tlName, bypassNikValidation, tlspvPassword);
+        await _approveReturn(idTool, tlNik, tlName, false, null);
       } else {
         throw Exception('Tipe aksi tidak valid: $action');
       }
@@ -340,23 +342,35 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
     try {
       print('Processing ${catridges.length} catridges for ID: $idTool by TL: $tlNik ($tlName)');
       
+      // PERBAIKAN: Gunakan kredensial login CRF_TL, bukan dari QR
+      final userData = await _authService.getUserData();
+      final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
+      final currentUserName = userData?['userName'] ?? '';
+      
+      // Dapatkan kredensial TL dari data login, bukan dari QR
+      final tlCredentials = await _authService.getTLSPVCredentials();
+      
+      if (tlCredentials == null || 
+          !tlCredentials.containsKey('username') || 
+          !tlCredentials.containsKey('password') ||
+          tlCredentials['username'] == null ||
+          tlCredentials['password'] == null) {
+        throw Exception('Kredensial TL tidak tersedia. Silakan login kembali.');
+      }
+      
+      final tlNikFromLogin = tlCredentials['username'].toString();
+      final tlPasswordFromLogin = tlCredentials['password'].toString();
+      
+      print('Using TL credentials from login: $tlNikFromLogin');
+      
       // Validasi nilai NIK
-      if (tlNik.isEmpty) {
+      if (tlNikFromLogin.isEmpty) {
         throw Exception('NIK TL tidak boleh kosong');
       }
       
-      // Jika password tersedia dari QR code, gunakan untuk validasi TLSPV
-      if (tlspvPassword == null || tlspvPassword.isEmpty) {
-        throw Exception('Password TL tidak tersedia dalam QR');
-      }
-      
-      // Debug log untuk memastikan nilai tlNik dan tlspvPassword tidak kosong
-      print('TL NIK: "$tlNik", isEmpty=${tlNik.isEmpty}');
-      print('TL Password: ${tlspvPassword.isNotEmpty ? "PROVIDED" : "EMPTY"}');
-      
       // Pastikan NIK dan password bersih dari whitespace
-      final cleanNik = tlNik.trim();
-      final cleanPassword = tlspvPassword.trim();
+      final cleanNik = tlNikFromLogin.trim();
+      final cleanPassword = tlPasswordFromLogin.trim();
       
       // Step 1: Validasi TL Supervisor credentials dan role - sama seperti flow manual
       print('=== STEP 1: VALIDATE TL SUPERVISOR ===');
@@ -381,8 +395,6 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       }
       
       // Dapatkan data user saat ini untuk parameter tambahan
-      final userData = await _authService.getUserData();
-      final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
       final tableCode = catridges[0].tableCode; // Gunakan tableCode dari catridge pertama
       final warehouseCode = catridges[0].warehouseCode; // Gunakan warehouseCode dari catridge pertama
       
@@ -402,7 +414,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         throw Exception('Update planning gagal: ${planningResponse.message}');
       }
       
-      print('Planning update success for ID: $idTool by TL: $tlNik ($tlName)');
+      print('Planning update success for ID: $idTool by TL: $cleanNik ($currentUserName)');
       
       // Step 3: Insert ATM Catridge untuk setiap item catridge
       print('=== STEP 3: INSERT ATM CATRIDGE ===');
@@ -443,10 +455,6 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       if (_operatorId != null && _operatorId!.isNotEmpty) {
         print('=== STEP 4: SEND NOTIFICATION TO CRF_OPR ===');
         try {
-          final userData = await _authService.getUserData();
-          final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
-          final currentUserName = userData?['userName'] ?? userData?['name'] ?? 'UNKNOWN';
-          
           await _notificationService.sendNotification(
             idTool: idTool,
             action: 'PREPARE_APPROVED',
@@ -498,23 +506,35 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
     try {
       print('Approving prepare for ID: $idTool by TL: $tlNik ($tlName), bypassValidation: $bypassNikValidation, hasPassword: ${tlspvPassword != null}');
       
+      // PERBAIKAN: Gunakan kredensial login CRF_TL, bukan dari QR
+      final userData = await _authService.getUserData();
+      final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
+      final currentUserName = userData?['userName'] ?? '';
+      
+      // Dapatkan kredensial TL dari data login, bukan dari QR
+      final tlCredentials = await _authService.getTLSPVCredentials();
+      
+      if (tlCredentials == null || 
+          !tlCredentials.containsKey('username') || 
+          !tlCredentials.containsKey('password') ||
+          tlCredentials['username'] == null ||
+          tlCredentials['password'] == null) {
+        throw Exception('Kredensial TL tidak tersedia. Silakan login kembali.');
+      }
+      
+      final tlNikFromLogin = tlCredentials['username'].toString();
+      final tlPasswordFromLogin = tlCredentials['password'].toString();
+      
+      print('Using TL credentials from login: $tlNikFromLogin');
+      
       // Validasi nilai NIK
-      if (tlNik.isEmpty) {
+      if (tlNikFromLogin.isEmpty) {
         throw Exception('NIK TL tidak boleh kosong');
       }
       
-      // Jika password tersedia dari QR code, gunakan untuk validasi TLSPV
-      if (tlspvPassword == null || tlspvPassword.isEmpty) {
-        throw Exception('Password TL tidak tersedia dalam QR');
-      }
-      
-      // Debug log untuk memastikan nilai tlNik dan tlspvPassword tidak kosong
-      print('TL NIK: "$tlNik", isEmpty=${tlNik.isEmpty}');
-      print('TL Password: ${tlspvPassword.isNotEmpty ? "PROVIDED" : "EMPTY"}');
-      
       // Pastikan NIK dan password bersih dari whitespace
-      final cleanNik = tlNik.trim();
-      final cleanPassword = tlspvPassword.trim();
+      final cleanNik = tlNikFromLogin.trim();
+      final cleanPassword = tlPasswordFromLogin.trim();
       
       // Step 1: Validasi TL Supervisor credentials dan role - sama seperti flow manual
       print('=== STEP 1: VALIDATE TL SUPERVISOR ===');
@@ -539,8 +559,6 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       }
       
       // Dapatkan data user saat ini untuk parameter tambahan
-      final userData = await _authService.getUserData();
-      final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
       final tableCode = userData?['tableCode'] ?? 'DEFAULT';
       final warehouseCode = userData?['warehouseCode'] ?? 'Cideng';
       
@@ -560,15 +578,11 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         throw Exception('Update planning gagal: ${planningResponse.message}');
       }
       
-      print('Planning update success for ID: $idTool by TL: $tlNik ($tlName)');
+      print('Planning update success for ID: $idTool by TL: $cleanNik ($currentUserName)');
       
       // Kirim notifikasi ke CRF_OPR jika ada informasi operator
       if (_operatorId != null && _operatorId!.isNotEmpty) {
         try {
-          final userData = await _authService.getUserData();
-          final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
-          final currentUserName = userData?['userName'] ?? userData?['name'] ?? 'UNKNOWN';
-          
           await _notificationService.sendNotification(
             idTool: idTool,
             action: 'PREPARE_APPROVED',
@@ -594,19 +608,35 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
     try {
       print('Approving return for ID: $idTool by TL: $tlNik ($tlName), bypassValidation: $bypassNikValidation, hasPassword: ${tlspvPassword != null}');
       
+      // PERBAIKAN: Gunakan kredensial login CRF_TL, bukan dari QR
+      final userData = await _authService.getUserData();
+      final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
+      final currentUserName = userData?['userName'] ?? '';
+      
+      // Dapatkan kredensial TL dari data login, bukan dari QR
+      final tlCredentials = await _authService.getTLSPVCredentials();
+      
+      if (tlCredentials == null || 
+          !tlCredentials.containsKey('username') || 
+          !tlCredentials.containsKey('password') ||
+          tlCredentials['username'] == null ||
+          tlCredentials['password'] == null) {
+        throw Exception('Kredensial TL tidak tersedia. Silakan login kembali.');
+      }
+      
+      final tlNikFromLogin = tlCredentials['username'].toString();
+      final tlPasswordFromLogin = tlCredentials['password'].toString();
+      
+      print('Using TL credentials from login: $tlNikFromLogin');
+      
       // Validasi nilai NIK
-      if (tlNik.isEmpty) {
+      if (tlNikFromLogin.isEmpty) {
         throw Exception('NIK TL tidak boleh kosong');
       }
       
-      // Jika password tersedia dari QR code, gunakan untuk validasi TLSPV
-      if (tlspvPassword == null || tlspvPassword.isEmpty) {
-        throw Exception('Password TL tidak tersedia dalam QR');
-      }
-      
       // Pastikan NIK dan password bersih dari whitespace
-      final cleanNik = tlNik.trim();
-      final cleanPassword = tlspvPassword.trim();
+      final cleanNik = tlNikFromLogin.trim();
+      final cleanPassword = tlPasswordFromLogin.trim();
       
       // Step 1: Validasi TL Supervisor credentials dan role - sama seperti flow manual
       print('=== STEP 1: VALIDATE TL SUPERVISOR ===');
@@ -614,19 +644,17 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         nik: cleanNik,
         password: cleanPassword
       );
-      
+        
       if (!validationResponse.success || validationResponse.data?.validationStatus != 'SUCCESS') {
         throw Exception('Validasi TLSPV gagal: ${validationResponse.message}');
       }
-      
+        
       print('TLSPV validation successful: ${validationResponse.data?.userName} (${validationResponse.data?.userRole})');
       
       // Pastikan idTool valid
       String cleanIdTool = idTool.trim();
       
       // Dapatkan data user saat ini untuk parameter tambahan
-      final userData = await _authService.getUserData();
-      final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
       final tableCode = userData?['tableCode'] ?? 'DEFAULT';
       final warehouseCode = userData?['warehouseCode'] ?? 'Cideng';
       
@@ -649,15 +677,11 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         throw Exception('Update planning RTN gagal: ${updateResponse.message}');
       }
       
-      print('Return approved for ID: $idTool by TL: $tlNik ($tlName)');
+      print('Return approved for ID: $idTool by TL: $cleanNik ($currentUserName)');
       
       // Kirim notifikasi ke CRF_OPR jika ada informasi operator
       if (_operatorId != null && _operatorId!.isNotEmpty) {
         try {
-          final userData = await _authService.getUserData();
-          final currentUser = userData?['nik'] ?? userData?['userID'] ?? 'UNKNOWN';
-          final currentUserName = userData?['userName'] ?? userData?['name'] ?? 'UNKNOWN';
-          
           await _notificationService.sendNotification(
             idTool: idTool,
             action: 'RETURN_APPROVED',
@@ -815,20 +839,20 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: SingleChildScrollView(
-              child: Column(
+            child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+              children: [
                   // Kredensial TL form card
-                  Card(
+                Card(
                     elevation: 4,
-                    shape: RoundedRectangleBorder(
+                  shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
-                    ),
+                  ),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Column(
+                    child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+                      children: [
                           const Text(
                             'Simpan Kredensial TL',
                             style: TextStyle(
@@ -870,8 +894,8 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
+                        SizedBox(
+                          width: double.infinity,
                             child: ElevatedButton(
                               onPressed: _isSavingCredentials ? null : _saveCredentials,
                               style: ElevatedButton.styleFrom(
@@ -880,40 +904,40 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                               ),
                               child: _isSavingCredentials
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    ),
-                                  )
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
                                 : const Text('Simpan Kredensial'),
                             ),
                           ),
                         ],
-                      ),
                     ),
                   ),
-                  
+                ),
+                
                   const SizedBox(height: 20),
                   
                   // Existing content
                   Card(
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
                             'Scan QR Code',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -928,9 +952,9 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                               ),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
                       ),
                     ),
                   ),

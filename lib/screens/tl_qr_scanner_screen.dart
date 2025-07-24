@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
 import '../widgets/barcode_scanner_widget.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../models/prepare_model.dart';
 import '../services/notification_service.dart';
+import '../widgets/qr_code_scanner_tl_widget.dart'; // Import widget scanner baru
 
 class TLQRScannerScreen extends StatefulWidget {
   const TLQRScannerScreen({Key? key}) : super(key: key);
@@ -1068,7 +1070,40 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
   // PERBAIKAN: Metode untuk memulai scan QR code
   Future<void> _startQRScan() async {
     try {
-      // Tampilkan dialog pilihan metode scan
+      // Jika platform web, langsung tampilkan input manual
+      if (kIsWeb) {
+        print('🔍 Running on web platform, using manual input');
+        final qrResult = await _showManualInputDialog();
+        
+        if (qrResult != null && qrResult.isNotEmpty) {
+          print('🔍 Processing manual QR code: ${qrResult.length > 20 ? qrResult.substring(0, 20) + "..." : qrResult}');
+          
+          setState(() {
+            _isProcessing = true;
+          });
+          
+          try {
+            await _processQRCode(qrResult);
+          } catch (e) {
+            print('🔍 Error processing QR code: $e');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error memproses QR code: ${e.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          } finally {
+            if (mounted) {
+              setState(() {
+                _isProcessing = false;
+              });
+            }
+          }
+        }
+        return;
+      }
+      
+      // Untuk platform mobile, tampilkan dialog pilihan metode scan
       final scanMethod = await showDialog<String>(
         context: context,
         builder: (BuildContext context) {
@@ -1077,8 +1112,12 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
             content: const Text('Pilih metode untuk scan QR code:'),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(context).pop('camera'),
-                child: const Text('Kamera'),
+                onPressed: () => Navigator.of(context).pop('qr_code_scanner'),
+                child: const Text('Scanner Baru'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('mobile_scanner'),
+                child: const Text('Scanner Lama'),
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop('manual'),
@@ -1096,14 +1135,44 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
       
       String? qrResult;
       
-      if (scanMethod == 'camera') {
+      if (scanMethod == 'qr_code_scanner') {
+        // Gunakan scanner QR baru
+        print('🔍 Opening new QR scanner...');
+        
         // Set to portrait mode before scanning
         await SystemChrome.setPreferredOrientations([
           DeviceOrientation.portraitUp,
           DeviceOrientation.portraitDown,
         ]);
         
-        print('🔍 Opening QR scanner...');
+        // Gunakan QRCodeScannerTLWidget
+        qrResult = await Navigator.push<String>(
+          context,
+          MaterialPageRoute(
+            builder: (context) => QRCodeScannerTLWidget(
+              title: 'Scan QR Code Approval',
+              onQRCodeDetected: (code) {
+                // Callback akan dijalankan oleh scanner widget
+                print('🔍 QR Code detected in new scanner: ${code.length > 20 ? code.substring(0, 20) + "..." : code}');
+              },
+            ),
+          ),
+        );
+        
+        // Reset orientation to portrait for this screen
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+        ]);
+      } else if (scanMethod == 'mobile_scanner') {
+        // Gunakan scanner lama (mobile_scanner)
+        print('🔍 Opening old QR scanner...');
+        
+        // Set to portrait mode before scanning
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+        ]);
         
         // Gunakan navigator untuk membuka scanner
         qrResult = await Navigator.push<String>(
@@ -1113,8 +1182,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
               title: 'Scan QR Code',
               onBarcodeDetected: (code) {
                 // Callback akan dijalankan oleh scanner widget
-                print('🔍 QR Code detected in callback: ${code.length > 20 ? code.substring(0, 20) + "..." : code}');
-                // PENTING: Jangan pop navigator di sini, biarkan widget scanner yang menangani
+                print('🔍 QR Code detected in old scanner: ${code.length > 20 ? code.substring(0, 20) + "..." : code}');
               },
               fieldKey: 'qrcode', // Use consistent field key
               fieldLabel: 'Approval QR',

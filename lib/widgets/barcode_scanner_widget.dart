@@ -188,10 +188,18 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
     if (!_screenOpened && mounted) {
       final List<Barcode> barcodes = barcodeCapture.barcodes;
       if (barcodes.isNotEmpty) {
-        final String code = barcodes.first.displayValue ?? barcodes.first.rawValue ?? '';
+        // Gunakan rawValue jika displayValue kosong atau null
+        final String code = barcodes.first.rawValue ?? barcodes.first.displayValue ?? '';
+        
+        // Tambahkan logging ekstensif
+        print('🔍 BARCODE DETECTED RAW: ${barcodes.first.rawValue}');
+        print('🔍 BARCODE DETECTED DISPLAY: ${barcodes.first.displayValue}');
+        print('🔍 BARCODE FORMAT: ${barcodes.first.format}');
+        print('🔍 BARCODE TYPE: ${barcodes.first.type}');
+        
         if (code.isNotEmpty) {
           _screenOpened = true;
-          print('🎯 SCANNER: Barcode detected: $code for field: ${widget.fieldKey}');
+          print('🎯 SCANNER: Barcode detected: ${code.length > 50 ? code.substring(0, 50) + "..." : code}');
           
           // Stop the camera safely
           try {
@@ -219,10 +227,12 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
           // Call the callback function with the scanned code
           widget.onBarcodeDetected(code);
           
-          // Close the scanner screen
+          // Close the scanner screen with the code as result
           if (mounted && Navigator.of(context).canPop()) {
             Navigator.of(context).pop(code);
           }
+        } else {
+          print('🚫 SCANNER: Empty barcode content detected');
         }
       }
     }

@@ -71,16 +71,10 @@ android {
         }
     }
 
-    // Add explicit APK output configuration
+    // Set a fixed name for the debug APK
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
-            def appName = "CRF_Android"
-            def buildType = variant.buildType.name
-            def versionName = variant.versionName
-            def versionCode = variant.versionCode
-            def timestamp = new Date().format('yyyyMMddHHmm')
-            
-            outputFileName = "${appName}_${buildType}_${versionName}_${timestamp}.apk"
+            outputFileName = "CRF_Android_final.apk"
         }
     }
 

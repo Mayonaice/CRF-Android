@@ -188,6 +188,16 @@ workflows:
               }\
           ' "$APP_BUILD_GRADLE"
             fi
+
+            # Ensure APK output name is consistent
+            sed -i '' '/applicationVariants.all/,/}/c\
+            // Set a fixed name for the debug APK\
+            applicationVariants.all { variant ->\
+                variant.outputs.all { output ->\
+                    outputFileName = "CRF_Android_final.apk"\
+                }\
+            }\
+        ' "$APP_BUILD_GRADLE"
           fi
       
       - name: Patch QR Mobile Vision package
@@ -215,6 +225,15 @@ workflows:
                 namespace "com.github.rmtmckenzie.qrmobilevision"
               ' "$QR_GRADLE_FILE"
             fi
+
+            # Patch QR Mobile Vision Preview class conflict
+            QR_CAMERA_FILE="$QR_MOBILE_VISION_PATH/lib/src/qr_camera.dart"
+            if [ -f "$QR_CAMERA_FILE" ]; then
+              echo "Patching QR camera file to fix Preview class conflict"
+              # Rename Preview class to QRPreview to avoid conflict with Flutter
+              sed -i '' 's/class Preview extends StatelessWidget/class QRPreview extends StatelessWidget/g' "$QR_CAMERA_FILE"
+              sed -i '' 's/Preview(/QRPreview(/g' "$QR_CAMERA_FILE"
+            fi
             
             echo "QR Mobile Vision package patched successfully"
           else
@@ -224,6 +243,12 @@ workflows:
           # Fix platform package
           flutter pub remove platform || true
           flutter pub add platform:3.1.3 || true
+          
+          # Fix QR mobile vision Preview class conflict in our code
+          if [ -f "lib/widgets/qr_code_scanner_tl_widget.dart" ]; then
+            echo "Fixing QR Scanner widget in our code"
+            sed -i '' 's/Icons.camera_off/Icons.no_photography/g' "lib/widgets/qr_code_scanner_tl_widget.dart"
+          fi
           
       - name: Build APK with Flutter
         script: |
@@ -242,18 +267,16 @@ workflows:
           
           # Try to build with specific configuration
           echo "Building APK with Flutter..."
-          flutter build apk --debug --no-shrink || true
+          flutter build apk --debug --no-shrink
           
           # Check if APK exists
-          if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
-            echo "✅ Flutter build succeeded"
-          else
+          if [ ! -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
             echo "Flutter build failed, trying direct Gradle build..."
             
             # Try building directly with Gradle
             cd android
             chmod +x ./gradlew
-            ./gradlew assembleDebug --info || true
+            ./gradlew assembleDebug --stacktrace
             cd ..
             
             # Check if Gradle produced an APK
@@ -261,11 +284,9 @@ workflows:
               echo "✅ Gradle build succeeded"
               mkdir -p build/app/outputs/flutter-apk/
               cp android/app/build/outputs/apk/debug/app-debug.apk build/app/outputs/flutter-apk/app-debug.apk
-            else
-              echo "All build attempts failed, creating fallback APK"
-              # Create a dummy APK to prevent build failure
-              dd if=/dev/urandom of=build/app/outputs/flutter-apk/app-debug.apk bs=1M count=20
             fi
+          else
+            echo "✅ Flutter build succeeded"
           fi
           
           # List all generated APKs
@@ -274,9 +295,7 @@ workflows:
           
       - name: Prepare APK artifacts
         script: |
-          # Define file names with timestamp
-          TIMESTAMP=$(date +"%Y%m%d%H%M")
-          DEBUG_APK_NAME="CRF_Android_debug_${TIMESTAMP}.apk"
+          # Define a consistent file name (no timestamp) for easier download
           FINAL_APK_NAME="CRF_Android_final.apk"
           
           # Ensure output directories exist
@@ -285,20 +304,19 @@ workflows:
           # Check if Flutter APK exists and copy it
           if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
             echo "Using Flutter APK"
-            cp build/app/outputs/flutter-apk/app-debug.apk "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
+            cp build/app/outputs/flutter-apk/app-debug.apk "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME"
           elif [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
             echo "Using Gradle APK"
-            cp android/app/build/outputs/apk/debug/app-debug.apk "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
+            cp android/app/build/outputs/apk/debug/app-debug.apk "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME"
+          elif [ -f "android/app/build/outputs/apk/debug/CRF_Android_final.apk" ]; then
+            echo "Using Gradle custom named APK"
+            cp android/app/build/outputs/apk/debug/CRF_Android_final.apk "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME"
           else
-            echo "No APK found! Creating a dummy APK to prevent build failure."
-            dd if=/dev/urandom of="$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME" bs=1M count=20
+            echo "No APK found! Build failed."
+            exit 1
           fi
           
-          # Create a standard named copy
-          cp "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME" "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME"
-          
           # Set MIME type for direct download
-          echo "application/vnd.android.package-archive" > "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME.mime"
           echo "application/vnd.android.package-archive" > "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME.mime"
           
           # Show file details
@@ -308,9 +326,11 @@ workflows:
           echo "✅ APK successfully prepared for download"
           
     artifacts:
-      - build/app/outputs/flutter-apk/*.apk
-      - android/app/build/outputs/apk/debug/*.apk
-      - $FCI_BUILD_OUTPUT_DIR/*.apk
+      - build/app/outputs/flutter-apk/app-debug.apk
+      - android/app/build/outputs/apk/debug/app-debug.apk
+      - android/app/build/outputs/apk/debug/CRF_Android_final.apk
+      - build*/app/outputs/apk/debug/CRF_Android_final.apk
+      - $FCI_BUILD_OUTPUT_DIR/CRF_Android_final.apk
     
     publishing:
       email:
@@ -319,3 +339,6 @@ workflows:
         notify:
           success: true
           failure: true
+      scripts:
+        # Script untuk memastikan APK tersedia untuk unduh
+        - echo "APK should now be available for direct download from Codemagic"

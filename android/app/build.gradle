@@ -88,6 +88,19 @@ android {
         disable 'InvalidPackage'
         checkReleaseBuilds false
     }
+
+    // Add permissions for QR code scanner
+    aaptOptions {
+        noCompress "tflite"
+        noCompress "lite"
+        ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
+    
+    // Add for QR code scanner compatibility
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
 }
 
 flutter {

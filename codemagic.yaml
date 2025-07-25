@@ -167,6 +167,27 @@ workflows:
               }\
           ' "$APP_BUILD_GRADLE"
             fi
+            
+            # Add QR scanner specific options if not already present
+            if ! grep -q "aaptOptions" "$APP_BUILD_GRADLE"; then
+              sed -i '' '/android {/a\
+              aaptOptions {\
+                  noCompress "tflite"\
+                  noCompress "lite"\
+                  ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"\
+              }\
+          ' "$APP_BUILD_GRADLE"
+            fi
+            
+            # Add compileOptions if not already present
+            if ! grep -q "compileOptions" "$APP_BUILD_GRADLE"; then
+              sed -i '' '/android {/a\
+              compileOptions {\
+                  sourceCompatibility JavaVersion.VERSION_1_8\
+                  targetCompatibility JavaVersion.VERSION_1_8\
+              }\
+          ' "$APP_BUILD_GRADLE"
+            fi
           fi
           
           # Fix platform package

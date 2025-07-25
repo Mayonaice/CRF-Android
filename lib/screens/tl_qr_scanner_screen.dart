@@ -1143,11 +1143,11 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
           DeviceOrientation.portraitDown,
         ]);
         
-        // Gunakan navigator untuk membuka scanner
+        // Gunakan navigator untuk membuka scanner - UPDATED TO USE NEW SCANNER
         qrResult = await Navigator.push<String>(
           context,
           MaterialPageRoute(
-            builder: (context) => BarcodeScannerWidget(
+            builder: (context) => QRCodeScannerTLWidget(
               title: 'Scan QR Code',
               onBarcodeDetected: (code) {
                 // Callback akan dijalankan oleh scanner widget

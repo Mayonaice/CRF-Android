@@ -1,8 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
+import 'package:flutter_barcode_scanner/flutter_barcode_scanner.dart';
 
 class QRCodeScannerTLWidget extends StatefulWidget {
   final String title;
@@ -25,31 +24,12 @@ class QRCodeScannerTLWidget extends StatefulWidget {
 }
 
 class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
-  final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
-  QRViewController? controller;
-  bool _screenOpened = false;
-  bool _processingBarcode = false;
-  bool _hasFlash = false;
-  bool _flashOn = false;
-  
-  // For handling the result
-  StreamSubscription? _subscription;
-
-  @override
-  void reassemble() {
-    super.reassemble();
-    if (Platform.isAndroid) {
-      controller?.pauseCamera();
-    } else if (Platform.isIOS) {
-      controller?.resumeCamera();
-    }
-  }
+  bool _isScanning = false;
+  String _scanResult = '';
 
   @override
   void initState() {
     super.initState();
-    _screenOpened = false;
-    _processingBarcode = false;
     
     // Change to portrait orientation for camera scanning
     SystemChrome.setPreferredOrientations([
@@ -58,112 +38,46 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
     ]);
     
     print('🔍 QR Code scanner TL widget initialized');
+    
+    // Start scanning automatically after a short delay
+    Future.delayed(Duration(milliseconds: 500), () {
+      _startScan();
+    });
   }
 
   @override
   void dispose() {
-    _subscription?.cancel();
-    controller?.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        actions: [
-          if (_hasFlash)
-            IconButton(
-              icon: Icon(_flashOn ? Icons.flash_on : Icons.flash_off),
-              onPressed: () async {
-                await controller?.toggleFlash();
-                setState(() {
-                  _flashOn = !_flashOn;
-                });
-              },
-            ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            flex: 5,
-            child: QRView(
-              key: qrKey,
-              onQRViewCreated: _onQRViewCreated,
-              overlay: QrScannerOverlayShape(
-                borderColor: Colors.orange,
-                borderRadius: 10,
-                borderLength: 30,
-                borderWidth: 10,
-                cutOutSize: MediaQuery.of(context).size.width * 0.8,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: Text(
-                'Arahkan kamera ke QR Code',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _onQRViewCreated(QRViewController controller) {
-    this.controller = controller;
+  Future<void> _startScan() async {
+    if (_isScanning) return;
     
-    // Check if flash is available
-    controller.getFlashStatus().then((value) {
-      setState(() {
-        _hasFlash = value ?? false;
-      });
-    });
-    
-    // Listen for scanned data
-    _subscription = controller.scannedDataStream.listen((scanData) {
-      _processScannedData(scanData);
-    });
-    
-    // Resume camera
-    controller.resumeCamera();
-  }
-  
-  void _processScannedData(Barcode scanData) {
-    // Avoid processing multiple times
-    if (_screenOpened || _processingBarcode || !mounted) return;
-    
-    // Set processing flag
     setState(() {
-      _processingBarcode = true;
+      _isScanning = true;
     });
     
     try {
-      final code = scanData.code ?? '';
+      // Start barcode scanning
+      String barcodeScanRes = await FlutterBarcodeScanner.scanBarcode(
+        '#FF6600', // Orange color
+        'Cancel',
+        true,
+        ScanMode.QR,
+      );
       
-      if (code.isEmpty) {
-        print('🚫 SCANNER TL: Empty barcode content detected');
-        setState(() {
-          _processingBarcode = false;
-        });
+      // Check if scan was cancelled
+      if (barcodeScanRes == '-1') {
+        print('🔍 Scan cancelled');
+        Navigator.of(context).pop(null);
         return;
       }
       
-      print('🎯 SCANNER TL: QR code detected: ${code.length > 50 ? code.substring(0, 50) + "..." : code}');
+      print('🎯 SCANNER TL: QR code detected: ${barcodeScanRes.length > 50 ? barcodeScanRes.substring(0, 50) + "..." : barcodeScanRes}');
       
-      // Mark screen as opened
-      _screenOpened = true;
-      
-      // Stop the camera
-      controller?.pauseCamera();
+      setState(() {
+        _scanResult = barcodeScanRes;
+      });
       
       // Return to landscape orientation before calling callback
       SystemChrome.setPreferredOrientations([
@@ -172,16 +86,78 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
       ]);
       
       // Call the callback function with the scanned code
-      widget.onBarcodeDetected(code);
+      widget.onBarcodeDetected(barcodeScanRes);
       
       // Close the screen
-      Navigator.of(context).pop(code);
+      Navigator.of(context).pop(barcodeScanRes);
       
     } catch (e) {
       print('🚫 SCANNER TL ERROR: $e');
+      // Show error dialog
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Scanning Error'),
+          content: Text('Failed to scan barcode: ${e.toString()}'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop(null);
+              },
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } finally {
       setState(() {
-        _processingBarcode = false;
+        _isScanning = false;
       });
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _startScan,
+          ),
+        ],
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (_isScanning)
+              CircularProgressIndicator(
+                color: Colors.orange,
+              )
+            else
+              ElevatedButton.icon(
+                onPressed: _startScan,
+                icon: Icon(Icons.qr_code_scanner),
+                label: Text('Scan QR Code'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+              ),
+            SizedBox(height: 20),
+            Text(
+              'Arahkan kamera ke QR Code',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 } 

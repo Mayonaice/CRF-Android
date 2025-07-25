@@ -19,6 +19,11 @@ class QRCodeScannerTLWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Automatically show manual input dialog after a short delay
+    Future.delayed(Duration(milliseconds: 100), () {
+      _showManualInputDialog(context);
+    });
+    
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -43,6 +48,10 @@ class QRCodeScannerTLWidget extends StatelessWidget {
                 // Show manual input dialog
                 _showManualInputDialog(context);
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
               child: const Text('Enter QR Code Manually'),
             ),
           ],
@@ -56,6 +65,7 @@ class QRCodeScannerTLWidget extends StatelessWidget {
     
     return showDialog<void>(
       context: context,
+      barrierDismissible: false, // User must tap a button to close dialog
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Manual QR Code Input'),
@@ -79,7 +89,10 @@ class QRCodeScannerTLWidget extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop(null);
+              },
               child: const Text('Cancel'),
             ),
             TextButton(
@@ -88,6 +101,13 @@ class QRCodeScannerTLWidget extends StatelessWidget {
                   onBarcodeDetected(textController.text);
                   Navigator.of(context).pop();
                   Navigator.of(context).pop(textController.text);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('QR code cannot be empty'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
                 }
               },
               child: const Text('Submit'),

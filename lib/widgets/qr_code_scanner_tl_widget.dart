@@ -26,12 +26,14 @@ class QRCodeScannerTLWidget extends StatefulWidget {
   State<QRCodeScannerTLWidget> createState() => _QRCodeScannerTLWidgetState();
 }
 
-class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
+class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> with WidgetsBindingObserver {
   bool _isScanning = false;
   bool _qrFound = false;
   String _scanResult = '';
   bool _hasPermission = false;
   bool _loading = true;
+  Timer? _permissionCheckTimer;
+  int _permissionRetryCount = 0;
 
   @override
   void initState() {
@@ -39,18 +41,62 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
     _isScanning = false;
     _qrFound = false;
     
+    // Register observer for app lifecycle changes
+    WidgetsBinding.instance.addObserver(this);
+    
     // Change to portrait orientation for camera scanning
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
     
-    // Check for camera permission
-    _checkPermission();
+    // Delay permission check to avoid race conditions
+    Future.delayed(Duration(milliseconds: 300), () {
+      if (mounted) {
+        _checkPermission();
+      }
+    });
+  }
+  
+  @override
+  void dispose() {
+    // Unregister observer
+    WidgetsBinding.instance.removeObserver(this);
+    
+    // Stop camera and cancel timers
+    QrMobileVision.stop();
+    _permissionCheckTimer?.cancel();
+    
+    super.dispose();
+  }
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Handle app lifecycle changes to properly manage camera resources
+    if (state == AppLifecycleState.resumed) {
+      // App is visible, ensure camera is working
+      if (_hasPermission && !_qrFound && mounted) {
+        print('App resumed: ensuring camera is active');
+        _resetCameraState();
+      }
+    } else if (state == AppLifecycleState.inactive || 
+              state == AppLifecycleState.paused || 
+              state == AppLifecycleState.detached) {
+      // App is not visible, release camera resources
+      print('App state changed to $state: stopping camera');
+      QrMobileVision.stop();
+    }
   }
 
   Future<void> _checkPermission() async {
+    _permissionCheckTimer?.cancel();
+    
     try {
+      print('Checking camera permission...');
+      
+      // Cleanup previous instances
+      await QrMobileVision.stop();
+      
       // Check camera permission by starting with minimal required parameters
       await QrMobileVision.start(
         qrCodeHandler: (String? code) {
@@ -65,58 +111,98 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
         formats: const [BarcodeFormats.QR_CODE],
       );
       
-      setState(() {
-        _hasPermission = true;
-        _loading = false;
-      });
+      // Successfully initialized camera, permission granted
+      if (mounted) {
+        setState(() {
+          _hasPermission = true;
+          _loading = false;
+          _permissionRetryCount = 0;
+        });
+      }
       
-      // Stop immediately, we'll start again in build
+      // Stop immediately, we'll start again via QRCameraWrapper
       await QrMobileVision.stop();
+      
+      print('Camera permission check successful');
       
     } catch (e) {
       print('Error checking camera permission: $e');
-      setState(() {
-        _hasPermission = false;
-        _loading = false;
-      });
+      
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          
+          // Only set permission to false after a few retries
+          if (_permissionRetryCount >= 2) {
+            _hasPermission = false;
+          }
+        });
+      }
+      
+      // Retry permission check with increasing delay
+      _retryPermissionCheck();
     }
   }
+  
+  void _retryPermissionCheck() {
+    if (_permissionRetryCount >= 3 || !mounted || _hasPermission) return;
+    
+    _permissionRetryCount++;
+    final delay = _permissionRetryCount * 1000; // Increasing delay: 1s, 2s, 3s
+    
+    print('Retrying permission check in ${delay}ms (attempt $_permissionRetryCount)');
+    
+    _permissionCheckTimer = Timer(Duration(milliseconds: delay), () {
+      if (mounted) {
+        setState(() {
+          _loading = true;
+        });
+        _checkPermission();
+      }
+    });
+  }
 
-  @override
-  void dispose() {
-    QrMobileVision.stop();
-    super.dispose();
+  void _resetCameraState() {
+    if (mounted) {
+      setState(() {
+        _isScanning = false;
+        _qrFound = false;
+      });
+    }
   }
 
   void _handleCode(String code) {
     if (_qrFound || code.isEmpty) return;
     
-    setState(() {
-      _qrFound = true;
-      _scanResult = code;
-      _isScanning = false;
-    });
-    
     print('🎯 QR SCANNER TL: QR code detected: ${code.length > 50 ? code.substring(0, 50) + "..." : code}');
     
-    // Return to landscape orientation before calling callback
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    // Ensure we set state only if mounted
+    if (mounted) {
+      setState(() {
+        _qrFound = true;
+        _scanResult = code;
+        _isScanning = false;
+      });
     
-    // Call the callback function with the scanned code
-    widget.onBarcodeDetected(code);
-    
-    // Stop the camera
-    QrMobileVision.stop();
-    
-    // Close the screen after a short delay
-    Future.delayed(Duration(milliseconds: 500), () {
-      if (mounted) {
-        Navigator.of(context).pop(code);
-      }
-    });
+      // Return to landscape orientation before calling callback
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      
+      // Stop the camera
+      QrMobileVision.stop();
+      
+      // Call the callback function with the scanned code
+      widget.onBarcodeDetected(code);
+      
+      // Close the screen after a short delay
+      Future.delayed(Duration(milliseconds: 500), () {
+        if (mounted) {
+          Navigator.of(context).pop(code);
+        }
+      });
+    }
   }
 
   void _showManualInputDialog() {
@@ -189,7 +275,27 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
         ],
       ),
       body: _loading
-          ? Center(child: CircularProgressIndicator())
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text(
+                    'Initializing camera...',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  if (_permissionRetryCount > 0) 
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        'Retry attempt: $_permissionRetryCount',
+                        style: TextStyle(fontSize: 14, color: Colors.orange),
+                      ),
+                    ),
+                ],
+              ),
+            )
           : Column(
               children: [
                 Expanded(
@@ -199,12 +305,41 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
                           formats: const [BarcodeFormats.QR_CODE],
                           fit: BoxFit.cover,
                           notStartedBuilder: (context) => Center(
-                            child: Text('Camera starting...'),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                CircularProgressIndicator(),
+                                SizedBox(height: 16),
+                                Text('Starting camera...'),
+                              ],
+                            ),
                           ),
                           onError: (context, error) => Center(
-                            child: Text(
-                              'Camera error: $error',
-                              style: TextStyle(color: Colors.red),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  color: Colors.red,
+                                  size: 40,
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'Camera error',
+                                  style: TextStyle(color: Colors.red, fontSize: 18),
+                                ),
+                                SizedBox(height: 8),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                                  child: Text(
+                                    error.toString().length > 100 
+                                        ? '${error.toString().substring(0, 100)}...' 
+                                        : error.toString(),
+                                    style: TextStyle(color: Colors.red, fontSize: 14),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         )
@@ -213,7 +348,7 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                Icons.no_photography,  // Diganti dari Icons.camera_off ke Icons.no_photography
+                                Icons.no_photography,
                                 size: 64,
                                 color: Colors.red,
                               ),
@@ -230,6 +365,7 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
                                 onPressed: () {
                                   setState(() {
                                     _loading = true;
+                                    _permissionRetryCount = 0;
                                   });
                                   _checkPermission();
                                 },

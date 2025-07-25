@@ -324,6 +324,7 @@ class _CrfAppState extends State<CrfApp> {
   Widget build(BuildContext context) {
     return NotificationListenerWidget(
       child: MaterialApp(
+        debugShowCheckedModeBanner: false, // Hapus badge DEBUG di pojok kanan atas
         title: 'CRF App',
         theme: ThemeData(
           primarySwatch: Colors.blue,

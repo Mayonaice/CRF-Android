@@ -1,0 +1,23 @@
+workflows:
+  android-debug:
+    name: Android Debug Build
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      flutter: 3.16.9
+      java: 17
+      vars:
+        PACKAGE_NAME: "com.advantage.crf"
+    scripts:
+      - name: Set up environment
+        script: |
+          echo "Testing YAML"
+    artifacts:
+      - build/app/outputs/flutter-apk/app-debug.apk
+    publishing:
+      email:
+        recipients:
+          - devs@advantage.co.id
+        notify:
+          success: true
+          failure: true 

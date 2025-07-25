@@ -4,332 +4,54 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m1
     environment:
-      flutter: 3.16.9 # Using specific older version that's more compatible
-      java: 17 # Updated Java version for Android Gradle Plugin 8.1.0
+      flutter: 3.16.9
+      java: 17
       vars:
-        PACKAGE_NAME: "com.advantage.crf" # Application ID from build.gradle
+        PACKAGE_NAME: "com.advantage.crf"
     scripts:
       - name: Set up environment
         script: |
           echo "flutter.sdk=$HOME/programs/flutter" > "$CM_BUILD_DIR/android/local.properties"
           echo "sdk.dir=$ANDROID_SDK_ROOT" >> "$CM_BUILD_DIR/android/local.properties"
-          # Print environment for debugging
-          echo "Environment variables:"
-          env | sort
           
-      - name: Setup project
+      - name: Fix Preview class conflict
         script: |
-          # Display Flutter and Java versions
-          flutter --version
-          java -version
-          
-          # Create a dummy keystore for debug build
-          keytool -genkey -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          
-          # Create a simpler gradle.properties with AndroidX settings
-          echo "android.useAndroidX=true" > android/gradle.properties
-          echo "android.enableJetifier=true" >> android/gradle.properties
-          echo "org.gradle.jvmargs=-Xmx3072m" >> android/gradle.properties
-          echo "org.gradle.parallel=true" >> android/gradle.properties
-          echo "org.gradle.daemon=true" >> android/gradle.properties
-          echo "android.enableR8=false" >> android/gradle.properties
-          
-          # Generate required resource directories
-          mkdir -p android/app/src/main/res/drawable
-          mkdir -p android/app/src/main/res/drawable-v21
-          mkdir -p android/app/src/main/res/mipmap-hdpi
-          mkdir -p android/app/src/main/res/mipmap-mdpi
-          mkdir -p android/app/src/main/res/mipmap-xhdpi
-          mkdir -p android/app/src/main/res/mipmap-xxhdpi
-          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
-          mkdir -p android/app/src/main/res/values
-          
-          # Create styles.xml with simplified method
-          echo -n '<?xml version="1.0" encoding="utf-8"?><resources><style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar"><item name="android:windowBackground">@android:color/white</item></style><style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar"><item name="android:windowBackground">@android:color/white</item></style></resources>' > android/app/src/main/res/values/styles.xml
-          
-          # Create launch backgrounds with simplified method
-          echo -n '<?xml version="1.0" encoding="utf-8"?><layer-list xmlns:android="http://schemas.android.com/apk/res/android"><item><color android:color="#FFFFFF"/></item></layer-list>' > android/app/src/main/res/drawable/launch_background.xml
-          echo -n '<?xml version="1.0" encoding="utf-8"?><layer-list xmlns:android="http://schemas.android.com/apk/res/android"><item><color android:color="#FFFFFF"/></item></layer-list>' > android/app/src/main/res/drawable-v21/launch_background.xml
-          
-          # Remove any existing XML icon files to prevent resource conflicts
-          rm -f android/app/src/main/res/mipmap-*/ic_launcher.xml
-          
-          # Use the actual app icon from assets/images/app_icon.png
-          if [ -f "assets/images/app_icon.png" ]; then
-            echo "Using app_icon.png from assets/images/"
-            
-            # Create icons in all required sizes using the actual app icon
-            convert assets/images/app_icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png || echo "Icon conversion failed for hdpi"
-            convert assets/images/app_icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png || echo "Icon conversion failed for mdpi"
-            convert assets/images/app_icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png || echo "Icon conversion failed for xhdpi"
-            convert assets/images/app_icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png || echo "Icon conversion failed for xxhdpi"
-            convert assets/images/app_icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png || echo "Icon conversion failed for xxxhdpi"
-            
-            echo "App icon successfully converted to all sizes"
-          else
-            echo "app_icon.png not found, using placeholder"
-            # Fallback to placeholder if file doesn't exist
-            for dir in android/app/src/main/res/mipmap-*; do
-              convert -size 72x72 xc:#0056A4 "$dir/ic_launcher.png" || echo "Failed to create icon in $dir"
-            done
-          fi
-          
-          # If ImageMagick fails, copy the original PNG to all directories
-          if [ ! -f "android/app/src/main/res/mipmap-hdpi/ic_launcher.png" ] && [ -f "assets/images/app_icon.png" ]; then
-            echo "ImageMagick failed, copying original PNG to all directories"
-            for dir in android/app/src/main/res/mipmap-*; do
-              cp "assets/images/app_icon.png" "$dir/ic_launcher.png" || echo "Failed to copy icon to $dir"
-            done
-          fi
-          
-          # Clean and get dependencies
-          flutter clean
-          flutter pub get
-          
-          # Check Android setup
-          flutter doctor -v
-          
-      - name: Setup Gradle wrapper
-        script: |
-          # Check Android directory structure 
-          ls -la android/
-          
-          # Create Gradle wrapper manually
-          cd android
-          mkdir -p gradle/wrapper
-          echo "distributionBase=GRADLE_USER_HOME" > gradle/wrapper/gradle-wrapper.properties
-          echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
-          echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
-          echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
-          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-7.5-all.zip" >> gradle/wrapper/gradle-wrapper.properties
-          
-          # Download Gradle wrapper files
-          curl -s -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradle/wrapper/gradle-wrapper.jar
-          curl -s -o gradlew https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew
-          curl -s -o gradlew.bat https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew.bat
-          chmod +x gradlew
-          
-          # Verify wrapper is created
-          ls -la gradle/wrapper/
-          cd ..
-          
-      - name: Apply Kotlin fixes
-        script: |
-          # Add Kotlin fixes to android/build.gradle
-          BUILD_GRADLE="$CM_BUILD_DIR/android/build.gradle"
-          if [ -f "$BUILD_GRADLE" ]; then
-            # Insert Kotlin resolution strategy
-            sed -i '' '/rootProject.buildDir/i\
-          // Add resolution strategy to fix Kotlin version conflicts\
-          subprojects {\
-              configurations.all {\
-                  resolutionStrategy {\
-                      force "org.jetbrains.kotlin:kotlin-stdlib:1.7.10"\
-                      force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.10"\
-                      force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.10"\
-                      force "org.jetbrains.kotlin:kotlin-stdlib-common:1.7.10"\
-                  }\
-              }\
-          }\
-          ' "$BUILD_GRADLE"
-          fi
-          
-          # Update app's build.gradle to handle Kotlin version
-          APP_BUILD_GRADLE="$CM_BUILD_DIR/android/app/build.gradle"
-          if [ -f "$APP_BUILD_GRADLE" ]; then
-            # Add namespace if needed
-            if ! grep -q "namespace" "$APP_BUILD_GRADLE"; then
-              sed -i '' '/android {/a\
-              namespace "com.advantage.crf"\
-          ' "$APP_BUILD_GRADLE"
-            fi
-            
-            # Update Kotlin dependencies
-            sed -i '' 's/implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:\$kotlin_version"/implementation "org.jetbrains.kotlin:kotlin-stdlib:\$kotlin_version"/g' "$APP_BUILD_GRADLE"
-            
-            # Add proper lintOptions
-            if grep -q "lintOptions" "$APP_BUILD_GRADLE"; then
-              sed -i '' '/lintOptions/,/}/c\
-              lintOptions {\
-                  disable "InvalidPackage"\
-                  disable "Deprecated"\
-                  checkReleaseBuilds false\
-                  abortOnError false\
-              }\
-          ' "$APP_BUILD_GRADLE"
-            else
-              sed -i '' '/android {/a\
-              lintOptions {\
-                  disable "InvalidPackage"\
-                  disable "Deprecated"\
-                  checkReleaseBuilds false\
-                  abortOnError false\
-              }\
-          ' "$APP_BUILD_GRADLE"
-            fi
-            
-            # Add QR scanner specific options if not already present
-            if ! grep -q "aaptOptions" "$APP_BUILD_GRADLE"; then
-              sed -i '' '/android {/a\
-              aaptOptions {\
-                  noCompress "tflite"\
-                  noCompress "lite"\
-                  ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"\
-              }\
-          ' "$APP_BUILD_GRADLE"
-            fi
-            
-            # Add compileOptions if not already present
-            if ! grep -q "compileOptions" "$APP_BUILD_GRADLE"; then
-              sed -i '' '/android {/a\
-              compileOptions {\
-                  sourceCompatibility JavaVersion.VERSION_1_8\
-                  targetCompatibility JavaVersion.VERSION_1_8\
-              }\
-          ' "$APP_BUILD_GRADLE"
-            fi
-
-            # Ensure APK output name is consistent
-            sed -i '' '/applicationVariants.all/,/}/c\\
-              // Set a fixed name for the debug APK\\
-              applicationVariants.all { variant ->\\
-                  variant.outputs.all { output ->\\
-                      outputFileName = "CRF_Android_final.apk"\\
-                  }\\
-              }\\
-            ' "$APP_BUILD_GRADLE"
-          fi
-      
-      - name: Patch QR Mobile Vision package
-        script: |
-          # Find the qr_mobile_vision package
-          QR_MOBILE_VISION_PATH=$(find ~/.pub-cache/hosted/pub.dev -path "*/qr_mobile_vision-*" -type d | head -n 1)
-          
-          if [ -n "$QR_MOBILE_VISION_PATH" ]; then
-            echo "Found QR Mobile Vision at: $QR_MOBILE_VISION_PATH"
-            
-            # Update Android build.gradle
-            QR_GRADLE_FILE="$QR_MOBILE_VISION_PATH/android/build.gradle"
-            if [ -f "$QR_GRADLE_FILE" ]; then
-              echo "Updating $QR_GRADLE_FILE"
-              
-              # Replace compileSdkVersion and targetSdkVersion if needed
-              sed -i '' 's/compileSdkVersion 28/compileSdkVersion 33/g' "$QR_GRADLE_FILE"
-              sed -i '' 's/targetSdkVersion 28/targetSdkVersion 33/g' "$QR_GRADLE_FILE"
-              
-              # Update Gradle plugin version
-              sed -i '' 's/classpath "com.android.tools.build:gradle:3.2.1"/classpath "com.android.tools.build:gradle:7.3.1"/g' "$QR_GRADLE_FILE"
-              
-              # Add namespace if needed for compatibility with newer Gradle versions
-              sed -i '' '/defaultConfig {/a\\
-                namespace "com.github.rmtmckenzie.qrmobilevision"\\
-              ' "$QR_GRADLE_FILE"
-            fi
-
-            # Patch QR Mobile Vision Preview class conflict
-            QR_CAMERA_FILE="$QR_MOBILE_VISION_PATH/lib/src/qr_camera.dart"
-            if [ -f "$QR_CAMERA_FILE" ]; then
-              echo "Patching QR camera file to fix Preview class conflict"
-              # Rename Preview class to QRPreview to avoid conflict with Flutter
-              sed -i '' 's/class Preview extends StatelessWidget/class QRPreview extends StatelessWidget/g' "$QR_CAMERA_FILE"
-              sed -i '' 's/Preview(/QRPreview(/g' "$QR_CAMERA_FILE"
-            fi
-            
-            echo "QR Mobile Vision package patched successfully"
-          else
-            echo "QR Mobile Vision package not found, will try to continue without patching"
-          fi
-          
-          # Fix platform package
-          flutter pub remove platform || true
-          flutter pub add platform:3.1.3 || true
-          
           # Fix QR mobile vision Preview class conflict in our code
           if [ -f "lib/widgets/qr_code_scanner_tl_widget.dart" ]; then
             echo "Fixing QR Scanner widget in our code"
             sed -i '' 's/Icons.camera_off/Icons.no_photography/g' "lib/widgets/qr_code_scanner_tl_widget.dart"
           fi
           
-      - name: Build APK with Flutter
+      - name: Build APK
         script: |
-          # Configure Gradle for maximum compatibility
-          export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
-          
-          # Create output directories early
-          mkdir -p build/app/outputs/flutter-apk
-          mkdir -p "$FCI_BUILD_OUTPUT_DIR"
-          
-          # Clean any previous build attempts
           flutter clean
+          flutter pub get
           
-          # Get dependencies with forced update
-          flutter pub get --no-pub-get-verification
+          # Set fixed output name
+          cat > /tmp/apk_name.txt << 'EOF'
+    // Set a fixed name for the debug APK
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            outputFileName = "CRF_Android_final.apk"
+        }
+    }
+EOF
+          sed -i '' -e '/applicationVariants.all/,/}/c\
+'"$(cat /tmp/apk_name.txt)"'
+' "android/app/build.gradle"
           
-          # Try to build with specific configuration
-          echo "Building APK with Flutter..."
+          # Build APK
           flutter build apk --debug --no-shrink
           
-          # Check if APK exists
-          if [ ! -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
-            echo "Flutter build failed, trying direct Gradle build..."
-            
-            # Try building directly with Gradle
-            cd android
-            chmod +x ./gradlew
-            ./gradlew assembleDebug --stacktrace
-            cd ..
-            
-            # Check if Gradle produced an APK
-            if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
-              echo "✅ Gradle build succeeded"
-              mkdir -p build/app/outputs/flutter-apk/
-              cp android/app/build/outputs/apk/debug/app-debug.apk build/app/outputs/flutter-apk/app-debug.apk
-            fi
-          else
-            echo "✅ Flutter build succeeded"
-          fi
-          
-          # List all generated APKs
-          echo "Available APK files:"
-          find . -name "*.apk" -ls
-          
-      - name: Prepare APK artifacts
-        script: |
-          # Define a consistent file name (no timestamp) for easier download
-          FINAL_APK_NAME="CRF_Android_final.apk"
-          
-          # Ensure output directories exist
+          # Copy to output directory
           mkdir -p "$FCI_BUILD_OUTPUT_DIR"
-          
-          # Check if Flutter APK exists and copy it
-          if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
-            echo "Using Flutter APK"
-            cp build/app/outputs/flutter-apk/app-debug.apk "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME"
-          elif [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
-            echo "Using Gradle APK"
-            cp android/app/build/outputs/apk/debug/app-debug.apk "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME"
-          elif [ -f "android/app/build/outputs/apk/debug/CRF_Android_final.apk" ]; then
-            echo "Using Gradle custom named APK"
-            cp android/app/build/outputs/apk/debug/CRF_Android_final.apk "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME"
-          else
-            echo "No APK found! Build failed."
-            exit 1
-          fi
+          cp build/app/outputs/flutter-apk/app-debug.apk "$FCI_BUILD_OUTPUT_DIR/CRF_Android_final.apk"
           
           # Set MIME type for direct download
-          echo "application/vnd.android.package-archive" > "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME.mime"
-          
-          # Show file details
-          ls -la "$FCI_BUILD_OUTPUT_DIR"/*.apk
-          du -sh "$FCI_BUILD_OUTPUT_DIR"/*.apk
-          
-          echo "✅ APK successfully prepared for download"
+          echo "application/vnd.android.package-archive" > "$FCI_BUILD_OUTPUT_DIR/CRF_Android_final.apk.mime"
           
     artifacts:
       - build/app/outputs/flutter-apk/app-debug.apk
-      - android/app/build/outputs/apk/debug/app-debug.apk
-      - android/app/build/outputs/apk/debug/CRF_Android_final.apk
-      - build*/app/outputs/apk/debug/CRF_Android_final.apk
       - $FCI_BUILD_OUTPUT_DIR/CRF_Android_final.apk
     
     publishing:
@@ -339,6 +61,3 @@ workflows:
         notify:
           success: true
           failure: true
-      scripts:
-        # Script untuk memastikan APK tersedia untuk unduh
-        - echo "APK should now be available for direct download from Codemagic"

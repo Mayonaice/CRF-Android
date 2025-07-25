@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:qr_mobile_vision/qr_camera.dart';
+// Hapus import QrCamera yang menyebabkan konflik
 import 'package:qr_mobile_vision/qr_mobile_vision.dart';
+// Import wrapper kita sendiri
+import 'qr_camera_wrapper.dart';
 
 class QRCodeScannerTLWidget extends StatefulWidget {
   final String title;
@@ -86,8 +88,8 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
     super.dispose();
   }
 
-  void _handleCode(String? code) {
-    if (_qrFound || code == null || code.isEmpty) return;
+  void _handleCode(String code) {
+    if (_qrFound || code.isEmpty) return;
     
     setState(() {
       _qrFound = true;
@@ -192,9 +194,10 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
               children: [
                 Expanded(
                   child: _hasPermission
-                      ? QrCamera(
-                          fit: BoxFit.cover,
+                      ? QRCameraWrapper(
                           qrCodeCallback: _handleCode,
+                          formats: const [BarcodeFormats.QR_CODE],
+                          fit: BoxFit.cover,
                           notStartedBuilder: (context) => Center(
                             child: Text('Camera starting...'),
                           ),
@@ -204,7 +207,6 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
                               style: TextStyle(color: Colors.red),
                             ),
                           ),
-                          formats: const [BarcodeFormats.QR_CODE],
                         )
                       : Center(
                           child: Column(

@@ -107,21 +107,80 @@ workflows:
           echo "distributionPath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
           echo "zipStoreBase=GRADLE_USER_HOME" >> gradle/wrapper/gradle-wrapper.properties
           echo "zipStorePath=wrapper/dists" >> gradle/wrapper/gradle-wrapper.properties
-          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.0-all.zip" >> gradle/wrapper/gradle-wrapper.properties
+          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-7.5-all.zip" >> gradle/wrapper/gradle-wrapper.properties
           
           # Download Gradle wrapper files
-          curl -s -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.0.0/gradle/wrapper/gradle-wrapper.jar
-          curl -s -o gradlew https://raw.githubusercontent.com/gradle/gradle/v8.0.0/gradlew
-          curl -s -o gradlew.bat https://raw.githubusercontent.com/gradle/gradle/v8.0.0/gradlew.bat
+          curl -s -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradle/wrapper/gradle-wrapper.jar
+          curl -s -o gradlew https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew
+          curl -s -o gradlew.bat https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradlew.bat
           chmod +x gradlew
           
           # Verify wrapper is created
           ls -la gradle/wrapper/
           cd ..
           
+      - name: Fix flutter_barcode_scanner namespace issue
+        script: |
+          # Locate flutter_barcode_scanner AndroidManifest.xml
+          BARCODE_MANIFEST_PATH="$HOME/.pub-cache/hosted/pub.dev/flutter_barcode_scanner-2.0.0/android/src/main/AndroidManifest.xml"
+          if [ -f "$BARCODE_MANIFEST_PATH" ]; then
+            echo "Found flutter_barcode_scanner AndroidManifest.xml"
+            echo "Original content:"
+            cat "$BARCODE_MANIFEST_PATH"
+            
+            # Create backup
+            cp "$BARCODE_MANIFEST_PATH" "${BARCODE_MANIFEST_PATH}.bak"
+            
+            # Remove package attribute from manifest
+            sed -i '' 's/package="com.amolg.flutterbarcodescanner"//g' "$BARCODE_MANIFEST_PATH"
+            
+            echo "Modified content:"
+            cat "$BARCODE_MANIFEST_PATH"
+            
+            # Create namespace in build.gradle
+            BARCODE_GRADLE_PATH="$HOME/.pub-cache/hosted/pub.dev/flutter_barcode_scanner-2.0.0/android/build.gradle"
+            if [ -f "$BARCODE_GRADLE_PATH" ]; then
+              echo "Found flutter_barcode_scanner build.gradle"
+              echo "Original content:"
+              cat "$BARCODE_GRADLE_PATH"
+              
+              # Create backup
+              cp "$BARCODE_GRADLE_PATH" "${BARCODE_GRADLE_PATH}.bak"
+              
+              # Add namespace to android block
+              sed -i '' 's/android {/android {\n    namespace "com.amolg.flutterbarcodescanner"/g' "$BARCODE_GRADLE_PATH"
+              
+              echo "Modified content:"
+              cat "$BARCODE_GRADLE_PATH"
+            else
+              echo "flutter_barcode_scanner build.gradle not found"
+            fi
+          else
+            echo "flutter_barcode_scanner AndroidManifest.xml not found"
+          fi
+          
+          # Update project's build.gradle to use older AGP version
+          PROJECT_BUILD_GRADLE="$CM_BUILD_DIR/android/build.gradle"
+          if [ -f "$PROJECT_BUILD_GRADLE" ]; then
+            echo "Found project build.gradle"
+            echo "Original content:"
+            cat "$PROJECT_BUILD_GRADLE"
+            
+            # Create backup
+            cp "$PROJECT_BUILD_GRADLE" "${PROJECT_BUILD_GRADLE}.bak"
+            
+            # Replace AGP version to 7.3.0
+            sed -i '' 's/com.android.tools.build:gradle:8.1.0/com.android.tools.build:gradle:7.3.0/g' "$PROJECT_BUILD_GRADLE"
+            
+            echo "Modified content:"
+            cat "$PROJECT_BUILD_GRADLE"
+          else
+            echo "Project build.gradle not found"
+          fi
+          
       - name: Build APK with Flutter
         script: |
-          # Configure Gradle for maximum compatibility and mobile_scanner support
+          # Configure Gradle for maximum compatibility
           export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
           
           # Ensure no XML launcher icons exist

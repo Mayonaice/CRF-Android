@@ -57,14 +57,7 @@ class BarcodeScannerWidget extends StatefulWidget {
 }
 
 class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
-  MobileScannerController cameraController = MobileScannerController(
-    // Configure camera for portrait orientation during scanning
-    facing: CameraFacing.back,
-    torchEnabled: false,
-    formats: BarcodeFormat.values, // Support ALL barcode formats
-    useNewCameraSelector: true,
-    detectionSpeed: DetectionSpeed.normal, // Use normal detection speed for better accuracy
-  );
+  late MobileScannerController cameraController;
   bool _screenOpened = false;
   bool _processingBarcode = false; // Tambahkan flag untuk mencegah multiple processing
 
@@ -83,6 +76,18 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
     // Debug log
     print('🔍 Barcode scanner initialized with ALL formats');
     print('🔍 Supported formats: ${BarcodeFormat.values}');
+    
+    // Inisialisasi controller dengan konfigurasi yang lebih agresif
+    cameraController = MobileScannerController(
+      // Configure camera for portrait orientation during scanning
+      facing: CameraFacing.back,
+      torchEnabled: false,
+      formats: BarcodeFormat.values, // Support ALL barcode formats
+      useNewCameraSelector: true,
+      detectionSpeed: DetectionSpeed.normal, // Use normal detection speed for better accuracy
+      detectionTimeoutMs: 1000, // Timeout untuk deteksi (1 detik)
+      returnImage: true, // Mengembalikan gambar untuk debugging
+    );
   }
 
   @override

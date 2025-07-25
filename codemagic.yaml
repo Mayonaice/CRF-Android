@@ -7,10 +7,44 @@ workflows:
       flutter: 3.16.9
       java: 17
     scripts:
+      - name: Fix Resource Conflicts
+        script: |
+          # Tampilkan struktur direktori untuk debugging
+          echo "Checking resource directories before cleanup:"
+          find android/app/src/main/res -type f -name "ic_launcher*" | sort
+          
+          # Hapus semua file XML ic_launcher untuk mencegah konflik dengan PNG
+          find android/app/src/main/res/mipmap-*/ic_launcher.xml -delete 2>/dev/null || true
+          find $CM_BUILD_DIR/android/app/src/main/res/mipmap-*/ic_launcher.xml -delete 2>/dev/null || true
+          
+          # Hapus juga file foreground dan background yang mungkin konflik
+          find android/app/src/main/res/mipmap-*/ic_launcher_foreground.* -delete 2>/dev/null || true
+          find android/app/src/main/res/mipmap-*/ic_launcher_background.* -delete 2>/dev/null || true
+          
+          # Pastikan mipmap-anydpi-v26 tidak bermasalah (folder khusus adaptive icons)
+          rm -rf android/app/src/main/res/mipmap-anydpi-v26 2>/dev/null || true
+          
+          echo "Resource directories after cleanup:"
+          find android/app/src/main/res -type f -name "ic_launcher*" | sort
+          
+          echo "Removed conflicting launcher icons"
+          
       - name: Build APK
         script: |
           flutter clean
           flutter pub get
-          flutter build apk --debug
+          
+          echo "Starting APK build..."
+          flutter build apk --debug --verbose
+          
+          # Verifikasi apakah APK berhasil dibuat
+          if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
+            echo "✅ APK build successful!"
+            ls -la build/app/outputs/flutter-apk/
+          else
+            echo "❌ APK build failed!"
+            exit 1
+          fi
+          
     artifacts:
       - build/app/outputs/flutter-apk/*.apk

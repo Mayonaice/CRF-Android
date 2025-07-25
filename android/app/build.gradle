@@ -105,6 +105,8 @@ android {
         noCompress "tflite"
         noCompress "lite"
         ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
+        // Tambahkan opsi untuk mengatasi error resource duplikat
+        additionalParameters '--warn-manifest-validation', '--no-version-vectors'
     }
     
     // Add for QR code scanner compatibility

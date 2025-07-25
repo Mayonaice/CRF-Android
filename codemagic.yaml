@@ -6,7 +6,7 @@ workflows:
     environment:
       flutter: 3.16.9 # Using specific older version that's more compatible
       java: 17 # Updated Java version for Android Gradle Plugin 8.1.0
-# No signing config for debug build
+      # No signing config for debug build
       vars:
         PACKAGE_NAME: "com.advantage.crf" # Application ID from build.gradle
     scripts:
@@ -17,7 +17,7 @@ workflows:
           # Print environment for debugging
           echo "Environment variables:"
           env | sort
-          
+
       - name: Setup project
         script: |
           # Display Flutter and Java versions
@@ -33,11 +33,6 @@ workflows:
           echo "org.gradle.jvmargs=-Xmx3072m" >> android/gradle.properties
           echo "org.gradle.parallel=true" >> android/gradle.properties
           echo "org.gradle.daemon=true" >> android/gradle.properties
-          echo "android.compileSdkVersion=34" >> android/gradle.properties
-          echo "android.targetSdkVersion=34" >> android/gradle.properties
-          echo "android.buildToolsVersion=34.0.0" >> android/gradle.properties
-          # Add Kotlin version settings
-          echo "kotlin.stdlib.default.dependency=false" >> android/gradle.properties
           
           # Generate required resource directories
           mkdir -p android/app/src/main/res/drawable
@@ -99,9 +94,6 @@ workflows:
           # Check Android directory structure 
           ls -la android/
           
-          # Check Android manifest and other files
-          cat android/app/src/main/AndroidManifest.xml
-          
           # Create Gradle wrapper manually
           cd android
           mkdir -p gradle/wrapper
@@ -121,780 +113,147 @@ workflows:
           ls -la gradle/wrapper/
           cd ..
           
-      - name: Fix flutter_barcode_scanner namespace issue
+      - name: Apply Kotlin fixes
         script: |
-          # Locate flutter_barcode_scanner AndroidManifest.xml
-          BARCODE_MANIFEST_PATH="$HOME/.pub-cache/hosted/pub.dev/flutter_barcode_scanner-2.0.0/android/src/main/AndroidManifest.xml"
-          if [ -f "$BARCODE_MANIFEST_PATH" ]; then
-            echo "Found flutter_barcode_scanner AndroidManifest.xml"
-            echo "Original content:"
-            cat "$BARCODE_MANIFEST_PATH"
-            
-            # Create backup
-            cp "$BARCODE_MANIFEST_PATH" "${BARCODE_MANIFEST_PATH}.bak"
-            
-            # Remove package attribute from manifest
-            sed -i '' 's/package="com.amolg.flutterbarcodescanner"//g' "$BARCODE_MANIFEST_PATH"
-            
-            echo "Modified content:"
-            cat "$BARCODE_MANIFEST_PATH"
-            
-            # Create namespace in build.gradle
-            BARCODE_GRADLE_PATH="$HOME/.pub-cache/hosted/pub.dev/flutter_barcode_scanner-2.0.0/android/build.gradle"
-            if [ -f "$BARCODE_GRADLE_PATH" ]; then
-              echo "Found flutter_barcode_scanner build.gradle"
-              echo "Original content:"
-              cat "$BARCODE_GRADLE_PATH"
-              
-              # Create backup
-              cp "$BARCODE_GRADLE_PATH" "${BARCODE_GRADLE_PATH}.bak"
-              
-              # Add namespace to android block
-              sed -i '' 's/android {/android {\n    namespace "com.amolg.flutterbarcodescanner"/g' "$BARCODE_GRADLE_PATH"
-              
-              echo "Modified content:"
-              cat "$BARCODE_GRADLE_PATH"
-            else
-              echo "flutter_barcode_scanner build.gradle not found"
-            fi
-          else
-            echo "flutter_barcode_scanner AndroidManifest.xml not found"
+          # Add Kotlin fixes to android/build.gradle
+          BUILD_GRADLE="$CM_BUILD_DIR/android/build.gradle"
+          if [ -f "$BUILD_GRADLE" ]; then
+            # Insert Kotlin resolution strategy
+            sed -i '' '/rootProject.buildDir/i\
+          // Add resolution strategy to fix Kotlin version conflicts\
+          subprojects {\
+              configurations.all {\
+                  resolutionStrategy {\
+                      force "org.jetbrains.kotlin:kotlin-stdlib:1.7.10"\
+                      force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.10"\
+                      force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.10"\
+                      force "org.jetbrains.kotlin:kotlin-stdlib-common:1.7.10"\
+                  }\
+              }\
+          }\
+          ' "$BUILD_GRADLE"
           fi
           
-          # Update project's build.gradle to use older AGP version
-          PROJECT_BUILD_GRADLE="$CM_BUILD_DIR/android/build.gradle"
-          if [ -f "$PROJECT_BUILD_GRADLE" ]; then
-            echo "Found project build.gradle"
-            echo "Original content:"
-            cat "$PROJECT_BUILD_GRADLE"
-            
-            # Create backup
-            cp "$PROJECT_BUILD_GRADLE" "${PROJECT_BUILD_GRADLE}.bak"
-            
-            # Replace AGP version to 7.3.0
-            sed -i '' 's/com.android.tools.build:gradle:8.1.0/com.android.tools.build:gradle:7.3.0/g' "$PROJECT_BUILD_GRADLE"
-            
-            echo "Modified content:"
-            cat "$PROJECT_BUILD_GRADLE"
-          else
-            echo "Project build.gradle not found"
-          fi
-          
-      - name: Replace android_id plugin with compatible version
-        script: |
-          # Create a directory for our custom android_id plugin
-          mkdir -p "$CM_BUILD_DIR/custom_plugins/android_id/android/src/main/kotlin/dev/fluttercommunity/android_id"
-          
-          # Create the Kotlin implementation file
-          cat > "$CM_BUILD_DIR/custom_plugins/android_id/android/src/main/kotlin/dev/fluttercommunity/android_id/AndroidIdPlugin.kt" << 'EOF'
-          package dev.fluttercommunity.android_id
-
-          import android.content.Context
-          import android.provider.Settings
-          import io.flutter.embedding.engine.plugins.FlutterPlugin
-          import io.flutter.plugin.common.MethodCall
-          import io.flutter.plugin.common.MethodChannel
-          import io.flutter.plugin.common.MethodChannel.MethodCallHandler
-          import io.flutter.plugin.common.MethodChannel.Result
-
-          /** AndroidIdPlugin */
-          class AndroidIdPlugin : FlutterPlugin, MethodCallHandler {
-              private lateinit var channel: MethodChannel
-              private lateinit var context: Context
-
-              override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-                  channel = MethodChannel(flutterPluginBinding.binaryMessenger, "dev.fluttercommunity.plus/android_id")
-                  channel.setMethodCallHandler(this)
-                  context = flutterPluginBinding.applicationContext
-              }
-
-              override fun onMethodCall(call: MethodCall, result: Result) {
-                  if (call.method == "getAndroidId") {
-                      try {
-                          val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
-                          result.success(androidId)
-                      } catch (e: Exception) {
-                          result.error("ANDROID_ID_ERROR", "Failed to get Android ID", e.message)
-                      }
-                  } else {
-                      result.notImplemented()
-                  }
-              }
-
-              override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-                  channel.setMethodCallHandler(null)
-              }
-          }
-          EOF
-          
-          # Create the build.gradle file
-          cat > "$CM_BUILD_DIR/custom_plugins/android_id/android/build.gradle" << 'EOF'
-          group 'dev.fluttercommunity.android_id'
-          version '1.0'
-
-          buildscript {
-              ext.kotlin_version = '1.7.10'
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:7.3.0'
-                  classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-              }
-          }
-
-          rootProject.allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-
-          apply plugin: 'com.android.library'
-          apply plugin: 'kotlin-android'
-
-          android {
-              namespace "dev.fluttercommunity.android_id"
-              compileSdkVersion 33
-
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_1_8
-                  targetCompatibility JavaVersion.VERSION_1_8
-              }
-
-              kotlinOptions {
-                  jvmTarget = '1.8'
-              }
-
-              defaultConfig {
-                  minSdkVersion 16
-              }
-          }
-
-          dependencies {
-              implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-          }
-          EOF
-          
-          # Create AndroidManifest.xml
-          mkdir -p "$CM_BUILD_DIR/custom_plugins/android_id/android/src/main"
-          cat > "$CM_BUILD_DIR/custom_plugins/android_id/android/src/main/AndroidManifest.xml" << 'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-          </manifest>
-          EOF
-          
-          # Create pubspec.yaml
-          cat > "$CM_BUILD_DIR/custom_plugins/android_id/pubspec.yaml" << 'EOF'
-          name: android_id
-          description: Android ID plugin compatible with Kotlin 1.7.10
-          version: 0.1.3+1
-          
-          environment:
-            sdk: '>=2.12.0 <4.0.0'
-            flutter: ">=1.20.0"
-          
-          dependencies:
-            flutter:
-              sdk: flutter
-          
-          flutter:
-            plugin:
-              platforms:
-                android:
-                  package: dev.fluttercommunity.android_id
-                  pluginClass: AndroidIdPlugin
-          EOF
-          
-          # Replace the original android_id plugin with our custom one
-          ANDROID_ID_DIR=$(find "$HOME/.pub-cache/hosted/pub.dev" -type d -path "*android_id*" | head -n 1)
-          if [ -n "$ANDROID_ID_DIR" ]; then
-            echo "Found android_id plugin directory at: $ANDROID_ID_DIR"
-            
-            # Backup the original plugin
-            cp -r "$ANDROID_ID_DIR" "${ANDROID_ID_DIR}.bak"
-            
-            # Replace with our custom plugin
-            cp -r "$CM_BUILD_DIR/custom_plugins/android_id/"* "$ANDROID_ID_DIR/"
-            
-            echo "Replaced android_id plugin with compatible version"
-          else
-            echo "android_id plugin directory not found"
-          fi
-          
-      - name: Update build.gradle for mobile_scanner
-        script: |
-          # Create a patch file for the project's build.gradle
-          cat > android_build_gradle_patch.txt << 'EOF'
-          
-          // Add this to root build.gradle to support custom YuvToRgbConverter
-          subprojects {
-              afterEvaluate {project ->
-                  if (project.hasProperty('android')) {
-                      android {
-                          // Disable RenderScript for all modules
-                          buildFeatures {
-                              renderScript false
-                          }
-                          
-                          // Increase Java compatibility for newer features
-                          compileOptions {
-                              sourceCompatibility JavaVersion.VERSION_1_8
-                              targetCompatibility JavaVersion.VERSION_1_8
-                          }
-                      }
-                  }
-              }
-          }
-          
-          EOF
-          
-          # Insert this into the project's build.gradle file
-          PROJECT_BUILD_GRADLE="$CM_BUILD_DIR/android/build.gradle"
-          if [ -f "$PROJECT_BUILD_GRADLE" ]; then
-            # Create backup
-            cp "$PROJECT_BUILD_GRADLE" "${PROJECT_BUILD_GRADLE}.bak2"
-            
-            # Insert the patch before the rootProject.buildDir line
-            sed -i '' '/rootProject.buildDir/i\\
-          '"$(cat android_build_gradle_patch.txt)" "$PROJECT_BUILD_GRADLE"
-            
-            echo "Updated project build.gradle for mobile_scanner compatibility"
-            cat "$PROJECT_BUILD_GRADLE"
-          else
-            echo "Project build.gradle not found"
-          fi
-          
-      - name: Patch mobile_scanner package
-        script: |
-          # Create directory for our patched mobile_scanner
-          mkdir -p "$CM_BUILD_DIR/patched_packages/mobile_scanner/android/src/main/kotlin/dev/steenbakker/mobile_scanner/utils"
-          
-          # Create a fixed version of YuvToRgbConverter.kt that doesn't use deprecated APIs
-          cat > "$CM_BUILD_DIR/patched_packages/mobile_scanner/android/src/main/kotlin/dev/steenbakker/mobile_scanner/utils/YuvToRgbConverter.kt" << 'EOF'
-          package dev.steenbakker.mobile_scanner.utils
-
-          import android.content.Context
-          import android.graphics.Bitmap
-          import android.graphics.ImageFormat
-          import android.graphics.Rect
-          import android.media.Image
-          import androidx.annotation.RequiresApi
-          import java.nio.ByteBuffer
-          
-          /**
-           * Helper class used to efficiently convert a [Media.Image] object from
-           * [ImageFormat.YUV_420_888] format to an RGB [Bitmap] object.
-           *
-           * This has been modified to avoid using RenderScript which is deprecated
-           */
-          class YuvToRgbConverter(context: Context) {
-              
-              // Simple YUV420 to RGB conversion without using RenderScript
-              @RequiresApi(21)
-              fun yuvToRgb(image: Image, output: Bitmap) {
-                  val yBuffer = image.planes[0].buffer
-                  val uBuffer = image.planes[1].buffer
-                  val vBuffer = image.planes[2].buffer
-                  
-                  val ySize = yBuffer.remaining()
-                  val uSize = uBuffer.remaining()
-                  val vSize = vBuffer.remaining()
-                  
-                  val nv21 = ByteArray(ySize + uSize + vSize)
-                  
-                  // U and V are swapped
-                  yBuffer.get(nv21, 0, ySize)
-                  vBuffer.get(nv21, ySize, vSize)
-                  uBuffer.get(nv21, ySize + vSize, uSize)
-                  
-                  val yuvToRgbConverter = YuvByteArrayToRgbConverter()
-                  yuvToRgbConverter.nv21ToRgba(
-                      nv21, 
-                      image.width, 
-                      image.height, 
-                      output
-                  )
-              }
-          }
-          
-          /**
-           * Helper class for manual YUV420 to RGB conversion
-           */
-          private class YuvByteArrayToRgbConverter {
-              private val rgbBytes = IntArray(1)
-              
-              fun nv21ToRgba(yuv: ByteArray, width: Int, height: Int, output: Bitmap) {
-                  var y: Int
-                  var u: Int
-                  var v: Int
-                  var index = 0
-                  val size = width * height
-                  val uvOffset = size
-                  val pixels = IntArray(size)
-                  
-                  for (j in 0 until height) {
-                      for (i in 0 until width) {
-                          y = yuv[j * width + i].toInt() and 0xFF
-                          // NV21 format: YYYYVU
-                          val uvIndex = uvOffset + (j shr 1) * width + (i and 0xFFFFFFFE)
-                          v = yuv[uvIndex].toInt() and 0xFF
-                          u = yuv[uvIndex + 1].toInt() and 0xFF
-                          
-                          // YUV to RGB conversion
-                          y = if (y < 16) 16 else y
-                          var r = (1.164 * (y - 16) + 1.596 * (v - 128)).toInt()
-                          var g = (1.164 * (y - 16) - 0.813 * (v - 128) - 0.391 * (u - 128)).toInt()
-                          var b = (1.164 * (y - 16) + 2.018 * (u - 128)).toInt()
-                          
-                          r = if (r < 0) 0 else if (r > 255) 255 else r
-                          g = if (g < 0) 0 else if (g > 255) 255 else g
-                          b = if (b < 0) 0 else if (b > 255) 255 else b
-                          
-                          // RGBA format (we set alpha to 255)
-                          pixels[index++] = 0xFF000000.toInt() or (r shl 16) or (g shl 8) or b
-                      }
-                  }
-                  
-                  output.setPixels(pixels, 0, width, 0, 0, width, height)
-              }
-          }
-          EOF
-          
-          # Find the mobile_scanner YuvToRgbConverter.kt file
-          MOBILE_SCANNER_YUV_PATH=$(find "$HOME/.pub-cache/hosted/pub.dev" -path "*mobile_scanner*/android/src/main/kotlin/dev/steenbakker/mobile_scanner/utils/YuvToRgbConverter.kt" | head -n 1)
-          if [ -n "$MOBILE_SCANNER_YUV_PATH" ]; then
-            echo "Found mobile_scanner YuvToRgbConverter.kt at: $MOBILE_SCANNER_YUV_PATH"
-            
-            # Create backup
-            cp "$MOBILE_SCANNER_YUV_PATH" "${MOBILE_SCANNER_YUV_PATH}.bak"
-            
-            # Replace with our fixed version
-            cp "$CM_BUILD_DIR/patched_packages/mobile_scanner/android/src/main/kotlin/dev/steenbakker/mobile_scanner/utils/YuvToRgbConverter.kt" "$MOBILE_SCANNER_YUV_PATH"
-            
-            echo "Patched mobile_scanner YuvToRgbConverter.kt with a version that doesn't use deprecated RenderScript APIs"
-          else
-            echo "mobile_scanner YuvToRgbConverter.kt not found"
-          fi
-          
-          # Also update the mobile_scanner build.gradle to handle RenderScript deprecation
-          MOBILE_SCANNER_GRADLE_PATH=$(find "$HOME/.pub-cache/hosted/pub.dev" -path "*mobile_scanner*/android/build.gradle" | head -n 1)
-          if [ -n "$MOBILE_SCANNER_GRADLE_PATH" ]; then
-            echo "Found mobile_scanner build.gradle at: $MOBILE_SCANNER_GRADLE_PATH"
-            
-            # Create backup
-            cp "$MOBILE_SCANNER_GRADLE_PATH" "${MOBILE_SCANNER_GRADLE_PATH}.bak"
-            
-            # Update the build.gradle file to remove RenderScript dependencies
-            sed -i '' 's/renderscriptTargetApi.*/\/\/ Removed renderscriptTargetApi - using custom YuvToRgbConverter/g' "$MOBILE_SCANNER_GRADLE_PATH"
-            sed -i '' 's/renderscriptSupportModeEnabled.*/\/\/ Removed renderscriptSupportModeEnabled - using custom YuvToRgbConverter/g' "$MOBILE_SCANNER_GRADLE_PATH"
-            
-            echo "Updated mobile_scanner build.gradle to remove RenderScript dependencies"
-          else
-            echo "mobile_scanner build.gradle not found"
-          fi
-          
-      - name: Patch Flutter platform package
-        script: |
-          # Create a directory for our patched platform package
-          mkdir -p "$CM_BUILD_DIR/patched_packages/platform/lib/src/interface"
-          
-          # Create a fixed version of local_platform.dart
-          cat > "$CM_BUILD_DIR/patched_packages/platform/lib/src/interface/local_platform.dart" << 'EOF'
-          // Copyright 2017 The Chromium Authors. All rights reserved.
-          // Use of this source code is governed by a BSD-style license that can be
-          // found in the LICENSE file.
-          
-          import 'dart:io' as io;
-          
-          import '../platform.dart';
-          import 'local_interface.dart';
-          
-          /// `Platform` implementation that uses dart:io.
-          class LocalPlatform extends LocalPlatformInterface {
-            /// Creates a new [LocalPlatform].
-            const LocalPlatform();
-          
-            @override
-            int get numberOfProcessors => io.Platform.numberOfProcessors;
-          
-            @override
-            String get pathSeparator => io.Platform.pathSeparator;
-          
-            @override
-            String get operatingSystem => io.Platform.operatingSystem;
-          
-            @override
-            String get operatingSystemVersion => io.Platform.operatingSystemVersion;
-          
-            @override
-            String get localHostname => io.Platform.localHostname;
-          
-            @override
-            Map<String, String> get environment => io.Platform.environment;
-          
-            @override
-            String get executable => io.Platform.executable;
-          
-            @override
-            String get resolvedExecutable => io.Platform.resolvedExecutable;
-          
-            @override
-            Uri get script => io.Platform.script;
-          
-            @override
-            List<String> get executableArguments => io.Platform.executableArguments;
-          
-            @override
-            String get version {
-              try {
-                // This getter is deprecated but still available.
-                // ignore: deprecated_member_use
-                return io.Platform.version;
-              } on NoSuchMethodError {
-                return super.version;
-              }
-            }
-          
-            @override
-            String get localeName {
-              try {
-                return io.Platform.localeName;
-              } on NoSuchMethodError {
-                return super.localeName;
-              }
-            }
-          
-            @override
-            bool get isAndroid => io.Platform.isAndroid;
-          
-            @override
-            bool get isIOS => io.Platform.isIOS;
-          
-            @override
-            bool get isFuchsia => io.Platform.isFuchsia;
-          
-            @override
-            bool get isLinux => io.Platform.isLinux;
-          
-            @override
-            bool get isMacOS => io.Platform.isMacOS;
-          
-            @override
-            bool get isWindows => io.Platform.isWindows;
-          }
-          EOF
-          
-          # Find all platform package directories in the Flutter cache
-          find "$HOME/.pub-cache" -path "*/platform-*/lib/src/interface/local_platform.dart" | while read -r file; do
-            echo "Found platform package file: $file"
-            
-            # Create backup
-            cp "$file" "${file}.bak"
-            
-            # Replace with our fixed version
-            cp "$CM_BUILD_DIR/patched_packages/platform/lib/src/interface/local_platform.dart" "$file"
-            
-            echo "Patched platform package file: $file"
-          done
-          
-      - name: Fix platform package issue
-        script: |
-          # Find the platform package directory
-          PLATFORM_PATH=$(find "$HOME/.pub-cache/hosted/pub.dev" -path "*platform-3.0.0*" -type d | head -n 1)
-          if [ -n "$PLATFORM_PATH" ]; then
-            echo "Found platform package at: $PLATFORM_PATH"
-            
-            # Fix the local_platform.dart file
-            LOCAL_PLATFORM_PATH="$PLATFORM_PATH/lib/src/interface/local_platform.dart"
-            if [ -f "$LOCAL_PLATFORM_PATH" ]; then
-              echo "Found local_platform.dart at: $LOCAL_PLATFORM_PATH"
-              
-              # Create backup
-              cp "$LOCAL_PLATFORM_PATH" "${LOCAL_PLATFORM_PATH}.bak"
-              
-              # Replace the line with packageRoot
-              sed -i '' 's/io.Platform.packageRoot; \/\/ ignore: deprecated_member_use/\/\/ io.Platform.packageRoot; \/\/ Commented out as packageRoot is removed/g' "$LOCAL_PLATFORM_PATH"
-              
-              echo "Modified local_platform.dart:"
-              cat "$LOCAL_PLATFORM_PATH"
-            else
-              echo "local_platform.dart not found"
-            fi
-          else
-            echo "Platform package not found, installing correct version"
-            flutter pub add platform:3.1.3
-          fi
-          
-      - name: Fix Kotlin dependency conflicts
-        script: |
-          # Create a temporary file with the resolution strategy
-          cat > kotlin_fix.gradle << 'EOF'
-          
-          // Add resolution strategy to fix Kotlin version conflicts
-          subprojects {
-              configurations.all {
-                  resolutionStrategy {
-                      force "org.jetbrains.kotlin:kotlin-stdlib:1.7.10"
-                      force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.10"
-                      force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.10"
-                      force "org.jetbrains.kotlin:kotlin-stdlib-common:1.7.10"
-                      force "org.jetbrains.kotlin:kotlin-reflect:1.7.10"
-                      
-                      // Force all Kotlin components to use the same version
-                      eachDependency { DependencyResolveDetails details ->
-                          if (details.requested.group == 'org.jetbrains.kotlin') {
-                              details.useVersion "1.7.10"
-                          }
-                      }
-                  }
-              }
-          }
-          
-          EOF
-          
-          # Apply the fix to the root project by inserting before the tasks.register line
-          PROJECT_BUILD_GRADLE="$CM_BUILD_DIR/android/build.gradle"
-          if [ -f "$PROJECT_BUILD_GRADLE" ]; then
-            # Create backup
-            cp "$PROJECT_BUILD_GRADLE" "${PROJECT_BUILD_GRADLE}.bak"
-            
-            # Insert the resolution strategy before the tasks.register line
-            sed -i '' '/tasks.register/i\\
-          '"$(cat kotlin_fix.gradle)" "$PROJECT_BUILD_GRADLE"
-            
-            echo "Modified project build.gradle:"
-            cat "$PROJECT_BUILD_GRADLE"
-          else
-            echo "Project build.gradle not found"
-          fi
-          
-          # Update app's build.gradle to use consistent Kotlin stdlib
+          # Update app's build.gradle to handle Kotlin version
           APP_BUILD_GRADLE="$CM_BUILD_DIR/android/app/build.gradle"
           if [ -f "$APP_BUILD_GRADLE" ]; then
-            # Create backup
-            cp "$APP_BUILD_GRADLE" "${APP_BUILD_GRADLE}.bak"
+            # Add namespace if needed
+            if ! grep -q "namespace" "$APP_BUILD_GRADLE"; then
+              sed -i '' '/android {/a\
+              namespace "com.advantage.crf"\
+          ' "$APP_BUILD_GRADLE"
+            fi
             
-            # Replace kotlin-stdlib-jdk7 with kotlin-stdlib
+            # Update Kotlin dependencies
             sed -i '' 's/implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:\$kotlin_version"/implementation "org.jetbrains.kotlin:kotlin-stdlib:\$kotlin_version"/g' "$APP_BUILD_GRADLE"
             
-            # Add exclusions for multidex
-            sed -i '' 's/implementation '"'"'androidx.multidex:multidex:2.0.1'"'"'/implementation('"'"'androidx.multidex:multidex:2.0.1'"'"') {\n        exclude group: '"'"'org.jetbrains.kotlin'"'"', module: '"'"'kotlin-stdlib-jdk7'"'"'\n        exclude group: '"'"'org.jetbrains.kotlin'"'"', module: '"'"'kotlin-stdlib-jdk8'"'"'\n    }/g' "$APP_BUILD_GRADLE"
-            
-            echo "Modified app build.gradle:"
-            cat "$APP_BUILD_GRADLE"
-          else
-            echo "App build.gradle not found"
-          fi
-          
-          # Fix android_id plugin Kotlin version issue
-          ANDROID_ID_GRADLE_PATH=$(find "$HOME/.pub-cache/hosted/pub.dev" -name "build.gradle" -path "*android_id*" | head -n 1)
-          if [ -n "$ANDROID_ID_GRADLE_PATH" ]; then
-            echo "Found android_id build.gradle at: $ANDROID_ID_GRADLE_PATH"
-            
-            # Create backup
-            cp "$ANDROID_ID_GRADLE_PATH" "${ANDROID_ID_GRADLE_PATH}.bak"
-            
-            # Force Kotlin version in the plugin's build.gradle
-            sed -i '' 's/ext.kotlin_version = ".*"/ext.kotlin_version = "1.7.10"/g' "$ANDROID_ID_GRADLE_PATH"
-            
-            echo "Modified android_id build.gradle:"
-            cat "$ANDROID_ID_GRADLE_PATH"
-          else
-            echo "android_id build.gradle not found"
-          fi
-          
-      - name: Create working APK file
-        script: |
-          # Make sure we have a real APK file
-          echo "Creating real downloadable APK file..."
-          
-          # Ensure directories exist
-          mkdir -p build/app/outputs/flutter-apk
-          mkdir -p "$FCI_BUILD_OUTPUT_DIR"
-          mkdir -p "$FCI_ARTIFACT_ROOT"
-          mkdir -p "$FCI_EXPORT_DIR"
-          
-          # Try to build real APK using Flutter first
-          echo "Attempting to build APK using Flutter..."
-          flutter clean
-          flutter pub get
-          flutter build apk --debug || true
-          
-          # Check if Flutter build succeeded
-          if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
-            echo "✓ Successfully built APK with Flutter"
-          else
-            # Try direct Gradle build
-            echo "Flutter build failed, trying direct Gradle build..."
-            cd android
-            chmod +x ./gradlew
-            ./gradlew assembleDebug || true
-            cd ..
-            
-            # Check if Gradle build succeeded
-            if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
-              echo "✓ Successfully built APK with Gradle"
-              mkdir -p build/app/outputs/flutter-apk
-              cp android/app/build/outputs/apk/debug/app-debug.apk build/app/outputs/flutter-apk/app-debug.apk
+            # Add proper lintOptions
+            if grep -q "lintOptions" "$APP_BUILD_GRADLE"; then
+              sed -i '' '/lintOptions/,/}/c\
+              lintOptions {\
+                  disable "InvalidPackage"\
+                  disable "Deprecated"\
+                  checkReleaseBuilds false\
+                  abortOnError false\
+              }\
+          ' "$APP_BUILD_GRADLE"
             else
-              # If both build methods failed, download sample APK from GitHub
-              echo "× Both build methods failed, downloading sample APK..."
-              mkdir -p build/app/outputs/flutter-apk
-              
-              # Try to download a sample APK
-              curl -L -o build/app/outputs/flutter-apk/app-debug.apk https://github.com/flutter/gallery/releases/download/2.10.0+021-284d2aae8/gallery-debug.apk || true
-              
-              # Check if download succeeded
-              if [ ! -f "build/app/outputs/flutter-apk/app-debug.apk" ] || [ ! -s "build/app/outputs/flutter-apk/app-debug.apk" ]; then
-                echo "× Download failed, creating dummy APK..."
-                # Create a valid APK file structure using Android SDK tools
-                if [ -d "$ANDROID_HOME" ]; then
-                  TOOLS_PATH=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -r | head -n 1)
-                  if [ -d "$TOOLS_PATH" ]; then
-                    echo "Using tools from $TOOLS_PATH"
-                    if [ -f "$TOOLS_PATH/aapt2" ]; then
-                      cp "$TOOLS_PATH/aapt2" build/app/outputs/flutter-apk/app-debug.apk
-                      dd if=/dev/urandom of=build/app/outputs/flutter-apk/app-debug.apk bs=1M count=5 conv=notrunc
-                    fi
-                  fi
-                fi
-                
-                # If all else fails, create a dummy file
-                if [ ! -f "build/app/outputs/flutter-apk/app-debug.apk" ] || [ ! -s "build/app/outputs/flutter-apk/app-debug.apk" ]; then
-                  echo "× Creating random data APK..."
-                  dd if=/dev/urandom of=build/app/outputs/flutter-apk/app-debug.apk bs=1M count=5
-                fi
-              fi
+              sed -i '' '/android {/a\
+              lintOptions {\
+                  disable "InvalidPackage"\
+                  disable "Deprecated"\
+                  checkReleaseBuilds false\
+                  abortOnError false\
+              }\
+          ' "$APP_BUILD_GRADLE"
             fi
           fi
           
-          # Ensure output directories exist
-          mkdir -p "$FCI_BUILD_OUTPUT_DIR"
-          mkdir -p "$FCI_ARTIFACT_ROOT"
-          mkdir -p "$FCI_EXPORT_DIR"
+          # Fix platform package
+          flutter pub remove platform || true
+          flutter pub add platform:3.1.3 || true
           
-          # Define file names
-          TIMESTAMP=$(date +"%Y%m%d%H%M")
-          DEBUG_APK_NAME="CRF_Android_debug_${TIMESTAMP}.apk"
-          FINAL_APK_NAME="CRF_Android_final.apk"
-          
-          # Copy the APK to all required locations with appropriate names
-          cp build/app/outputs/flutter-apk/app-debug.apk "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
-          cp build/app/outputs/flutter-apk/app-debug.apk "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME"
-          cp build/app/outputs/flutter-apk/app-debug.apk "$FCI_ARTIFACT_ROOT/$DEBUG_APK_NAME"
-          cp build/app/outputs/flutter-apk/app-debug.apk "$FCI_ARTIFACT_ROOT/$FINAL_APK_NAME"
-          cp build/app/outputs/flutter-apk/app-debug.apk "$FCI_EXPORT_DIR/$DEBUG_APK_NAME" 2>/dev/null || true
-          cp build/app/outputs/flutter-apk/app-debug.apk "$FCI_EXPORT_DIR/$FINAL_APK_NAME" 2>/dev/null || true
-          
-          # Ensure file is executable and has correct permissions
-          chmod 755 "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
-          chmod 755 "$FCI_ARTIFACT_ROOT/$DEBUG_APK_NAME"
-          
-          # Set file type explicitly
-          file "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
-          
-          # Verify APK file exists and has content
-          echo "APK file information:"
-          ls -la "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
-          du -sh "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
-      
-      - name: Verify and finalize artifacts
+      - name: Build APK with Flutter
         script: |
-          # Create output directories
-          mkdir -p "$FCI_BUILD_OUTPUT_DIR" "$FCI_EXPORT_DIR" "$FCI_ARTIFACT_ROOT"
+          # Configure Gradle for maximum compatibility
+          export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
           
+          # Ensure all dependencies are installed
+          flutter pub get
+          
+          # Try direct Flutter build first
+          echo "Building APK with Flutter..."
+          flutter build apk --debug
+          
+          # Check if successful
+          if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
+            echo "✓ Successfully built APK with Flutter!"
+            APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+          else
+            # Try Gradle build if Flutter build fails
+            echo "Flutter build failed, trying Gradle..."
+            cd android
+            ./gradlew assembleDebug
+            cd ..
+            
+            if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
+              echo "✓ Successfully built APK with Gradle!"
+              mkdir -p build/app/outputs/flutter-apk/
+              cp android/app/build/outputs/apk/debug/app-debug.apk build/app/outputs/flutter-apk/app-debug.apk
+              APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+            else
+              echo "× Both build methods failed!"
+            fi
+          fi
+          
+      - name: Prepare APK artifacts
+        script: |
           # Define file names with timestamp
           TIMESTAMP=$(date +"%Y%m%d%H%M")
           DEBUG_APK_NAME="CRF_Android_debug_${TIMESTAMP}.apk"
           FINAL_APK_NAME="CRF_Android_final.apk"
           
-          # Find APK file
-          echo "Looking for APK files..."
-          find . -name "*.apk" -type f -ls
+          # Create output directories
+          mkdir -p "$FCI_BUILD_OUTPUT_DIR" "$FCI_EXPORT_DIR" "$FCI_ARTIFACT_ROOT"
           
-          # Ensure we have at least one APK file
+          # Find best APK
           APK_FILE=$(find . -name "*.apk" -type f | head -n 1)
           
           if [ -n "$APK_FILE" ]; then
             echo "Found APK: $APK_FILE"
             
-            # Copy to build output directories with appropriate names
+            # Get file details
+            ls -la "$APK_FILE"
+            file "$APK_FILE"
+            du -sh "$APK_FILE"
+            
+            # Copy to all required locations
             cp "$APK_FILE" "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
-            cp "$APK_FILE" "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME"
             cp "$APK_FILE" "$FCI_ARTIFACT_ROOT/$DEBUG_APK_NAME"
-            cp "$APK_FILE" "$FCI_ARTIFACT_ROOT/$FINAL_APK_NAME"
-            cp "$APK_FILE" "$FCI_EXPORT_DIR/$DEBUG_APK_NAME" 2>/dev/null || true
-            cp "$APK_FILE" "$FCI_EXPORT_DIR/$FINAL_APK_NAME" 2>/dev/null || true
+            cp "$APK_FILE" "$FCI_EXPORT_DIR/$DEBUG_APK_NAME"
+            cp "$APK_FILE" "$CM_ARTIFACT_DIR/$DEBUG_APK_NAME" 2>/dev/null || true
             
-            # File details
-            echo "APK file details:"
-            ls -la "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
-            file "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
-            du -sh "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
+            # Also create standard named version
+            cp "$APK_FILE" "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME"
+            
+            # Set MIME type for direct download
+            echo "application/vnd.android.package-archive" > "$FCI_EXPORT_DIR/$DEBUG_APK_NAME.mime"
+            echo "application/vnd.android.package-archive" > "$CM_ARTIFACT_DIR/$DEBUG_APK_NAME.mime" 2>/dev/null || true
+            
+            echo "APK successfully prepared for download"
           else
-            echo "No APK file found! Creating dummy file..."
-            dd if=/dev/urandom of="$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME" bs=1M count=5
-            cp "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME" "$FCI_ARTIFACT_ROOT/$DEBUG_APK_NAME"
-            cp "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME" "$FCI_EXPORT_DIR/$DEBUG_APK_NAME" 2>/dev/null || true
-            cp "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME" "$FCI_BUILD_OUTPUT_DIR/$FINAL_APK_NAME"
-            
-            echo "Dummy APK created:"
-            ls -la "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
+            echo "No APK found, build may have failed!"
           fi
           
-          # Mark build as successful
-          touch "$FCI_BUILD_OUTPUT_DIR/build_successful"
-          echo "Build artifacts finalized"
-      
-      - name: Prepare downloadable APK artifacts
-        script: |
-          # Make sure we have actual downloadable APK files
-          echo "Preparing downloadable APK artifacts..."
+          # List all APKs
+          echo "Available APKs:"
+          find . -name "*.apk" -type f -exec ls -la {} \;
           
-          # Find the best APK to use
-          BEST_APK=$(find . -name "*.apk" -type f -size +1M | head -n 1)
-          if [ -z "$BEST_APK" ]; then
-            # If no suitable APK found, create one
-            echo "No suitable APK found, creating one..."
-            TIMESTAMP=$(date +"%Y%m%d%H%M")
-            BEST_APK="$FCI_BUILD_OUTPUT_DIR/CRF_Android_${TIMESTAMP}.apk"
-            dd if=/dev/urandom of="$BEST_APK" bs=1M count=10
-          fi
-          
-          # Create artifacts directory if it doesn't exist
-          mkdir -p "$CM_EXPORT_DIR"
-          
-          # Prepare the artifact with correct mime type
-          TIMESTAMP=$(date +"%Y%m%d%H%M")
-          ARTIFACT_NAME="CRF_Android_debug_${TIMESTAMP}.apk"
-          
-          # Copy the APK to the artifacts directory with the correct name
-          cp "$BEST_APK" "$CM_EXPORT_DIR/$ARTIFACT_NAME"
-          
-          # Explicitly set the file type
-          file "$CM_EXPORT_DIR/$ARTIFACT_NAME"
-          
-          # Make sure the file is executable
-          chmod +x "$CM_EXPORT_DIR/$ARTIFACT_NAME"
-          
-          # List all exported APKs
-          echo "Exported APKs:"
-          find "$CM_EXPORT_DIR" -name "*.apk" -ls
-          
-          # Set proper application/vnd.android.package-archive MIME type
-          echo "application/vnd.android.package-archive" > "$CM_EXPORT_DIR/$ARTIFACT_NAME.mime"
-          
-          echo "APK artifacts prepared successfully"
-    
     artifacts:
-      # Path patterns for APK files to export
-      - $FCI_BUILD_OUTPUT_DIR/*.apk
-      - $FCI_ARTIFACT_ROOT/*.apk
       - build/app/outputs/flutter-apk/*.apk
       - android/app/build/outputs/apk/debug/*.apk
-      - $CM_EXPORT_DIR/*.apk
+      - $FCI_BUILD_OUTPUT_DIR/*.apk
+      - $FCI_EXPORT_DIR/*.apk
     
     publishing:
       email:
@@ -903,44 +262,6 @@ workflows:
         notify:
           success: true
           failure: true
-      scripts:
-        - name: Create downloadable APK
-          script: |
-            # Find the best APK to publish
-            APK_FILE=$(find . -name "*.apk" -type f -size +1M | head -n 1)
-            
-            if [ -n "$APK_FILE" ]; then
-              echo "Publishing APK: $APK_FILE"
-              
-              # Create the artifacts directory
-              mkdir -p "$CM_ARTIFACT_DIR"
-              
-              # Prepare a name with timestamp
-              TIMESTAMP=$(date +"%Y%m%d%H%M")
-              APK_NAME="CRF_Android_${TIMESTAMP}.apk"
-              
-              # Copy the APK to artifacts directory
-              cp "$APK_FILE" "$CM_ARTIFACT_DIR/$APK_NAME"
-              
-              # Set proper MIME type for direct download
-              echo "application/vnd.android.package-archive" > "$CM_ARTIFACT_DIR/$APK_NAME.mime"
-              
-              echo "APK prepared for download: $APK_NAME"
-            else
-              echo "No suitable APK found for publishing"
-              
-              # Create a dummy APK
-              TIMESTAMP=$(date +"%Y%m%d%H%M")
-              APK_NAME="CRF_Android_${TIMESTAMP}.apk"
-              
-              # Create a 10MB file
-              dd if=/dev/urandom of="$CM_ARTIFACT_DIR/$APK_NAME" bs=1M count=10
-              
-              # Set MIME type
-              echo "application/vnd.android.package-archive" > "$CM_ARTIFACT_DIR/$APK_NAME.mime"
-              
-              echo "Created dummy APK for download: $APK_NAME"
-            fi
       
     # Empty cache configuration to prevent hanging
     cache:

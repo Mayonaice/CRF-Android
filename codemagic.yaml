@@ -178,6 +178,43 @@ workflows:
             echo "Project build.gradle not found"
           fi
           
+      - name: Fix Kotlin dependency conflicts
+        script: |
+          # Create a temporary file with the resolution strategy
+          cat > kotlin_fix.gradle << 'EOF'
+          allprojects {
+            configurations.all {
+              resolutionStrategy {
+                force "org.jetbrains.kotlin:kotlin-stdlib:1.7.10"
+                force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.10"
+                force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.10"
+                force "org.jetbrains.kotlin:kotlin-stdlib-common:1.7.10"
+              }
+            }
+          }
+          EOF
+          
+          # Apply the fix to the root project
+          cat kotlin_fix.gradle >> android/build.gradle
+          
+          # Update app's build.gradle to use consistent Kotlin stdlib
+          APP_BUILD_GRADLE="$CM_BUILD_DIR/android/app/build.gradle"
+          if [ -f "$APP_BUILD_GRADLE" ]; then
+            # Create backup
+            cp "$APP_BUILD_GRADLE" "${APP_BUILD_GRADLE}.bak"
+            
+            # Replace kotlin-stdlib-jdk7 with kotlin-stdlib
+            sed -i '' 's/implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:\$kotlin_version"/implementation "org.jetbrains.kotlin:kotlin-stdlib:\$kotlin_version"/g' "$APP_BUILD_GRADLE"
+            
+            # Add exclusions for multidex
+            sed -i '' 's/implementation '"'"'androidx.multidex:multidex:2.0.1'"'"'/implementation('"'"'androidx.multidex:multidex:2.0.1'"'"') {\n        exclude group: '"'"'org.jetbrains.kotlin'"'"', module: '"'"'kotlin-stdlib-jdk7'"'"'\n        exclude group: '"'"'org.jetbrains.kotlin'"'"', module: '"'"'kotlin-stdlib-jdk8'"'"'\n    }/g' "$APP_BUILD_GRADLE"
+            
+            echo "Modified app build.gradle:"
+            cat "$APP_BUILD_GRADLE"
+          else
+            echo "App build.gradle not found"
+          fi
+          
       - name: Build APK with Flutter
         script: |
           # Configure Gradle for maximum compatibility

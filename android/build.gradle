@@ -17,6 +17,16 @@ allprojects {
         mavenCentral()
     }
     
+    // Add resolution strategy to fix Kotlin version conflicts
+    configurations.all {
+        resolutionStrategy {
+            force "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+            force "org.jetbrains.kotlin:kotlin-stdlib-common:$kotlin_version"
+        }
+    }
+    
     // Tambahkan konfigurasi namespace untuk semua subprojects
     plugins.withType(com.android.build.gradle.BasePlugin).configureEach {
         android {

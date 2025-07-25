@@ -323,6 +323,138 @@ workflows:
             echo "android_id plugin directory not found"
           fi
           
+      - name: Patch Flutter platform package
+        script: |
+          # Create a directory for our patched platform package
+          mkdir -p "$CM_BUILD_DIR/patched_packages/platform/lib/src/interface"
+          
+          # Create a fixed version of local_platform.dart
+          cat > "$CM_BUILD_DIR/patched_packages/platform/lib/src/interface/local_platform.dart" << 'EOF'
+          // Copyright 2017 The Chromium Authors. All rights reserved.
+          // Use of this source code is governed by a BSD-style license that can be
+          // found in the LICENSE file.
+          
+          import 'dart:io' as io;
+          
+          import '../platform.dart';
+          import 'local_interface.dart';
+          
+          /// `Platform` implementation that uses dart:io.
+          class LocalPlatform extends LocalPlatformInterface {
+            /// Creates a new [LocalPlatform].
+            const LocalPlatform();
+          
+            @override
+            int get numberOfProcessors => io.Platform.numberOfProcessors;
+          
+            @override
+            String get pathSeparator => io.Platform.pathSeparator;
+          
+            @override
+            String get operatingSystem => io.Platform.operatingSystem;
+          
+            @override
+            String get operatingSystemVersion => io.Platform.operatingSystemVersion;
+          
+            @override
+            String get localHostname => io.Platform.localHostname;
+          
+            @override
+            Map<String, String> get environment => io.Platform.environment;
+          
+            @override
+            String get executable => io.Platform.executable;
+          
+            @override
+            String get resolvedExecutable => io.Platform.resolvedExecutable;
+          
+            @override
+            Uri get script => io.Platform.script;
+          
+            @override
+            List<String> get executableArguments => io.Platform.executableArguments;
+          
+            @override
+            String get version {
+              try {
+                // This getter is deprecated but still available.
+                // ignore: deprecated_member_use
+                return io.Platform.version;
+              } on NoSuchMethodError {
+                return super.version;
+              }
+            }
+          
+            @override
+            String get localeName {
+              try {
+                return io.Platform.localeName;
+              } on NoSuchMethodError {
+                return super.localeName;
+              }
+            }
+          
+            @override
+            bool get isAndroid => io.Platform.isAndroid;
+          
+            @override
+            bool get isIOS => io.Platform.isIOS;
+          
+            @override
+            bool get isFuchsia => io.Platform.isFuchsia;
+          
+            @override
+            bool get isLinux => io.Platform.isLinux;
+          
+            @override
+            bool get isMacOS => io.Platform.isMacOS;
+          
+            @override
+            bool get isWindows => io.Platform.isWindows;
+          }
+          EOF
+          
+          # Find all platform package directories in the Flutter cache
+          find "$HOME/.pub-cache" -path "*/platform-*/lib/src/interface/local_platform.dart" | while read -r file; do
+            echo "Found platform package file: $file"
+            
+            # Create backup
+            cp "$file" "${file}.bak"
+            
+            # Replace with our fixed version
+            cp "$CM_BUILD_DIR/patched_packages/platform/lib/src/interface/local_platform.dart" "$file"
+            
+            echo "Patched platform package file: $file"
+          done
+          
+      - name: Fix platform package issue
+        script: |
+          # Find the platform package directory
+          PLATFORM_PATH=$(find "$HOME/.pub-cache/hosted/pub.dev" -path "*platform-3.0.0*" -type d | head -n 1)
+          if [ -n "$PLATFORM_PATH" ]; then
+            echo "Found platform package at: $PLATFORM_PATH"
+            
+            # Fix the local_platform.dart file
+            LOCAL_PLATFORM_PATH="$PLATFORM_PATH/lib/src/interface/local_platform.dart"
+            if [ -f "$LOCAL_PLATFORM_PATH" ]; then
+              echo "Found local_platform.dart at: $LOCAL_PLATFORM_PATH"
+              
+              # Create backup
+              cp "$LOCAL_PLATFORM_PATH" "${LOCAL_PLATFORM_PATH}.bak"
+              
+              # Replace the line with packageRoot
+              sed -i '' 's/io.Platform.packageRoot; \/\/ ignore: deprecated_member_use/\/\/ io.Platform.packageRoot; \/\/ Commented out as packageRoot is removed/g' "$LOCAL_PLATFORM_PATH"
+              
+              echo "Modified local_platform.dart:"
+              cat "$LOCAL_PLATFORM_PATH"
+            else
+              echo "local_platform.dart not found"
+            fi
+          else
+            echo "Platform package not found, installing correct version"
+            flutter pub add platform:3.1.3
+          fi
+          
       - name: Fix Kotlin dependency conflicts
         script: |
           # Create a temporary file with the resolution strategy
@@ -415,6 +547,10 @@ workflows:
           echo "kotlin.version=1.7.10" >> android/local.properties
           echo "kotlin.stdlib.default.dependency=false" >> android/local.properties
           
+          # Ensure the correct platform package version is used
+          flutter pub remove platform
+          flutter pub add platform:3.1.3
+          
           # Ensure no XML launcher icons exist
           find android/app/src/main/res/mipmap-* -name "*.xml" -delete
           
@@ -429,7 +565,7 @@ workflows:
           
           # Try to build with flutter directly, with extra parameters to help with Kotlin issues
           echo "Building debug APK with Flutter for DCT CRF Android..."
-          flutter build apk --debug --no-tree-shake-icons --no-pub
+          flutter build apk --debug --no-tree-shake-icons
           
           # If that fails, try with specific target platform
           if [ $? -ne 0 ]; then

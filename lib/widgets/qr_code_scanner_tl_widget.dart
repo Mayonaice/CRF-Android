@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-// Import only QrMobileVision for API access, not the camera widget
+import 'package:qr_mobile_vision/qr_camera.dart';
 import 'package:qr_mobile_vision/qr_mobile_vision.dart';
 
 class QRCodeScannerTLWidget extends StatefulWidget {
@@ -30,7 +30,6 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
   String _scanResult = '';
   bool _hasPermission = false;
   bool _loading = true;
-  bool _cameraStarted = false;
 
   @override
   void initState() {
@@ -83,9 +82,7 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
 
   @override
   void dispose() {
-    if (_cameraStarted) {
-      QrMobileVision.stop();
-    }
+    QrMobileVision.stop();
     super.dispose();
   }
 
@@ -110,10 +107,7 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
     widget.onBarcodeDetected(code);
     
     // Stop the camera
-    if (_cameraStarted) {
-      QrMobileVision.stop();
-      _cameraStarted = false;
-    }
+    QrMobileVision.stop();
     
     // Close the screen after a short delay
     Future.delayed(Duration(milliseconds: 500), () {
@@ -179,27 +173,8 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
     );
   }
 
-  void _startScanning() {
-    if (_hasPermission && !_cameraStarted) {
-      QrMobileVision.start(
-        qrCodeHandler: _handleCode,
-        formats: const [BarcodeFormats.QR_CODE],
-        width: MediaQuery.of(context).size.width.toInt(),
-        height: MediaQuery.of(context).size.height.toInt(),
-      );
-      setState(() {
-        _cameraStarted = true;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_hasPermission && !_cameraStarted && !_qrFound) {
-      // Start scanning when widget is built and we have permission
-      WidgetsBinding.instance.addPostFrameCallback((_) => _startScanning());
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
@@ -217,15 +192,26 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
               children: [
                 Expanded(
                   child: _hasPermission
-                      ? _CustomQRCameraView(
-                          isScanning: _cameraStarted,
+                      ? QrCamera(
+                          fit: BoxFit.cover,
+                          qrCodeCallback: _handleCode,
+                          notStartedBuilder: (context) => Center(
+                            child: Text('Camera starting...'),
+                          ),
+                          onError: (context, error) => Center(
+                            child: Text(
+                              'Camera error: $error',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                          formats: const [BarcodeFormats.QR_CODE],
                         )
                       : Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                Icons.no_photography,
+                                Icons.no_photography,  // Diganti dari Icons.camera_off ke Icons.no_photography
                                 size: 64,
                                 color: Colors.red,
                               ),
@@ -269,67 +255,6 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
                 ),
               ],
             ),
-    );
-  }
-}
-
-// Custom camera view widget that avoids using the conflicting QrCamera widget
-class _CustomQRCameraView extends StatelessWidget {
-  final bool isScanning;
-
-  const _CustomQRCameraView({
-    Key? key,
-    required this.isScanning,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    if (!isScanning) {
-      return Center(child: Text('Starting camera...'));
-    }
-    
-    // This is a placeholder for the camera view
-    // QrMobileVision.start has already been called to start the camera
-    return Container(
-      color: Colors.black,
-      child: Stack(
-        children: [
-          // The camera preview is shown by the native platform view
-          // We just need to provide a placeholder here
-          Center(
-            child: AspectRatio(
-              aspectRatio: 1.0,
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: Colors.white,
-                    width: 2.0,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Scan animation
-          Center(
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: Colors.green,
-                  width: 2.0,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  'Scanning...',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 } 

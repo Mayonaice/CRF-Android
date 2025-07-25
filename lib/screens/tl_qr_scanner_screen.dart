@@ -9,6 +9,7 @@ import '../models/prepare_model.dart';
 import '../services/notification_service.dart';
 // Import qr_code_scanner_tl_widget hanya jika bukan web
 import '../widgets/qr_code_scanner_tl_widget.dart' if (kIsWeb) '../widgets/qr_code_scanner_web_stub.dart';
+import 'dart:async';
 
 class TLQRScannerScreen extends StatefulWidget {
   const TLQRScannerScreen({Key? key}) : super(key: key);
@@ -32,6 +33,9 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
   // Variabel untuk notifikasi ke CRF_OPR
   String? _operatorId;
   String? _operatorName;
+  
+  // Timeout untuk scanner
+  Timer? _scannerTimeoutTimer;
 
   @override
   void initState() {
@@ -50,6 +54,7 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
   void dispose() {
     _nikController.dispose();
     _passwordController.dispose();
+    _scannerTimeoutTimer?.cancel();
     super.dispose();
   }
   
@@ -1139,6 +1144,24 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
           DeviceOrientation.portraitDown,
         ]);
         
+        // Mulai timer untuk timeout scanner (20 detik)
+        _scannerTimeoutTimer?.cancel();
+        _scannerTimeoutTimer = Timer(const Duration(seconds: 20), () {
+          // Jika timer habis dan scanner masih berjalan, kembali ke screen ini
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context);
+            
+            // Tampilkan pesan timeout
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Scanner timeout. Silakan coba lagi.'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        });
+        
         // Use the QR scanner widget
         qrResult = await Navigator.push<String>(
           context,
@@ -1147,12 +1170,17 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
               title: 'Scan QR Code',
               onBarcodeDetected: (code) {
                 print('🔍 QR Code detected in scanner: ${code.length > 20 ? code.substring(0, 20) + "..." : code}');
+                // Cancel timeout timer when QR code detected
+                _scannerTimeoutTimer?.cancel();
               },
               fieldKey: 'qrcode',
               fieldLabel: 'Approval QR',
             ),
           ),
         );
+        
+        // Cancel timeout timer when returning from scanner
+        _scannerTimeoutTimer?.cancel();
         
         // Reset orientation to portrait for this screen
         await SystemChrome.setPreferredOrientations([

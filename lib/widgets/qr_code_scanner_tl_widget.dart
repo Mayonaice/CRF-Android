@@ -33,8 +33,12 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> with Widg
   bool _hasPermission = false;
   bool _loading = true;
   Timer? _permissionCheckTimer;
+  Timer? _forceRestartTimer;
   int _permissionRetryCount = 0;
-
+  bool _forceRestarting = false;
+  // Gunakan GlobalKey dengan tipe state yang benar
+  final GlobalKey<QRCameraWrapperState> _cameraKey = GlobalKey<QRCameraWrapperState>();
+  
   @override
   void initState() {
     super.initState();
@@ -56,6 +60,14 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> with Widg
         _checkPermission();
       }
     });
+    
+    // Set timer untuk force restart kamera jika masih infinite loading setelah 15 detik
+    _forceRestartTimer = Timer(Duration(seconds: 15), () {
+      if (mounted && !_qrFound && _hasPermission) {
+        print('⚠️ Force restarting camera after 15s of potential infinite loading');
+        _forceRestartCamera();
+      }
+    });
   }
   
   @override
@@ -66,6 +78,7 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> with Widg
     // Stop camera and cancel timers
     QrMobileVision.stop();
     _permissionCheckTimer?.cancel();
+    _forceRestartTimer?.cancel();
     
     super.dispose();
   }
@@ -78,6 +91,13 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> with Widg
       if (_hasPermission && !_qrFound && mounted) {
         print('App resumed: ensuring camera is active');
         _resetCameraState();
+        
+        // Force restart camera after a short delay
+        Future.delayed(Duration(milliseconds: 500), () {
+          if (mounted && _hasPermission && !_qrFound) {
+            _forceRestartCamera();
+          }
+        });
       }
     } else if (state == AppLifecycleState.inactive || 
               state == AppLifecycleState.paused || 
@@ -85,6 +105,65 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> with Widg
       // App is not visible, release camera resources
       print('App state changed to $state: stopping camera');
       QrMobileVision.stop();
+    }
+  }
+  
+  // Force restart kamera untuk mengatasi infinite loading
+  Future<void> _forceRestartCamera() async {
+    if (_forceRestarting) return;
+    
+    setState(() {
+      _forceRestarting = true;
+    });
+    
+    print('🔄 Force restarting camera in QRCodeScannerTLWidget');
+    
+    try {
+      // Coba gunakan GlobalKey untuk memanggil metode pada QRCameraWrapper jika tersedia
+      if (_cameraKey.currentState != null) {
+        await _cameraKey.currentState!.forceRestartCamera();
+        
+        // Tunggu sebentar sebelum mengubah status restarting
+        await Future.delayed(Duration(milliseconds: 500));
+        
+        if (mounted) {
+          setState(() {
+            _forceRestarting = false;
+          });
+        }
+        return;
+      }
+      
+      // Fallback jika state tidak tersedia
+      // Stop camera
+      await QrMobileVision.stop();
+      
+      // Reset state
+      if (mounted) {
+        setState(() {
+          _isScanning = false;
+        });
+      }
+      
+      // Wait a moment
+      await Future.delayed(Duration(milliseconds: 800));
+      
+      // Reset permission check
+      if (mounted) {
+        setState(() {
+          _loading = true;
+        });
+        
+        await _checkPermission();
+      }
+    } catch (e) {
+      print('Error during force restart: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _forceRestarting = false;
+        });
+      }
     }
   }
 
@@ -272,6 +351,11 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> with Widg
             onPressed: _showManualInputDialog,
             tooltip: 'Manual Input',
           ),
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _forceRestarting ? null : _forceRestartCamera,
+            tooltip: 'Restart Camera',
+          ),
         ],
       ),
       body: _loading
@@ -300,48 +384,77 @@ class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> with Widg
               children: [
                 Expanded(
                   child: _hasPermission
-                      ? QRCameraWrapper(
-                          qrCodeCallback: _handleCode,
-                          formats: const [BarcodeFormats.QR_CODE],
-                          fit: BoxFit.cover,
-                          notStartedBuilder: (context) => Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                CircularProgressIndicator(),
-                                SizedBox(height: 16),
-                                Text('Starting camera...'),
-                              ],
+                      ? Stack(
+                          children: [
+                            QRCameraWrapper(
+                              key: _cameraKey,
+                              qrCodeCallback: _handleCode,
+                              formats: const [BarcodeFormats.QR_CODE],
+                              fit: BoxFit.cover,
+                              notStartedBuilder: (context) => Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    CircularProgressIndicator(),
+                                    SizedBox(height: 16),
+                                    Text('Starting camera...'),
+                                  ],
+                                ),
+                              ),
+                              onError: (context, error) => Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      color: Colors.red,
+                                      size: 40,
+                                    ),
+                                    SizedBox(height: 16),
+                                    Text(
+                                      'Camera error',
+                                      style: TextStyle(color: Colors.red, fontSize: 18),
+                                    ),
+                                    SizedBox(height: 8),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                                      child: Text(
+                                        error.toString().length > 100 
+                                            ? '${error.toString().substring(0, 100)}...' 
+                                            : error.toString(),
+                                        style: TextStyle(color: Colors.red, fontSize: 14),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    SizedBox(height: 20),
+                                    ElevatedButton(
+                                      onPressed: _forceRestartCamera,
+                                      child: Text('Restart Camera'),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
-                          onError: (context, error) => Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.error_outline,
-                                  color: Colors.red,
-                                  size: 40,
-                                ),
-                                SizedBox(height: 16),
-                                Text(
-                                  'Camera error',
-                                  style: TextStyle(color: Colors.red, fontSize: 18),
-                                ),
-                                SizedBox(height: 8),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                                  child: Text(
-                                    error.toString().length > 100 
-                                        ? '${error.toString().substring(0, 100)}...' 
-                                        : error.toString(),
-                                    style: TextStyle(color: Colors.red, fontSize: 14),
-                                    textAlign: TextAlign.center,
+                            if (_forceRestarting)
+                              Container(
+                                color: Colors.black.withOpacity(0.7),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      CircularProgressIndicator(
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                      SizedBox(height: 16),
+                                      Text(
+                                        'Restarting camera...',
+                                        style: TextStyle(color: Colors.white, fontSize: 16),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
+                              ),
+                          ],
                         )
                       : Center(
                           child: Column(

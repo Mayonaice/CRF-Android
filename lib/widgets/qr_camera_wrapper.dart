@@ -21,10 +21,11 @@ class QRCameraWrapper extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<QRCameraWrapper> createState() => _QRCameraWrapperState();
+  State<QRCameraWrapper> createState() => QRCameraWrapperState();
 }
 
-class _QRCameraWrapperState extends State<QRCameraWrapper> {
+// Ubah menjadi public class agar bisa diakses dari luar jika diperlukan
+class QRCameraWrapperState extends State<QRCameraWrapper> {
   bool _isStarted = false;
   bool _hasError = false;
   String _errorMessage = '';
@@ -33,15 +34,28 @@ class _QRCameraWrapperState extends State<QRCameraWrapper> {
   int _retryCount = 0;
   Timer? _initTimeoutTimer;
   Timer? _retryTimer;
+  Timer? _forceRestartTimer;
   bool _isInitializing = false;
   
   @override
   void initState() {
     super.initState();
-    // Tunda inisialisasi kamera sedikit untuk menghindari race condition
-    Future.delayed(Duration(milliseconds: 300), () {
-      if (mounted) {
-        _startCamera();
+    
+    // Pastikan kamera dimatikan dulu sebelum memulai
+    _forceStopCamera().then((_) {
+      // Tunda inisialisasi kamera sedikit untuk menghindari race condition
+      Future.delayed(Duration(milliseconds: 500), () {
+        if (mounted) {
+          _startCamera();
+        }
+      });
+    });
+    
+    // Set timer untuk force restart kamera jika masih infinite loading setelah 10 detik
+    _forceRestartTimer = Timer(Duration(seconds: 10), () {
+      if (!_isStarted && mounted && !_hasError) {
+        print('⚠️ Force restarting camera after 10s of loading');
+        forceRestartCamera();
       }
     });
   }
@@ -49,13 +63,48 @@ class _QRCameraWrapperState extends State<QRCameraWrapper> {
   @override
   void dispose() {
     _cancelTimers();
-    QrMobileVision.stop();
+    _forceStopCamera();
     super.dispose();
   }
   
   void _cancelTimers() {
     _initTimeoutTimer?.cancel();
     _retryTimer?.cancel();
+    _forceRestartTimer?.cancel();
+  }
+  
+  // Force stop kamera untuk memastikan tidak ada instance yang berjalan
+  Future<void> _forceStopCamera() async {
+    try {
+      print('Force stopping camera to ensure clean state');
+      await QrMobileVision.stop();
+    } catch (e) {
+      print('Error stopping camera: $e');
+      // Ignore errors, we just want to make sure it's stopped
+    }
+  }
+  
+  // Force restart kamera jika terjadi infinite loading (public method)
+  Future<void> forceRestartCamera() async {
+    print('🔄 Force restarting camera');
+    await _forceStopCamera();
+    
+    // Reset state
+    if (mounted) {
+      setState(() {
+        _isStarted = false;
+        _hasError = false;
+        _retryCount = 0;
+        _isInitializing = false;
+      });
+    }
+    
+    // Tunggu sebentar sebelum restart
+    await Future.delayed(Duration(milliseconds: 800));
+    
+    if (mounted) {
+      _startCamera();
+    }
   }
 
   Future<void> _startCamera() async {
@@ -87,8 +136,13 @@ class _QRCameraWrapperState extends State<QRCameraWrapper> {
       // Log untuk debug
       print('Starting QR scanner with size: $_previewWidth x $_previewHeight');
       
-      await QrMobileVision.stop(); // Pastikan tidak ada instance yang berjalan
+      // Pastikan kamera dimatikan dulu
+      await QrMobileVision.stop();
       
+      // Tambahkan delay kecil untuk memastikan kamera benar-benar berhenti
+      await Future.delayed(Duration(milliseconds: 300));
+      
+      // Mulai kamera dengan parameter yang benar
       await QrMobileVision.start(
         qrCodeHandler: (String? code) {
           if (code != null && code.isNotEmpty) {
@@ -167,7 +221,7 @@ class _QRCameraWrapperState extends State<QRCameraWrapper> {
           ElevatedButton(
             onPressed: () {
               _retryCount = 0;
-              _startCamera();
+              forceRestartCamera();
             },
             child: Text('Coba Lagi'),
           ),
@@ -191,6 +245,11 @@ class _QRCameraWrapperState extends State<QRCameraWrapper> {
                 'Mencoba ulang: $_retryCount',
                 style: TextStyle(color: Colors.amber),
               ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: forceRestartCamera,
+              child: Text('Restart Kamera'),
+            ),
           ],
         ),
       );

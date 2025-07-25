@@ -1,7 +1,7 @@
 workflows:
   android-debug:
     name: Android Debug Build - DCT CRF
-    max_build_duration: 60
+    max_build_duration: 120
     instance_type: mac_mini_m1
     environment:
       flutter: 3.16.9 # Using specific older version that's more compatible
@@ -194,27 +194,27 @@ workflows:
           flutter pub remove platform || true
           flutter pub add platform:3.1.3 || true
           
-      - name: Build APK with Flutter
+      - name: Build APK with Flutter (Force Output)
         script: |
           # Configure Gradle for maximum compatibility
           export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
           
           # Ensure all dependencies are installed
-          flutter pub get
+          flutter pub get --no-pub-get-verification
           
-          # Try direct Flutter build first
+          # Try direct Flutter build first with a longer timeout
           echo "Building APK with Flutter..."
-          flutter build apk --debug
+          flutter build apk --debug --no-tree-shake-icons --no-shrink
           
           # Check if successful
           if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
             echo "✓ Successfully built APK with Flutter!"
             APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
           else
-            # Try Gradle build if Flutter build fails
-            echo "Flutter build failed, trying Gradle..."
+            # Try Gradle build with direct command if Flutter build fails
+            echo "Flutter build failed, trying direct Gradle build..."
             cd android
-            ./gradlew assembleDebug
+            ./gradlew assembleDebug --stacktrace --info
             cd ..
             
             if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
@@ -223,11 +223,23 @@ workflows:
               cp android/app/build/outputs/apk/debug/app-debug.apk build/app/outputs/flutter-apk/app-debug.apk
               APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
             else
-              echo "× Both build methods failed!"
+              echo "× Both build methods failed! Trying alternative approach..."
+              
+              # Try with direct Gradle commands for app module only
+              cd android
+              # Force clean build
+              ./gradlew clean
+              # Build debug variant only
+              ./gradlew :app:assembleDebug --stacktrace --info
+              cd ..
             fi
           fi
           
-      - name: Prepare APK artifacts
+          # List all possible APK locations
+          echo "Looking for APK files in common locations:"
+          find . -name "*.apk" | sort
+          
+      - name: Prepare APK artifacts (Enhanced)
         script: |
           # Define file names with timestamp
           TIMESTAMP=$(date +"%Y%m%d%H%M")
@@ -235,10 +247,10 @@ workflows:
           FINAL_APK_NAME="CRF_Android_final.apk"
           
           # Create output directories
-          mkdir -p "$FCI_BUILD_OUTPUT_DIR" "$FCI_EXPORT_DIR" "$FCI_ARTIFACT_ROOT"
+          mkdir -p "$FCI_BUILD_OUTPUT_DIR" "$FCI_EXPORT_DIR" "$FCI_ARTIFACT_ROOT" "$CM_ARTIFACT_DIR"
           
-          # Find best APK
-          APK_FILE=$(find . -name "*.apk" -type f | head -n 1)
+          # Find best APK (try multiple locations)
+          APK_FILE=$(find . -name "*.apk" -type f | grep -v "unsigned" | head -n 1)
           
           if [ -n "$APK_FILE" ]; then
             echo "Found APK: $APK_FILE"
@@ -248,7 +260,7 @@ workflows:
             file "$APK_FILE"
             du -sh "$APK_FILE"
             
-            # Copy to all required locations
+            # Copy to all standard locations
             cp "$APK_FILE" "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
             cp "$APK_FILE" "$FCI_ARTIFACT_ROOT/$DEBUG_APK_NAME"
             cp "$APK_FILE" "$FCI_EXPORT_DIR/$DEBUG_APK_NAME"
@@ -261,20 +273,48 @@ workflows:
             echo "application/vnd.android.package-archive" > "$FCI_EXPORT_DIR/$DEBUG_APK_NAME.mime"
             echo "application/vnd.android.package-archive" > "$CM_ARTIFACT_DIR/$DEBUG_APK_NAME.mime" 2>/dev/null || true
             
+            # Make files executable
+            chmod +x "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
+            chmod +x "$FCI_ARTIFACT_ROOT/$DEBUG_APK_NAME"
+            chmod +x "$FCI_EXPORT_DIR/$DEBUG_APK_NAME" 2>/dev/null || true
+            
             echo "APK successfully prepared for download"
           else
-            echo "No APK found, build may have failed!"
+            echo "No APK found in standard locations, creating direct APK..."
+            
+            # If all else fails, try direct APK generation
+            cd android
+            ./gradlew :app:assembleDebug --stacktrace
+            cd ..
+            
+            # Find again after last attempt
+            APK_FILE=$(find . -name "*.apk" -type f | head -n 1)
+            
+            if [ -n "$APK_FILE" ]; then
+              echo "Finally found APK: $APK_FILE"
+              cp "$APK_FILE" "$FCI_BUILD_OUTPUT_DIR/$DEBUG_APK_NAME"
+              cp "$APK_FILE" "$FCI_EXPORT_DIR/$DEBUG_APK_NAME"
+              echo "application/vnd.android.package-archive" > "$FCI_EXPORT_DIR/$DEBUG_APK_NAME.mime"
+            else
+              echo "Failed to generate APK after multiple attempts"
+            fi
           fi
           
           # List all APKs
           echo "Available APKs:"
           find . -name "*.apk" -type f -exec ls -la {} \;
           
+          # List exported files
+          echo "Files in export directory:"
+          ls -la "$FCI_EXPORT_DIR"
+          
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
       - android/app/build/outputs/apk/debug/*.apk
+      - android/app/build/outputs/apk/**/*.apk
       - $FCI_BUILD_OUTPUT_DIR/*.apk
       - $FCI_EXPORT_DIR/*.apk
+      - $CM_ARTIFACT_DIR/*.apk
     
     publishing:
       email:
@@ -283,6 +323,33 @@ workflows:
         notify:
           success: true
           failure: true
+      scripts:
+        - name: Prepare APK for Download
+          script: |
+            # Find the best APK
+            APK_FILE=$(find . -name "*.apk" -type f | head -n 1)
+            
+            if [ -n "$APK_FILE" ]; then
+              echo "Found APK for publishing: $APK_FILE"
+              
+              # Create timestamp
+              TIMESTAMP=$(date +"%Y%m%d%H%M")
+              
+              # Define paths
+              TARGET_DIR="${CM_EXPORT_DIR:-$FCI_EXPORT_DIR}"
+              TARGET_NAME="CRF_Android_${TIMESTAMP}.apk"
+              
+              # Create directory if needed
+              mkdir -p "$TARGET_DIR"
+              
+              # Copy and set mime type
+              cp "$APK_FILE" "$TARGET_DIR/$TARGET_NAME"
+              echo "application/vnd.android.package-archive" > "$TARGET_DIR/$TARGET_NAME.mime"
+              
+              echo "APK prepared for download: $TARGET_NAME"
+            else
+              echo "No APK found to publish"
+            fi
       
     # Empty cache configuration to prevent hanging
     cache:

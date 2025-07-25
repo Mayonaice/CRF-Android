@@ -36,6 +36,8 @@ workflows:
           echo "android.compileSdkVersion=34" >> android/gradle.properties
           echo "android.targetSdkVersion=34" >> android/gradle.properties
           echo "android.buildToolsVersion=34.0.0" >> android/gradle.properties
+          # Add Kotlin version settings
+          echo "kotlin.stdlib.default.dependency=false" >> android/gradle.properties
           
           # Generate required resource directories
           mkdir -p android/app/src/main/res/drawable
@@ -182,20 +184,36 @@ workflows:
         script: |
           # Create a temporary file with the resolution strategy
           cat > kotlin_fix.gradle << 'EOF'
-          allprojects {
-            configurations.all {
-              resolutionStrategy {
-                force "org.jetbrains.kotlin:kotlin-stdlib:1.7.10"
-                force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.10"
-                force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.10"
-                force "org.jetbrains.kotlin:kotlin-stdlib-common:1.7.10"
+          
+          // Add resolution strategy to fix Kotlin version conflicts
+          subprojects {
+              configurations.all {
+                  resolutionStrategy {
+                      force "org.jetbrains.kotlin:kotlin-stdlib:1.7.10"
+                      force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.10"
+                      force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.10"
+                      force "org.jetbrains.kotlin:kotlin-stdlib-common:1.7.10"
+                  }
               }
-            }
           }
+          
           EOF
           
-          # Apply the fix to the root project
-          cat kotlin_fix.gradle >> android/build.gradle
+          # Apply the fix to the root project by inserting before the tasks.register line
+          PROJECT_BUILD_GRADLE="$CM_BUILD_DIR/android/build.gradle"
+          if [ -f "$PROJECT_BUILD_GRADLE" ]; then
+            # Create backup
+            cp "$PROJECT_BUILD_GRADLE" "${PROJECT_BUILD_GRADLE}.bak"
+            
+            # Insert the resolution strategy before the tasks.register line
+            sed -i '' '/tasks.register/i\\
+          '"$(cat kotlin_fix.gradle)" "$PROJECT_BUILD_GRADLE"
+            
+            echo "Modified project build.gradle:"
+            cat "$PROJECT_BUILD_GRADLE"
+          else
+            echo "Project build.gradle not found"
+          fi
           
           # Update app's build.gradle to use consistent Kotlin stdlib
           APP_BUILD_GRADLE="$CM_BUILD_DIR/android/app/build.gradle"
@@ -220,6 +238,10 @@ workflows:
           # Configure Gradle for maximum compatibility
           export GRADLE_OPTS="-Dorg.gradle.project.android.useAndroidX=true -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false"
           
+          # Create a global gradle.properties file to force Kotlin version
+          mkdir -p ~/.gradle
+          echo "kotlin.stdlib.default.dependency=false" > ~/.gradle/gradle.properties
+          
           # Ensure no XML launcher icons exist
           find android/app/src/main/res/mipmap-* -name "*.xml" -delete
           
@@ -234,19 +256,19 @@ workflows:
           
           # Build using Flutter's default mode
           echo "Building debug APK with Flutter for DCT CRF Android..."
-          flutter build apk --debug
+          flutter build apk --debug --no-tree-shake-icons
           
           # If that fails, try with specific target platform
           if [ $? -ne 0 ]; then
             echo "First attempt failed, trying with specific target platform..."
-            flutter build apk --debug --target-platform=android-arm
+            flutter build apk --debug --target-platform=android-arm --no-tree-shake-icons
           fi
           
           # If that also fails, try with direct Gradle command
           if [ $? -ne 0 ]; then
             echo "Flutter build attempts failed, trying with direct Gradle command..."
             cd android
-            ./gradlew :app:assembleDebug
+            ./gradlew :app:assembleDebug -Pkotlin.stdlib.default.dependency=false
             cd ..
           fi
           

@@ -22,23 +22,32 @@ workflows:
             sed -i '' 's/Icons.camera_off/Icons.no_photography/g' "lib/widgets/qr_code_scanner_tl_widget.dart"
           fi
           
+          # Fix the Preview class conflict in QR Mobile Vision package
+          QR_MOBILE_VISION_PATH=$(find ~/.pub-cache/hosted/pub.dev -path "*/qr_mobile_vision-*" -type d | head -n 1)
+          if [ -n "$QR_MOBILE_VISION_PATH" ]; then
+            echo "Found QR Mobile Vision at: $QR_MOBILE_VISION_PATH"
+            
+            # Fix the preview class
+            QR_CAMERA_FILE="$QR_MOBILE_VISION_PATH/lib/src/qr_camera.dart"
+            if [ -f "$QR_CAMERA_FILE" ]; then
+              echo "Patching QR camera file to fix Preview class conflict"
+              sed -i '' 's/class Preview extends StatelessWidget/class QRPreview extends StatelessWidget/g' "$QR_CAMERA_FILE"
+              sed -i '' 's/Preview(/QRPreview(/g' "$QR_CAMERA_FILE"
+            fi
+          fi
+          
       - name: Build APK
         script: |
           flutter clean
           flutter pub get
           
-          # Set fixed output name
-          cat > /tmp/apk_name.txt << 'EOF'
-    // Set a fixed name for the debug APK
-    applicationVariants.all { variant ->
-        variant.outputs.all { output ->
-            outputFileName = "CRF_Android_final.apk"
-        }
-    }
-EOF
-          sed -i '' -e '/applicationVariants.all/,/}/c\
-'"$(cat /tmp/apk_name.txt)"'
-' "android/app/build.gradle"
+          # Set fixed output name directly using sed without heredoc
+          sed -i '' '/applicationVariants.all/,/}/c\
+            applicationVariants.all { variant ->\
+                variant.outputs.all { output ->\
+                    outputFileName = "CRF_Android_final.apk"\
+                }\
+            }' "android/app/build.gradle"
           
           # Build APK
           flutter build apk --debug --no-shrink

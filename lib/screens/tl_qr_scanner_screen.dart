@@ -1157,34 +1157,37 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
                   style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('Scanner alternatif: '),
-                    Switch(
-                      value: _useAlternativeScanner,
-                      activeColor: Colors.green,
-                      onChanged: (value) {
-                        setState(() {
-                          _useAlternativeScanner = value;
-                          Navigator.of(context).pop();
-                          // Panggil ulang metode ini untuk menampilkan dialog dengan nilai yang diperbarui
-                          _startQRScan();
-                        });
-                      },
-                    ),
-                  ],
-                ),
-                Text(
-                  _useAlternativeScanner 
-                    ? 'Menggunakan qr_code_scanner (lebih stabil)' 
-                    : 'Menggunakan qr_mobile_vision (default)',
-                  style: TextStyle(
-                    fontSize: 12, 
-                    color: _useAlternativeScanner ? Colors.green : Colors.orange,
-                    fontWeight: FontWeight.bold
+                // Tampilkan switch hanya jika bukan di web platform
+                if (!kIsWeb)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('Scanner alternatif: '),
+                      Switch(
+                        value: _useAlternativeScanner,
+                        activeColor: Colors.green,
+                        onChanged: (value) {
+                          setState(() {
+                            _useAlternativeScanner = value;
+                            Navigator.of(context).pop();
+                            // Panggil ulang metode ini untuk menampilkan dialog dengan nilai yang diperbarui
+                            _startQRScan();
+                          });
+                        },
+                      ),
+                    ],
                   ),
-                ),
+                if (!kIsWeb)
+                  Text(
+                    _useAlternativeScanner 
+                      ? 'Menggunakan qr_code_scanner (lebih stabil)' 
+                      : 'Menggunakan qr_mobile_vision (default)',
+                    style: TextStyle(
+                      fontSize: 12, 
+                      color: _useAlternativeScanner ? Colors.green : Colors.orange,
+                      fontWeight: FontWeight.bold
+                    ),
+                  ),
               ],
             ),
           );
@@ -1249,6 +1252,18 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
           DeviceOrientation.portraitDown,
         ]);
       } else if (scanMethod == 'alternative') {
+        // Jika platform web, tampilkan pesan error
+        if (kIsWeb) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Scanner alternatif tidak didukung di web. Gunakan input manual.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          return;
+        }
+        
         // Set to portrait mode before scanning
         await SystemChrome.setPreferredOrientations([
           DeviceOrientation.portraitUp,

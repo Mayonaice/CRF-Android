@@ -190,14 +190,14 @@ workflows:
             fi
 
             # Ensure APK output name is consistent
-            sed -i '' '/applicationVariants.all/,/}/c\
-            // Set a fixed name for the debug APK\
-            applicationVariants.all { variant ->\
-                variant.outputs.all { output ->\
-                    outputFileName = "CRF_Android_final.apk"\
-                }\
-            }\
-        ' "$APP_BUILD_GRADLE"
+            sed -i '' '/applicationVariants.all/,/}/c\\
+              // Set a fixed name for the debug APK\\
+              applicationVariants.all { variant ->\\
+                  variant.outputs.all { output ->\\
+                      outputFileName = "CRF_Android_final.apk"\\
+                  }\\
+              }\\
+            ' "$APP_BUILD_GRADLE"
           fi
       
       - name: Patch QR Mobile Vision package
@@ -221,8 +221,8 @@ workflows:
               sed -i '' 's/classpath "com.android.tools.build:gradle:3.2.1"/classpath "com.android.tools.build:gradle:7.3.1"/g' "$QR_GRADLE_FILE"
               
               # Add namespace if needed for compatibility with newer Gradle versions
-              sed -i '' '/defaultConfig {/a\
-                namespace "com.github.rmtmckenzie.qrmobilevision"
+              sed -i '' '/defaultConfig {/a\\
+                namespace "com.github.rmtmckenzie.qrmobilevision"\\
               ' "$QR_GRADLE_FILE"
             fi
 

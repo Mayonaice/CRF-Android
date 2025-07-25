@@ -180,6 +180,149 @@ workflows:
             echo "Project build.gradle not found"
           fi
           
+      - name: Replace android_id plugin with compatible version
+        script: |
+          # Create a directory for our custom android_id plugin
+          mkdir -p "$CM_BUILD_DIR/custom_plugins/android_id/android/src/main/kotlin/dev/fluttercommunity/android_id"
+          
+          # Create the Kotlin implementation file
+          cat > "$CM_BUILD_DIR/custom_plugins/android_id/android/src/main/kotlin/dev/fluttercommunity/android_id/AndroidIdPlugin.kt" << 'EOF'
+          package dev.fluttercommunity.android_id
+
+          import android.content.Context
+          import android.provider.Settings
+          import io.flutter.embedding.engine.plugins.FlutterPlugin
+          import io.flutter.plugin.common.MethodCall
+          import io.flutter.plugin.common.MethodChannel
+          import io.flutter.plugin.common.MethodChannel.MethodCallHandler
+          import io.flutter.plugin.common.MethodChannel.Result
+
+          /** AndroidIdPlugin */
+          class AndroidIdPlugin : FlutterPlugin, MethodCallHandler {
+              private lateinit var channel: MethodChannel
+              private lateinit var context: Context
+
+              override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
+                  channel = MethodChannel(flutterPluginBinding.binaryMessenger, "dev.fluttercommunity.plus/android_id")
+                  channel.setMethodCallHandler(this)
+                  context = flutterPluginBinding.applicationContext
+              }
+
+              override fun onMethodCall(call: MethodCall, result: Result) {
+                  if (call.method == "getAndroidId") {
+                      try {
+                          val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+                          result.success(androidId)
+                      } catch (e: Exception) {
+                          result.error("ANDROID_ID_ERROR", "Failed to get Android ID", e.message)
+                      }
+                  } else {
+                      result.notImplemented()
+                  }
+              }
+
+              override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+                  channel.setMethodCallHandler(null)
+              }
+          }
+          EOF
+          
+          # Create the build.gradle file
+          cat > "$CM_BUILD_DIR/custom_plugins/android_id/android/build.gradle" << 'EOF'
+          group 'dev.fluttercommunity.android_id'
+          version '1.0'
+
+          buildscript {
+              ext.kotlin_version = '1.7.10'
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:7.3.0'
+                  classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+              }
+          }
+
+          rootProject.allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          apply plugin: 'com.android.library'
+          apply plugin: 'kotlin-android'
+
+          android {
+              namespace "dev.fluttercommunity.android_id"
+              compileSdkVersion 33
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_1_8
+                  targetCompatibility JavaVersion.VERSION_1_8
+              }
+
+              kotlinOptions {
+                  jvmTarget = '1.8'
+              }
+
+              defaultConfig {
+                  minSdkVersion 16
+              }
+          }
+
+          dependencies {
+              implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+          }
+          EOF
+          
+          # Create AndroidManifest.xml
+          mkdir -p "$CM_BUILD_DIR/custom_plugins/android_id/android/src/main"
+          cat > "$CM_BUILD_DIR/custom_plugins/android_id/android/src/main/AndroidManifest.xml" << 'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          </manifest>
+          EOF
+          
+          # Create pubspec.yaml
+          cat > "$CM_BUILD_DIR/custom_plugins/android_id/pubspec.yaml" << 'EOF'
+          name: android_id
+          description: Android ID plugin compatible with Kotlin 1.7.10
+          version: 0.1.3+1
+          
+          environment:
+            sdk: '>=2.12.0 <4.0.0'
+            flutter: ">=1.20.0"
+          
+          dependencies:
+            flutter:
+              sdk: flutter
+          
+          flutter:
+            plugin:
+              platforms:
+                android:
+                  package: dev.fluttercommunity.android_id
+                  pluginClass: AndroidIdPlugin
+          EOF
+          
+          # Replace the original android_id plugin with our custom one
+          ANDROID_ID_DIR=$(find "$HOME/.pub-cache/hosted/pub.dev" -type d -path "*android_id*" | head -n 1)
+          if [ -n "$ANDROID_ID_DIR" ]; then
+            echo "Found android_id plugin directory at: $ANDROID_ID_DIR"
+            
+            # Backup the original plugin
+            cp -r "$ANDROID_ID_DIR" "${ANDROID_ID_DIR}.bak"
+            
+            # Replace with our custom plugin
+            cp -r "$CM_BUILD_DIR/custom_plugins/android_id/"* "$ANDROID_ID_DIR/"
+            
+            echo "Replaced android_id plugin with compatible version"
+          else
+            echo "android_id plugin directory not found"
+          fi
+          
       - name: Fix Kotlin dependency conflicts
         script: |
           # Create a temporary file with the resolution strategy
@@ -193,6 +336,14 @@ workflows:
                       force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.7.10"
                       force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.10"
                       force "org.jetbrains.kotlin:kotlin-stdlib-common:1.7.10"
+                      force "org.jetbrains.kotlin:kotlin-reflect:1.7.10"
+                      
+                      // Force all Kotlin components to use the same version
+                      eachDependency { DependencyResolveDetails details ->
+                          if (details.requested.group == 'org.jetbrains.kotlin') {
+                              details.useVersion "1.7.10"
+                          }
+                      }
                   }
               }
           }
@@ -233,6 +384,23 @@ workflows:
             echo "App build.gradle not found"
           fi
           
+          # Fix android_id plugin Kotlin version issue
+          ANDROID_ID_GRADLE_PATH=$(find "$HOME/.pub-cache/hosted/pub.dev" -name "build.gradle" -path "*android_id*" | head -n 1)
+          if [ -n "$ANDROID_ID_GRADLE_PATH" ]; then
+            echo "Found android_id build.gradle at: $ANDROID_ID_GRADLE_PATH"
+            
+            # Create backup
+            cp "$ANDROID_ID_GRADLE_PATH" "${ANDROID_ID_GRADLE_PATH}.bak"
+            
+            # Force Kotlin version in the plugin's build.gradle
+            sed -i '' 's/ext.kotlin_version = ".*"/ext.kotlin_version = "1.7.10"/g' "$ANDROID_ID_GRADLE_PATH"
+            
+            echo "Modified android_id build.gradle:"
+            cat "$ANDROID_ID_GRADLE_PATH"
+          else
+            echo "android_id build.gradle not found"
+          fi
+          
       - name: Build APK with Flutter
         script: |
           # Configure Gradle for maximum compatibility
@@ -241,6 +409,11 @@ workflows:
           # Create a global gradle.properties file to force Kotlin version
           mkdir -p ~/.gradle
           echo "kotlin.stdlib.default.dependency=false" > ~/.gradle/gradle.properties
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+          
+          # Create a local.properties file with Kotlin version settings
+          echo "kotlin.version=1.7.10" >> android/local.properties
+          echo "kotlin.stdlib.default.dependency=false" >> android/local.properties
           
           # Ensure no XML launcher icons exist
           find android/app/src/main/res/mipmap-* -name "*.xml" -delete
@@ -254,13 +427,15 @@ workflows:
           echo "Verifying app icon files:"
           find android/app/src/main/res/mipmap-* -name "ic_launcher.png" -exec ls -la {} \;
           
-          # Build using Flutter's default mode
+          # Try to build with flutter directly, with extra parameters to help with Kotlin issues
           echo "Building debug APK with Flutter for DCT CRF Android..."
-          flutter build apk --debug --no-tree-shake-icons
+          flutter build apk --debug --no-tree-shake-icons --no-pub
           
           # If that fails, try with specific target platform
           if [ $? -ne 0 ]; then
             echo "First attempt failed, trying with specific target platform..."
+            # Run flutter pub get with downgraded packages
+            flutter pub downgrade
             flutter build apk --debug --target-platform=android-arm --no-tree-shake-icons
           fi
           
@@ -268,7 +443,7 @@ workflows:
           if [ $? -ne 0 ]; then
             echo "Flutter build attempts failed, trying with direct Gradle command..."
             cd android
-            ./gradlew :app:assembleDebug -Pkotlin.stdlib.default.dependency=false
+            ./gradlew :app:assembleDebug -Pkotlin.stdlib.default.dependency=false -Pkotlin.version=1.7.10
             cd ..
           fi
           

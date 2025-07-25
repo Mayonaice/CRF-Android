@@ -372,10 +372,10 @@ packages:
     dependency: transitive
     description:
       name: native_device_orientation
-      sha256: "744a03030fad5a332a54833cd34f1e2ee51ae9acf477b4ef85bacc8823af9937"
+      sha256: "0c330c068575e4be72cce5968ca479a3f8d5d1e5dfce7d89d5c13a1e943b338c"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.1"
+    version: "2.0.3"
   nm:
     dependency: transitive
     description:
@@ -496,6 +496,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.2"
+  qr_code_scanner:
+    dependency: "direct main"
+    description:
+      name: qr_code_scanner
+      sha256: f23b68d893505a424f0bd2e324ebea71ed88465d572d26bb8d2e78a4749591fd
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.1"
   qr_flutter:
     dependency: "direct main"
     description:
@@ -508,10 +516,10 @@ packages:
     dependency: "direct main"
     description:
       name: qr_mobile_vision
-      sha256: "346fffa7067d234af75debb0716152657c11346706ce57811fa85a9c6f0fbfe0"
+      sha256: "80ed2c10ff9908a3dd64a6776af04b5aa9efa0543ee62c77d53980bf75b7bdd4"
       url: "https://pub.dev"
     source: hosted
-    version: "4.1.4"
+    version: "6.0.0"
   shared_preferences:
     dependency: "direct main"
     description:

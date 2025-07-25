@@ -9,6 +9,8 @@ import '../models/prepare_model.dart';
 import '../services/notification_service.dart';
 // Import qr_code_scanner_tl_widget hanya jika bukan web
 import '../widgets/qr_code_scanner_tl_widget.dart' if (kIsWeb) '../widgets/qr_code_scanner_web_stub.dart';
+// Import scanner alternatif yang menggunakan qr_code_scanner
+import '../widgets/qr_scanner_alternative.dart';
 import 'dart:async';
 
 class TLQRScannerScreen extends StatefulWidget {
@@ -36,6 +38,9 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
   
   // Timeout untuk scanner
   Timer? _scannerTimeoutTimer;
+  
+  // Flag untuk memilih scanner yang digunakan
+  bool _useAlternativeScanner = true; // Set ke true untuk menggunakan scanner alternatif
 
   @override
   void initState() {
@@ -1115,17 +1120,73 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
         builder: (BuildContext context) {
           return AlertDialog(
             title: const Text('Pilih Metode Scan'),
-            content: const Text('Pilih metode untuk scan QR code:'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop('scanner'),
-                child: const Text('Scanner Kamera'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop('manual'),
-                child: const Text('Input Manual'),
-              ),
-            ],
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Pilih metode untuk scan QR code:'),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Column(
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.qr_code_scanner, size: 40),
+                          onPressed: () => Navigator.of(context).pop(_useAlternativeScanner ? 'alternative' : 'scanner'),
+                        ),
+                        Text('Scanner Kamera'),
+                      ],
+                    ),
+                    Column(
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.text_fields, size: 40),
+                          onPressed: () => Navigator.of(context).pop('manual'),
+                        ),
+                        Text('Input Manual'),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Divider(),
+                const SizedBox(height: 8),
+                Text(
+                  'Jika scanner normal mengalami masalah, gunakan scanner alternatif.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('Scanner alternatif: '),
+                    Switch(
+                      value: _useAlternativeScanner,
+                      activeColor: Colors.green,
+                      onChanged: (value) {
+                        setState(() {
+                          _useAlternativeScanner = value;
+                          Navigator.of(context).pop();
+                          // Panggil ulang metode ini untuk menampilkan dialog dengan nilai yang diperbarui
+                          _startQRScan();
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                Text(
+                  _useAlternativeScanner 
+                    ? 'Menggunakan qr_code_scanner (lebih stabil)' 
+                    : 'Menggunakan qr_mobile_vision (default)',
+                  style: TextStyle(
+                    fontSize: 12, 
+                    color: _useAlternativeScanner ? Colors.green : Colors.orange,
+                    fontWeight: FontWeight.bold
+                  ),
+                ),
+              ],
+            ),
           );
         },
       );
@@ -1170,6 +1231,56 @@ class _TLQRScannerScreenState extends State<TLQRScannerScreen> {
               title: 'Scan QR Code',
               onBarcodeDetected: (code) {
                 print('🔍 QR Code detected in scanner: ${code.length > 20 ? code.substring(0, 20) + "..." : code}');
+                // Cancel timeout timer when QR code detected
+                _scannerTimeoutTimer?.cancel();
+              },
+              fieldKey: 'qrcode',
+              fieldLabel: 'Approval QR',
+            ),
+          ),
+        );
+        
+        // Cancel timeout timer when returning from scanner
+        _scannerTimeoutTimer?.cancel();
+        
+        // Reset orientation to portrait for this screen
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+        ]);
+      } else if (scanMethod == 'alternative') {
+        // Set to portrait mode before scanning
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+        ]);
+        
+        // Mulai timer untuk timeout scanner (20 detik)
+        _scannerTimeoutTimer?.cancel();
+        _scannerTimeoutTimer = Timer(const Duration(seconds: 20), () {
+          // Jika timer habis dan scanner masih berjalan, kembali ke screen ini
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context);
+            
+            // Tampilkan pesan timeout
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Scanner timeout. Silakan coba lagi.'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        });
+        
+        // Use the alternative QR scanner widget
+        qrResult = await Navigator.push<String>(
+          context,
+          MaterialPageRoute(
+            builder: (context) => QRScannerAlternative(
+              title: 'Scan QR Code',
+              onBarcodeDetected: (code) {
+                print('🔍 QR Code detected in alternative scanner: ${code.length > 20 ? code.substring(0, 20) + "..." : code}');
                 // Cancel timeout timer when QR code detected
                 _scannerTimeoutTimer?.cancel();
               },

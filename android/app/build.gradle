@@ -71,6 +71,19 @@ android {
         }
     }
 
+    // Add explicit APK output configuration
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def appName = "CRF_Android"
+            def buildType = variant.buildType.name
+            def versionName = variant.versionName
+            def versionCode = variant.versionCode
+            def timestamp = new Date().format('yyyyMMddHHmm')
+            
+            outputFileName = "${appName}_${buildType}_${versionName}_${timestamp}.apk"
+        }
+    }
+
     packagingOptions {
         // Exclude files that might cause conflicts
         exclude 'META-INF/DEPENDENCIES'

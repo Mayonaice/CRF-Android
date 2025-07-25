@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 // This is a stub implementation for web platform
-class QRCodeScannerTLWidget extends StatelessWidget {
+class QRCodeScannerTLWidget extends StatefulWidget {
   final String title;
   final Function(String) onBarcodeDetected;
   final String? fieldKey;
@@ -18,54 +18,27 @@ class QRCodeScannerTLWidget extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
+  State<QRCodeScannerTLWidget> createState() => _QRCodeScannerTLWidgetState();
+}
+
+class _QRCodeScannerTLWidgetState extends State<QRCodeScannerTLWidget> {
+  @override
+  void initState() {
+    super.initState();
     // Automatically show manual input dialog after a short delay
-    Future.delayed(Duration(milliseconds: 100), () {
-      _showManualInputDialog(context);
+    Future.delayed(Duration(milliseconds: 300), () {
+      if (mounted) {
+        _showManualInputDialog();
+      }
     });
-    
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.qr_code_scanner,
-              size: 80,
-              color: Colors.grey,
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'QR Code scanning is not available on web.',
-              style: TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                // Show manual input dialog
-                _showManualInputDialog(context);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
-              child: const Text('Enter QR Code Manually'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
-  Future<void> _showManualInputDialog(BuildContext context) async {
+  void _showManualInputDialog() {
     final textController = TextEditingController();
     
-    return showDialog<void>(
+    showDialog<void>(
       context: context,
-      barrierDismissible: false, // User must tap a button to close dialog
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Manual QR Code Input'),
@@ -98,9 +71,10 @@ class QRCodeScannerTLWidget extends StatelessWidget {
             TextButton(
               onPressed: () {
                 if (textController.text.isNotEmpty) {
-                  onBarcodeDetected(textController.text);
+                  String text = textController.text; // Get the text before dialog closes
+                  widget.onBarcodeDetected(text); // Non-null string from text input
                   Navigator.of(context).pop();
-                  Navigator.of(context).pop(textController.text);
+                  Navigator.of(context).pop(text);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -115,6 +89,41 @@ class QRCodeScannerTLWidget extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.qr_code_scanner,
+              size: 80,
+              color: Colors.grey,
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'QR Code scanning is not available on web.',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _showManualInputDialog,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: const Text('Enter QR Code Manually'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 } 

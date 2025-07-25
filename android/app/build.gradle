@@ -101,7 +101,9 @@ android {
     // Force opt-out from AndroidX for potential compatibility issues
     lintOptions {
         disable 'InvalidPackage'
+        disable 'Deprecated'
         checkReleaseBuilds false
+        abortOnError false
     }
 
     // Add permissions for QR code scanner

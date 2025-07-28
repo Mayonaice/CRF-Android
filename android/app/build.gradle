@@ -27,7 +27,7 @@ apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
     namespace "com.advantage.crf"
-    compileSdkVersion 34
+    compileSdkVersion 33
     ndkVersion flutter.ndkVersion
 
     compileOptions {
@@ -45,8 +45,8 @@ android {
 
     defaultConfig {
         applicationId "com.advantage.crf"
-        minSdkVersion 21 // Updated for QR code scanner
-        targetSdkVersion 34
+        minSdkVersion 21
+        targetSdkVersion 33
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         
@@ -91,7 +91,6 @@ android {
         exclude 'META-INF/*.kotlin_module'
     }
 
-    // Force opt-out from AndroidX for potential compatibility issues
     lintOptions {
         disable 'InvalidPackage'
         disable 'Deprecated'
@@ -99,19 +98,11 @@ android {
         abortOnError false
     }
 
-    // Add permissions for QR code scanner
     aaptOptions {
         noCompress "tflite"
         noCompress "lite"
         ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
-        // Tambahkan opsi untuk mengatasi error resource duplikat
         additionalParameters '--warn-manifest-validation', '--no-version-vectors'
-    }
-    
-    // Add for QR code scanner compatibility
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
     }
 }
 
@@ -121,7 +112,5 @@ flutter {
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-    
-    // For multidex support
     implementation 'androidx.multidex:multidex:2.0.1'
 } 

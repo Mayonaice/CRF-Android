@@ -1,12 +1,12 @@
 buildscript {
-    ext.kotlin_version = '1.9.10'
+    ext.kotlin_version = '1.7.10'
     repositories {
         google()
         mavenCentral()
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.1.0'
+        classpath 'com.android.tools.build:gradle:7.3.1'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
@@ -16,31 +16,6 @@ allprojects {
         google()
         mavenCentral()
     }
-    
-    // Enforce consistent Kotlin version across all dependencies
-    configurations.all {
-        resolutionStrategy {
-            eachDependency { DependencyResolveDetails details ->
-                if (details.requested.group == 'org.jetbrains.kotlin') {
-                    details.useVersion kotlin_version
-                }
-            }
-        }
-    }
-    
-    // Tambahkan konfigurasi namespace untuk semua subprojects
-    plugins.withType(com.android.build.gradle.BasePlugin).configureEach {
-        android {
-            buildFeatures {
-                buildConfig true
-            }
-            
-            // Pastikan namespace diatur untuk setiap subproject
-            if (!hasProperty('namespace')) {
-                namespace = "com.example.${project.name}"
-            }
-        }
-    }
 }
 
 rootProject.buildDir = '../build'
@@ -49,19 +24,6 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(':app')
-}
-
-// Add resolution strategy to fix Kotlin version conflicts
-subprojects {
-    configurations.all {
-        resolutionStrategy {
-            force "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-            force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-            force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
-            force "org.jetbrains.kotlin:kotlin-stdlib-common:$kotlin_version"
-            force "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
-        }
-    }
 }
 
 tasks.register("clean", Delete) {

@@ -6,7 +6,6 @@ workflows:
     environment:
       flutter: 3.16.9
       java: 17
-      android_sdk: /Users/builder/programs/android-sdk-macosx
       groups:
         - google_credentials
     scripts:
@@ -23,14 +22,19 @@ workflows:
           echo "ANDROID_HOME: $ANDROID_HOME"
           
           # Pastikan Android SDK path diatur dengan benar
-          if [ -z "$ANDROID_SDK_ROOT" ]; then
-            export ANDROID_SDK_ROOT=/Users/builder/programs/android-sdk-macosx
-            echo "Set ANDROID_SDK_ROOT to $ANDROID_SDK_ROOT"
-          fi
+          # Di Codemagic, Android SDK biasanya ada di /Users/builder/programs/android-sdk-macosx
+          export ANDROID_SDK_ROOT=/Users/builder/programs/android-sdk-macosx
+          export ANDROID_HOME=/Users/builder/programs/android-sdk-macosx
+          echo "Set ANDROID_SDK_ROOT to $ANDROID_SDK_ROOT"
+          echo "Set ANDROID_HOME to $ANDROID_HOME"
           
-          if [ -z "$ANDROID_HOME" ]; then
-            export ANDROID_HOME=/Users/builder/programs/android-sdk-macosx
-            echo "Set ANDROID_HOME to $ANDROID_HOME"
+          # Verifikasi bahwa Android SDK ada
+          if [ -d "$ANDROID_HOME" ]; then
+            echo "✅ Android SDK directory exists"
+            ls -la $ANDROID_HOME/tools || echo "No tools directory"
+            ls -la $ANDROID_HOME/platform-tools || echo "No platform-tools directory"
+          else
+            echo "❌ Android SDK directory not found at $ANDROID_HOME"
           fi
           
       - name: Fix Resource Conflicts

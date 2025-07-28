@@ -5,13 +5,13 @@ workflows:
     instance_type: mac_mini_m1
     environment:
       flutter: 3.16.9
-      java: 17  # Kembali ke Java 17 untuk SDK 34
+      java: 11  # Downgrade ke Java 11 untuk kompatibilitas dengan Gradle 7.0.2
       groups:
         - google_credentials
     scripts:
-      - name: Set up Java 17
+      - name: Set up Java 11
         script: |
-          echo "Setting up Java 17..."
+          echo "Setting up Java 11..."
           java -version
           echo "JAVA_HOME: $JAVA_HOME"
           

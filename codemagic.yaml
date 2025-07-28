@@ -6,7 +6,15 @@ workflows:
     environment:
       flutter: 3.16.9
       java: 17
+      groups:
+        - google_credentials
     scripts:
+      - name: Set up Java 17
+        script: |
+          echo "Setting up Java 17..."
+          java -version
+          echo "JAVA_HOME: $JAVA_HOME"
+          
       - name: Fix Resource Conflicts
         script: |
           # Tampilkan struktur direktori untuk debugging
@@ -28,6 +36,17 @@ workflows:
           find android/app/src/main/res -type f -name "ic_launcher*" | sort
           
           echo "Removed conflicting launcher icons"
+      
+      - name: Update Gradle Wrapper
+        script: |
+          echo "Checking Gradle wrapper version..."
+          cat android/gradle/wrapper/gradle-wrapper.properties
+          
+          # Pastikan menggunakan Gradle 8.0 untuk kompatibilitas dengan AGP 8.1.0
+          sed -i '' 's/gradle-[0-9]\.[0-9]-all.zip/gradle-8.0-all.zip/g' android/gradle/wrapper/gradle-wrapper.properties
+          
+          echo "Updated Gradle wrapper:"
+          cat android/gradle/wrapper/gradle-wrapper.properties
           
       - name: Build APK
         script: |
@@ -41,6 +60,11 @@ workflows:
           if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
             echo "✅ APK build successful!"
             ls -la build/app/outputs/flutter-apk/
+            
+            # Rename APK with timestamp
+            TIMESTAMP=$(date +"%Y%m%d%H%M")
+            cp build/app/outputs/flutter-apk/app-debug.apk build/app/outputs/flutter-apk/DCT-CRF-Android-debug-$TIMESTAMP.apk
+            echo "✅ APK renamed with timestamp: DCT-CRF-Android-debug-$TIMESTAMP.apk"
           else
             echo "❌ APK build failed!"
             exit 1

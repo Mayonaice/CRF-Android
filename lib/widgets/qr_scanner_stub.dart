@@ -32,9 +32,23 @@ class QRView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Buat controller dummy dan panggil callback
+    final dummyController = QRViewController();
+    Future.microtask(() => onQRViewCreated(dummyController));
+    
     return Container(
       child: Center(
-        child: Text('QR Scanner tidak tersedia di web'),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.qr_code_scanner, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'QR Scanner tidak tersedia di web',
+              style: TextStyle(fontSize: 16),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -42,13 +56,16 @@ class QRView extends StatelessWidget {
 
 // Stub untuk QRViewController
 class QRViewController {
-  Stream<Barcode> get scannedDataStream => Stream.empty();
+  // Buat stream dummy yang tidak pernah mengeluarkan data
+  Stream<Barcode> get scannedDataStream => 
+      Stream<Barcode>.empty();
   
   void dispose() {}
   void pauseCamera() {}
   void resumeCamera() {}
   Future<void> toggleFlash() async {}
   Future<void> flipCamera() async {}
+  Future<void> stopCamera() async {}
 }
 
 // Stub untuk QrScannerOverlayShape

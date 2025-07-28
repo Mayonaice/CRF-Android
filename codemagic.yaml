@@ -5,13 +5,13 @@ workflows:
     instance_type: mac_mini_m1
     environment:
       flutter: 3.16.9
-      java: 11  # Diturunkan ke Java 11 untuk kompatibilitas dengan Gradle 7.5
+      java: 17  # Kembali ke Java 17 untuk SDK 34
       groups:
         - google_credentials
     scripts:
-      - name: Set up Java 11
+      - name: Set up Java 17
         script: |
-          echo "Setting up Java 11..."
+          echo "Setting up Java 17..."
           java -version
           echo "JAVA_HOME: $JAVA_HOME"
           
@@ -57,27 +57,13 @@ workflows:
           
           echo "Removed conflicting launcher icons"
       
-      - name: Verify Gradle Wrapper
-        script: |
-          echo "Checking Gradle wrapper version..."
-          cat android/gradle/wrapper/gradle-wrapper.properties
-          
-          # Pastikan menggunakan Gradle 7.5 untuk kompatibilitas
-          if ! grep -q "gradle-7.5-all.zip" android/gradle/wrapper/gradle-wrapper.properties; then
-            echo "Updating Gradle wrapper to 7.5..."
-            sed -i '' 's/gradle-[0-9]\.[0-9]-all.zip/gradle-7.5-all.zip/g' android/gradle/wrapper/gradle-wrapper.properties
-          fi
-          
-          echo "Final Gradle wrapper:"
-          cat android/gradle/wrapper/gradle-wrapper.properties
-          
       - name: Build APK with Simplified Options
         script: |
           flutter clean
           flutter pub get
           
           echo "Starting APK build with simplified options..."
-          flutter build apk --debug --no-shrink --no-tree-shake-icons
+          flutter build apk --debug --no-shrink
           
           # Verifikasi apakah APK berhasil dibuat
           if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
